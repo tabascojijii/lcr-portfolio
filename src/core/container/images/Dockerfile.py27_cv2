@@ -1,0 +1,25 @@
+FROM python:2.7-slim-stretch
+
+# 1. アーカイブリポジトリの設定 (成功済み)
+RUN echo "deb http://archive.debian.org/debian/ stretch main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security/ stretch/updates main" >> /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+
+# 2. システムパッケージとして OpenCV と NumPy をセットでインストール
+# python-numpy を追加することで、pipを使わずに環境を完成させます
+RUN apt-get update && apt-get install -y --force-yes --allow-unauthenticated \
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 \
+    python-opencv \
+    python-numpy \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 3. システム側のライブラリを優先的に参照する設定
+ENV PYTHONPATH="/usr/lib/python2.7/dist-packages"
+
+# 4. OS標準の Python をデフォルトとして固定
+RUN ln -sf /usr/bin/python2.7 /usr/local/bin/python
+
+WORKDIR /app
+
+# 実行時もOS標準のPythonを使用
+ENTRYPOINT ["/usr/bin/python2.7"]

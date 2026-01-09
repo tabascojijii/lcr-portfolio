@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+.python-version
+
+# LCR Runtime Data (Crucial for Security)
+src/data/history.json
+data/results/*
+!data/results/.gitkeep
+*.log
+.env
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Build
+dist/
+build/

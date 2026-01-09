@@ -1,0 +1,19 @@
+# LCR (Legacy Code Reviver) Host App Requirements
+
+# GUI Framework
+PySide6
+
+# Docker Control
+docker
+
+# AI Sidecar (Analysis Layer)
+anthropic
+openai
+
+# Data & Logic
+pandas
+pyyaml
+astor
+
+# Utilities
+python-dotenv

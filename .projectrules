@@ -1,0 +1,13 @@
+# LCR (Legacy Code Reviver) Project Rules
+
+## Project Context
+- LCRは、古いPython環境（2.7/3.6等）でしか動かない研究用コードを、書き換えずにDockerコンテナ上で実行するプラットフォームである。
+- 製薬業界のCSV（コンピュータ化システムバリデーション）環境をターゲットとしており、「コードを1行も変えない」ことが核心的な価値である。
+
+## Development Guidelines
+- 略称「LCR」をプロジェクト全体で一貫して使用する。
+- ソースコードの核となるロジックは Maltilabeler (ProjectX) の「AIセンター」の設計（サブプロセス管理、QThread、シグナル通信）を流用・進化させる。
+- 依存関係の最小化: 実行エンジン（Core）は、可能な限りGUIライブラリから独立させ、Docker CLIとの連携に集中する。
+
+## Implementation Strategy
+- サブプロセス方式（TrainingWorkerの流用）を優先し、Dockerの標準出力をリアルタイムにキャプチャする設計とする。

@@ -1,0 +1,45 @@
+FROM {{ base_image }}
+
+# 1. Archive Repository Settings (if legacy)
+{% if use_archive_repo %}
+RUN echo "deb http://archive.debian.org/debian/ {{ debian_release }} main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security/ {{ debian_release }}/updates main" >> /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+{% endif %}
+
+# 2. System Dependencies
+# 2. System Dependencies
+{% if system_packages %}
+RUN apt-get update && apt-get install -y --force-yes --allow-unauthenticated \
+    {% for pkg in system_packages -%}
+    {{ pkg }} \
+    {% endfor -%}
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+{% endif %}
+
+# 3. Pip Configuration
+{% if trusted_hosts %}
+RUN mkdir -p /root/.pip && \
+    printf "[global]\ntrusted-host = {{ trusted_hosts | join(' ') }}\n" > /root/.pip/pip.conf
+{% endif %}
+
+# 4. Python Libraries
+{% if pip_packages %}
+RUN pip install --no-cache-dir \
+    {% for pkg in pip_packages -%}
+    "{{ pkg }}"{{ " \\" if not loop.last else "" }}
+    {% endfor %}
+{% endif %}
+
+{% if run_commands %}
+RUN {{ run_commands | join(' && \\\n    ') }}
+{% endif %}
+
+{% if env_vars %}
+{% for key, value in env_vars.items() %}
+ENV {{ key }}="{{ value }}"
+{% endfor %}
+{% endif %}
+
+WORKDIR /app
+ENTRYPOINT ["python"]

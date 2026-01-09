@@ -1,0 +1,16 @@
+{
+    "tag": "lcr-py27-cv-apt",
+    "base_image": "debian:stretch-slim",
+    "use_archive_repo": true,
+    "system_packages": [
+        "python",
+        "python-pip",
+        "python-opencv",
+        "python-numpy",
+        "libglib2.0-0",
+        "libsm6",
+        "libxrender1",
+        "libxext6"
+    ],
+    "pip_packages": []
+}

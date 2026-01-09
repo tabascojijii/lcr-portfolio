@@ -1,0 +1,39 @@
+FROM debian:stretch-slim
+
+# 1. Archive Repository Settings (if legacy)
+
+RUN echo "deb http://archive.debian.org/debian/ stretch main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security/ stretch/updates main" >> /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+
+
+# 2. System Dependencies
+# 2. System Dependencies
+
+RUN apt-get update && apt-get install -y --force-yes --allow-unauthenticated \
+    python \
+    python-pip \
+    python-opencv \
+    python-numpy \
+    libglib2.0-0 \
+    libsm6 \
+    libxrender1 \
+    libxext6 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+
+# 3. Pip Configuration
+
+RUN mkdir -p /root/.pip && \
+    printf "[global]\ntrusted-host = pypi.python.org pypi.org files.pythonhosted.org\n" > /root/.pip/pip.conf
+
+
+# 4. Python Libraries
+
+
+
+
+
+
+WORKDIR /app
+ENTRYPOINT ["python"]

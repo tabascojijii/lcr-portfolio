@@ -1,0 +1,28 @@
+FROM python:2.7-slim-stretch
+
+# 1. APTの設定: 署名の有効期限チェックを無効化し、アーカイブURLに固定
+RUN echo "deb http://archive.debian.org/debian/ stretch main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security/ stretch/updates main" >> /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+
+# 2. システム依存関係のインストール
+# --allow-unauthenticated を追加して古い署名でも通るようにします
+RUN apt-get update && apt-get install -y --force-yes --allow-unauthenticated \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxrender1 \
+    libxext6 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 3. pip の設定
+RUN mkdir -p /root/.pip && \
+    echo "[global]\ntrusted-host = pypi.python.org\n               pypi.org\n               files.pythonhosted.org" > /root/.pip/pip.conf
+
+# 4. NumPy と OpenCV のインストール
+RUN pip install --no-cache-dir \
+    "numpy<1.17" \
+    "opencv-python==2.4.13.7"
+
+WORKDIR /app
+ENTRYPOINT ["python"]

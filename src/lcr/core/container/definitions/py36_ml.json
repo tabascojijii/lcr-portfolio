@@ -1,0 +1,18 @@
+{
+    "tag": "lcr-py36-ml-classic",
+    "base_image": "python:3.6-slim-stretch",
+    "use_archive_repo": true,
+    "debian_release": "stretch",
+    "apt_packages": [
+        "libgomp1",
+        "libatlas-base-dev",
+        "liblapack-dev"
+    ],
+    "pip_packages": [
+        "numpy<1.16",
+        "pandas==0.23.4",
+        "scipy==1.1.0",
+        "scikit-learn==0.19.2",
+        "matplotlib==2.2.3"
+    ]
+}
