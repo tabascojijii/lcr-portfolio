@@ -37,3 +37,9 @@ pip install -r requirements.txt
 python run_gui.py
 ```
 This will launch the LCR Interface. Select your legacy script and execute.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2026 Yusoku Advisor Godo Kaisha (ゆうそくアドバイザー合同会社)

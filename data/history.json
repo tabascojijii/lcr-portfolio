@@ -34,5 +34,14 @@
     "image_tag": "lcr-py27-cv-apt",
     "output_dir": "data\\results\\20260107_224609",
     "status": "success"
+  },
+  {
+    "id": "26b7b260-efb0-49e9-a024-48a022e866e8",
+    "timestamp": "2026-01-10T13:01:25",
+    "script_path": "data\\samples\\legacy_cv_calc.py",
+    "runtime_name": "Docker Container",
+    "image_tag": "unknown",
+    "output_dir": "data\\results\\20260110_130122",
+    "status": "success"
   }
 ]

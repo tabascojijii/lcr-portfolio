@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Yusoku Advisor Godo Kaisha (ゆうそくアドバイザー合同会社)
+# Released under the MIT license
+# https://opensource.org/licenses/MIT
+
 """
 Main Window for Legacy Code Reviver (LCR) GUI.
 
