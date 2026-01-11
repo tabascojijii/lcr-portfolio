@@ -2,9 +2,10 @@ import json
 import os
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
+from lcr.utils.path_helper import get_resource_path
 
-TEMPLATE_DIR = Path(__file__).parent / "templates"
-IMAGE_DIR = Path(__file__).parent / "images"
+TEMPLATE_DIR = get_resource_path("templates")
+IMAGE_DIR = Path(__file__).parent / "images"  # Images are generated artifacts, keep local
 
 def generate_dockerfile(config_path: str, output_dir: str = str(IMAGE_DIR)):
     """
@@ -67,5 +68,6 @@ def generate_all(definitions_dir: str):
 
 if __name__ == "__main__":
     # Example usage
-    defs_dir = Path(__file__).parent / "definitions"
+    defs_dir = get_resource_path("definitions")
     generate_all(str(defs_dir))
+

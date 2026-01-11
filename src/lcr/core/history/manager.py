@@ -8,27 +8,28 @@ import os
 from pathlib import Path
 from typing import List, Optional
 from .types import ExecutionHistory
+from lcr.utils.path_helper import get_user_data_path
 
 class HistoryManager:
     """
     Manages persistence of execution history.
     Ensures portability by storing paths relative to the project root.
+    
+    Compatible with both development and PyInstaller frozen modes.
     """
 
     def __init__(self, storage_path: Optional[str] = None):
         """
         Args:
-            storage_path: Path to the JSON file. Defaults to data/history.json in project root.
+            storage_path: Path to the JSON file. Defaults to data/history.json (uses path_helper).
         """
         if storage_path:
             self.storage_path = Path(storage_path).resolve()
         else:
-            # Current file: src/lcr/core/history/manager.py
-            # Root is: src/lcr/core/history/../../../.. -> src/lcr/core/../../.. -> src/lcr/../../.. -> src/../../.. -> ../../../..
-            # Correct: parent=history, parent=core, parent=lcr, parent=src, parent=root (5 parents)
-            # Or reliance on _find_project_root which is safer.
-            self.project_root = self._find_project_root()
-            self.storage_path = self.project_root / "data" / "history.json"
+            # Use path_helper to resolve data/history.json in both dev and frozen modes
+            self.storage_path = get_user_data_path('src/data/history.json')
+            
+        self.project_root = self._find_project_root()
         print(f"[HistoryManager] Initialized. Storage Path: {self.storage_path}")
 
     def _find_project_root(self) -> Path:

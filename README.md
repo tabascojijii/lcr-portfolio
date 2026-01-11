@@ -4,11 +4,22 @@
 
 LCR (Legacy Code Reviver) is a specialized execution engine designed to safely run "abandoned" research code (e.g., Python 2.7 + OpenCV 2.4 scripts) on modern systems without modification.
 
+---
+### 🛡️ プロジェクトの公開制限と位置付けについて (Disclosure)
+
+> **注記：プロジェクトの公開制限について**
+> 
+> 私が並行して開発しているコアプロジェクト **『Maltilabeler』** は、1.3万行を超える規模であり、特定の研究ドメインにおける高度な機密性を含んでいます。プロフェッショナルとしての情報管理の観点から、コードの全容は非公開としております。
+> 
+> 本 **『LCR』** は、その開発過程で培ったアーキテクチャ設計能力を証明するための、**「汎用的かつ非侵入的なレガシー救済ソリューション」** として、その全容を公開（OSS化）しております。
+---
+
 ## Key Features
 
 - **Supply Chain Recovery**: Restore abandoned libraries (like OpenCV 2.4) using APT-based archive mapping.
-- **Containerized Safety**: Execute legacy scripts in isolated Docker environments.
-- **DI-First Architecture**: Strict separation of Read-Only inputs and Timestamped outputs, ensuring Data Integrity.
+- **Automatic Path Sanitization**: Detects and rewrites hardcoded absolute paths (e.g., `C:\Users\...`) to container-compatible paths on the fly.
+- **Containerized Safety**: Execute legacy scripts in isolated Docker environments to prevent host pollution.
+- **DI-First Architecture**: Strict separation of Read-Only inputs and Timestamped outputs, ensuring Data Integrity for pharmaceutical research.
 
 ## Quick Start
 
@@ -19,7 +30,7 @@ LCR (Legacy Code Reviver) is a specialized execution engine designed to safely r
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/Start-LCR/lcr-portfolio.git
+git clone https://github.com/tabascojijii/lcr-portfolio
 cd lcr-portfolio
 
 # Setup environment
