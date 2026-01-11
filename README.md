@@ -23,14 +23,23 @@ LCR (Legacy Code Reviver) is a specialized execution engine designed to safely r
 
 ## Quick Start
 
-### Prerequisites
-- Docker Desktop (Running)
-- Python 3.10+
+### Option 1: Running the Executable (Recommended for Demo)
+If you have downloaded the packaged release, you can run LCR without a Python environment.
+1. Ensure **Docker Desktop** is running.
+2. Download and extract `LCR.zip` from the [Releases](https://github.com/tabascojijii/lcr-portfolio/releases) page.
+3. Double-click `LCR.exe` within the extracted folder.
 
-### Installation
+### Option 2: Running from Source (For Developers)
+To set up a development environment:
+
+#### Prerequisites
+- Python 3.10+
+- Docker Desktop
+
+#### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/tabascojijii/lcr-portfolio
+git clone [https://github.com/tabascojijii/lcr-portfolio.git](https://github.com/tabascojijii/lcr-portfolio.git)
 cd lcr-portfolio
 
 # Setup environment
