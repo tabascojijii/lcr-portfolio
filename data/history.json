@@ -43,5 +43,14 @@
     "image_tag": "unknown",
     "output_dir": "data\\results\\20260110_130122",
     "status": "success"
+  },
+  {
+    "id": "52f024d3-8090-4a9d-b98e-5752e91ff5d8",
+    "timestamp": "2026-01-11T21:15:43",
+    "script_path": "data\\samples\\legacy_cv_calc.py",
+    "runtime_name": "Docker Container",
+    "image_tag": "unknown",
+    "output_dir": "data\\results\\20260111_211540",
+    "status": "success"
   }
 ]
