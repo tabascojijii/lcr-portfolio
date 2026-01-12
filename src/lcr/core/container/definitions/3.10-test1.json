@@ -1,0 +1,12 @@
+{
+    "tag": "3.10-test1",
+    "base_image": "python:3.10-slim",
+    "pip_packages": [
+        "PySide6"
+    ],
+    "apt_packages": [],
+    "env_vars": {
+        "PYTHONUNBUFFERED": "1"
+    },
+    "run_commands": []
+}

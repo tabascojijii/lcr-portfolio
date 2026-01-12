@@ -12,5 +12,9 @@
         "libxrender1",
         "libxext6"
     ],
-    "pip_packages": []
+    "pip_packages": [],
+    "installed_packages": [
+        "cv2",
+        "numpy"
+    ]
 }

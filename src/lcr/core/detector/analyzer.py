@@ -11,9 +11,21 @@ import ast
 import re
 import json
 import urllib.request
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Tuple
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Global cache for PyPI results (Session-level persistence)
+_PYPI_CACHE = {}
+
+@dataclass
+class PyPiPackageInfo:
+    """Structure for PyPI lookup results."""
+    name: str
+    exists: bool
+    is_dummy: bool = False
+    suggestion: Optional[str] = None
+    description: str = ""
 
 
 @dataclass
@@ -165,37 +177,109 @@ class CodeAnalyzer:
             print(f"[CodeAnalyzer] Warning: Failed to load library mappings: {e}")
         return {}
 
-    def guess_package_name(self, import_name: str) -> tuple[Optional[str], bool]:
+    def guess_package_name(self, import_name: str) -> Tuple[Optional[str], bool, Optional[str]]:
         """
         Guess PyPI package name from import name using PyPI JSON API.
         
         Returns:
-            (package_name, is_confirmed_on_pypi)
+            (package_name, is_confirmed_on_pypi, suggestion)
         """
         # 1. Try exact match
-        if self._check_pypi(import_name):
-            return import_name, True
+        info = self._check_pypi(import_name)
+        if info.exists:
+            if info.is_dummy and info.suggestion:
+                return import_name, True, info.suggestion
+            return import_name, True, None
             
         # 2. Try hyphen/underscore swap
         swapped = import_name.replace('_', '-')
-        if swapped != import_name and self._check_pypi(swapped):
-            return swapped, True
+        if swapped != import_name:
+            info_swapped = self._check_pypi(swapped)
+            if info_swapped.exists:
+                if info_swapped.is_dummy and info_swapped.suggestion:
+                    return swapped, True, info_swapped.suggestion
+                return swapped, True, None
             
-        return import_name, False
+        return import_name, False, None
 
-    def _check_pypi(self, package_name: str) -> bool:
-        """Check if package exists on PyPI via JSON API."""
+    def _check_pypi(self, package_name: str) -> PyPiPackageInfo:
+        """
+        Check if package exists on PyPI via JSON API. 
+        Uses global cache to prevent redundant requests.
+        """
+        if package_name in _PYPI_CACHE:
+            return _PYPI_CACHE[package_name]
+
         url = f"https://pypi.org/pypi/{package_name}/json"
         try:
-            with urllib.request.urlopen(url, timeout=3) as response:
-                # response.status doesn't exist - use getcode() instead
-                return response.getcode() == 200
+            # Enforce strict timeout to prevent UI blocking
+            with urllib.request.urlopen(url, timeout=2.0) as response:
+                if response.getcode() == 200:
+                    data = json.loads(response.read().decode('utf-8'))
+                    info = data.get('info', {})
+                    
+                    description = info.get('description', '') or info.get('summary', '')
+                    size = 0
+                    if data.get('urls'):
+                         size = data['urls'][0].get('size', 0)
+                    
+                    # Dummy Detection Logic
+                    is_dummy = False
+                    suggestion = None
+                    
+                    # Heuristic A: Extremely small size (< 2KB)
+                    if 0 < size < 2000:
+                        is_dummy = True
+                        
+                    # Heuristic B: Keywords in description
+                    lower_desc = description.lower()
+                    if "please install" in lower_desc or "use" in lower_desc and "instead" in lower_desc:
+                         is_dummy = True
+                         
+                         # Try to extract suggestion: "Please install X instead"
+                         # Simple regex for "install X instead"
+                         match = re.search(r'install\s+([a-zA-Z0-9_\-]+)\s+instead', lower_desc)
+                         if match:
+                             suggestion = match.group(1)
+
+                    result = PyPiPackageInfo(
+                        name=package_name,
+                        exists=True,
+                        is_dummy=is_dummy,
+                        suggestion=suggestion,
+                        description=info.get('summary', '')
+                    )
+                    _PYPI_CACHE[package_name] = result
+                    return result
+
         except Exception:
-            return False
+            pass
+            
+        # Not found or error
+        result = PyPiPackageInfo(name=package_name, exists=False)
+        _PYPI_CACHE[package_name] = result
+        return result
+
+    def _guess_apt_package_name(self, import_name: str) -> Optional[str]:
+        """
+        Heuristically guess APT package name (commonly python3-<name>).
+        NOTE: This does not verify existence against a remote repo, 
+        but assumes standard naming conventions for Debian/Ubuntu.
+        """
+        # Common pattern: import foo -> python3-foo
+        # We can add a list of known valid apt packages if we want to be stricter,
+        # or just return the guess.
+        
+        # Simple heuristic:
+        # Convert underscores to hyphens
+        normalized = import_name.replace('_', '-').lower()
+        return f"python3-{normalized}"
 
     def resolve_packages(self, imports: List[str]) -> Dict:
         """
         Resolve import names to Pip and Apt packages.
+        Strategy: APT FIRST.
+        
         Returns detailed resolution map:
         {
             "pip": set(),
@@ -219,47 +303,83 @@ class CodeAnalyzer:
             # Skip standard library modules
             if imp in stdlib:
                 continue
-                
+            
+            # 1. Check Library.json (Explicit Mappings)
             if imp in self.mappings:
-                # Mapped locally in library.json
                 mapping = self.mappings[imp]
                 
-                # Pip packages (list)
-                pip_pkgs = mapping.get("pip", [])
-                if isinstance(pip_pkgs, str): # Legacy/Migration safety
-                    pip_pkgs = [pip_pkgs]
-                elif pip_pkgs is None: # Explicit None safety
-                    pip_pkgs = []
-                    
-                for pkg in pip_pkgs:
-                    resolved["pip"].add(pkg)
-                    resolved["reasons"][pkg] = f"Mapped from import '{imp}'"
+                # Check if APT is defined and preferred
+                # If "apt" is present and not empty, we use it.
+                # If "pip" is also present, we might technically need both?
+                # Usually library.json defines dependencies.
                 
                 # Apt packages
                 apt_pkgs = mapping.get("apt", [])
-                if isinstance(apt_pkgs, str):
-                    apt_pkgs = [apt_pkgs]
-                elif apt_pkgs is None:
-                    apt_pkgs = []
-                    
-                for pkg in apt_pkgs:
-                    resolved["apt"].add(pkg)
-                    resolved["reasons"][pkg] = f"System dependency for '{imp}'"
+                if isinstance(apt_pkgs, str): apt_pkgs = [apt_pkgs]
+                elif apt_pkgs is None: apt_pkgs = []
+                
+                # Pip packages
+                pip_pkgs = mapping.get("pip", [])
+                if isinstance(pip_pkgs, str): pip_pkgs = [pip_pkgs]
+                elif pip_pkgs is None: pip_pkgs = []
+
+                if apt_pkgs:
+                    for pkg in apt_pkgs:
+                        resolved["apt"].add(pkg)
+                        resolved["reasons"][pkg] = f"Mapped from import '{imp}' (APT priority)"
+                
+                # Apt-First Strategy:
+                # If we have a 'python3-*' package in apt list, it's likely a system generic replacement.
+                # In that case, we SKIP the pip package to avoid conflict/redundancy.
+                # If apt list only has libraries (e.g. libgl...), we still need the pip package.
+                has_python_apt = any(p.startswith('python3-') or p.startswith('python-') for p in apt_pkgs)
+                
+                if pip_pkgs and not has_python_apt:
+                    for pkg in pip_pkgs:
+                        resolved["pip"].add(pkg)
+                        resolved["reasons"][pkg] = f"Mapped from import '{imp}'"
+                        
             else:
-                # Unknown import - Not in library.json
-                # Try to find it on PyPI using guess_package_name
-                candidate, confirmed = self.guess_package_name(imp)
+                # 2. Unknown Import - Try APT Heuristic FIRST
+                # This corresponds to "Search for python3-<name>"
+                # Since we can't search online easily, we use the heuristic guess.
+                
+                # User Requirement: "Search for python3-<name>... if not found... use pip"
+                # To purely simulate "Search", we'd need a list.
+                # Without a list, we might assume it exists if it's a "common" library?
+                # Or we can just default to the heuristic and let the user correct it if apt fails?
+                # "Apt-First" implies we should TRY apt.
+                
+                # Let's try to map it to python3-<name>
+                apt_candidate = self._guess_apt_package_name(imp)
+                
+                # We can't verify 'apt_candidate' existence easily on Windows host.
+                # However, for the sake of "Apt-First", we can tentatively add it to 'apt' 
+                # OR we could rely on PyPI check first, then map to apt?
+                
+                # compromise: We will use PyPI to confirm it's a real package names.
+                # If it is real, we map it to python3-<name> and put it in APT list
+                # (Assuming 'python3-<pypi_name>' is the standard).
+                
+                pypi_candidate, confirmed, suggestion = self.guess_package_name(imp)
                 
                 if confirmed:
-                    # CRITICAL: Package found on PyPI, add to pip set
-                    resolved["pip"].add(candidate)
-                    resolved["reasons"][candidate] = f"PyPI confirmed package for import '{imp}'"
-                    print(f"[CodeAnalyzer] PyPI Match: '{imp}' -> '{candidate}' (confirmed)")
+                    # It's a valid package. Prefer APT version.
+                    # e.g. 'requests' -> 'python3-requests'
+                    normalized_name = pypi_candidate if pypi_candidate else imp
+                    apt_guess = f"python3-{normalized_name.replace('_', '-').lower()}"
+                    
+                    resolved["apt"].add(apt_guess)
+                    resolved["reasons"][apt_guess] = f"Inferred Apt package for '{imp}' (Apt-First Strategy)"
+                    print(f"[CodeAnalyzer] Apt-First: '{imp}' -> '{apt_guess}'")
+                    
+                    # Do NOT add to pip list (User requirement: "put in apt list... not pip list")
                 else:
-                    # Not found on PyPI either
-                    resolved["unresolved"].add(candidate)
-                    resolved["reasons"][candidate] = f"Unconfirmed import '{imp}' (not in library.json, not found on PyPI)"
-                    print(f"[CodeAnalyzer] Unresolved: '{imp}' (candidate: '{candidate}')")
+                     # Not found on PyPI either.
+                     # Fallback to original behavior: add to unresolved
+                    resolved["unresolved"].add(imp) # Use original import name as candidate
+                    resolved["reasons"][imp] = f"Unconfirmed import '{imp}' (not in library.json, not found on PyPI)"
+                    print(f"[CodeAnalyzer] Unresolved: '{imp}'")
 
         return resolved
 

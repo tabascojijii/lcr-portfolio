@@ -56,7 +56,7 @@ class ContainerManager:
         {
             "id": "py36-ds",
             "name": "Python 3.6 Data Science",
-            "version": "3.x", 
+            "version": "3.6", 
             "libs": ["sklearn", "pandas", "numpy"], 
             "image": "lcr-py36-ml-classic", 
             "prepend_python": False, # LCR images have ENTRYPOINT ["python"]
@@ -75,6 +75,8 @@ class ContainerManager:
     
     def __init__(self):
         """Initialize the ContainerManager."""
+        self._metadata = None  # Lazy-loaded library metadata
+        self._sync_installed_packages()  # Sync from library.json to hardcoded rules
         self._load_definitions()
     
     def _load_definitions(self):
@@ -97,6 +99,10 @@ class ContainerManager:
                     with open(json_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                     
+                    # Hydration Prep
+                    meta = self._load_library_metadata()
+                    golden = meta.get("golden_images", {})
+                    
                     # Validation: Check required keys
                     if 'tag' not in data or 'base_image' not in data:
                         print(f"[ContainerManager] Skipping invalid definition {json_file.name}: Missing 'tag' or 'base_image'")
@@ -117,11 +123,42 @@ class ContainerManager:
                         "image": data['tag'],
                         "prepend_python": False, # LCR images
                         "triggers": [],
+                        "base_image": data.get('base_image'),
                         # Store extra info for UI tooltips if needed
-                        "description": f"Base: {data.get('base_image')}"
+                        "description": f"Base: {data.get('base_image')}",
+                        # Layer 2 installed packages (for strict diff calculation)
+                        "installed_packages": data.get('installed_packages', [])
                     }
+                    
+                    if not new_rule.get('installed_packages'):
+                        base_img = data.get('base_image', '')
+                        # 既知のゴールデンイメージ 'lcr-py36-ml-classic' を使っている場合
+                        if 'lcr-py36-ml-classic' in base_img:
+                            # 本家の 'py36-ds' ルールからデータをコピーする
+                            source = next((r for r in self.IMAGE_RULES if r['id'] == 'py36-ds'), None)
+                            if source:
+                                new_rule['installed_packages'] = list(source.get('installed_packages', []))
+                                print(f"[Debug] Hydrated rule '{new_rule['id']}' with installed_packages from py36-ds")
+                            else:
+                                print(f"[Debug] Failed to hydrate '{new_rule['id']}': Source 'py36-ds' not found.")
+                        
+                        # Fallback: Try Golden Image lookup by Base Image
+                        if not new_rule.get('installed_packages'):
+                             meta = self._load_library_metadata()
+                             golden = meta.get("golden_images", {})
+                             if base_img in golden:
+                                 new_rule['installed_packages'] = golden[base_img].get('pre_installed', [])
+                                 print(f"[Debug] Hydrated rule '{new_rule['id']}' with installed_packages from golden['{base_img}']")
+                             else:
+                                 pass # print(f"[Debug] No golden record for base '{base_img}'")
+                    # ---------------------------------------------------
+
                     self.IMAGE_RULES.append(new_rule)
                     loaded_count += 1
+                    
+                    # Debug: Confirm installed_packages were loaded
+                    pkg_count = len(new_rule['installed_packages'])
+                    print(f"[Debug] Loaded rule '{new_rule['id']}' with {pkg_count} installed package(s): {new_rule['installed_packages']}")
                     
                 except Exception as e:
                     print(f"[ContainerManager] Error loading {json_file.name}: {e}")
@@ -148,6 +185,201 @@ class ContainerManager:
         # Reload from disk
         self._load_definitions()
         print("[ContainerManager] Definitions reloaded.")
+    
+    def _sync_installed_packages(self):
+        """Sync installed_packages from library.json to hardcoded IMAGE_RULES.
+        
+        This ensures hardcoded rules have accurate pre-installed package lists
+        without manual duplication.
+        """
+        meta = self._load_library_metadata()
+        golden = meta.get("golden_images", {})
+        
+        for rule in self.IMAGE_RULES:
+            image_tag = rule.get('image')
+            if image_tag in golden:
+                # Sync pre_installed list to rule
+                rule['installed_packages'] = golden[image_tag].get('pre_installed', [])
+                print(f"[ContainerManager] Synced installed_packages for '{rule['id']}': {rule['installed_packages']}")
+            else:
+                # No golden image data, set empty list
+                rule['installed_packages'] = []
+    
+    def _load_library_metadata(self):
+        """Load library.json metadata for version pins and golden images."""
+        if self._metadata is not None:
+            return self._metadata
+            
+        try:
+            import json
+            from pathlib import Path
+            mapping_path = Path(__file__).parent.parent / "detector" / "mappings" / "library.json"
+            with open(mapping_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            self._metadata = data.get("_meta", {})
+        except Exception as e:
+            print(f"[ContainerManager] Warning: Failed to load library metadata: {e}")
+            self._metadata = {}
+        return self._metadata
+    
+    def _extract_version(self, base_rule):
+        """Extract major.minor version from rule (e.g., '3.6', '2.7').
+        
+        Returns:
+            String like '3.6', '2.7', or None if cannot determine
+        """
+        import re
+        
+        # Try rule['version'] first
+        version_str = base_rule.get('version', '')
+        if version_str:
+            # Extract x.y pattern
+            match = re.search(r'(\d+\.\d+)', version_str)
+            if match:
+                return match.group(1)
+        
+        # Fallback: Try parsing from image tag
+        image = base_rule.get('image', '')
+        match = re.search(r'(\d+\.\d+)', image)
+        if match:
+            return match.group(1)
+            
+        return None
+    
+    def _apply_legacy_pins(self, pip_packages, python_version):
+        """
+        Pythonバージョンに基づき、特定のパッケージを安定版に固定する。
+        名前の正規化（ハイフン/アンダースコア/小文字）を行い、表記揺れを吸収する。
+        """
+        if not pip_packages:
+            return []
+
+        # 1. library.json から該当バージョンのピン留めテーブルを取得
+        meta = self._load_library_metadata()
+        legacy_map = meta.get('legacy_versions', {})
+        
+        # バージョンキー (例: "3.6") の部分一致検索
+        target_pins = {}
+        for ver_key, pins in legacy_map.items():
+            if ver_key in python_version:
+                target_pins = pins
+                break
+        
+        if not target_pins:
+            return pip_packages
+
+        # 2. ピン留め辞書のキーを正規化して検索用マップを作る
+        # 例: "scikit-image" -> "scikit_image"
+        def normalize(name):
+            return name.lower().replace('-', '_').replace('.', '')
+
+        normalized_pins = {normalize(k): v for k, v in target_pins.items()}
+
+        # 3. パッケージリストを走査して置換
+        result = []
+        for pkg in pip_packages:
+            # バージョン指定を取り除いて名前だけにする
+            pkg_name = pkg.split('==')[0].split('>=')[0].split('<')[0].strip()
+            norm_name = normalize(pkg_name)
+
+            if norm_name in normalized_pins:
+                # マッチした！ -> 強制的にバージョンを付与した文字列にする
+                pin_version = normalized_pins[norm_name]
+                
+                # library.json の値が "==0.17.2" のように演算子込みか確認が必要
+                pinned_pkg = f"{pkg_name}{pin_version}"
+                
+                print(f"[Legacy Pin] Applied {pin_version} to '{pkg_name}'")
+                result.append(pinned_pkg)
+            else:
+                result.append(pkg)
+
+        return result
+    
+    def _subtract_golden_packages(self, packages, base_rule):
+        """Remove packages already in golden image to avoid conflicts.
+        
+        Args:
+            packages: List of package names to install
+            base_rule: Base image rule dictionary
+            
+        Returns:
+            Tuple of (filtered_packages, removed_packages) where:
+            - filtered_packages: List with pre-installed packages removed
+            - removed_packages: List of package names that were skipped
+        """
+        # Super-normalization: Unify all package name variations
+        def normalize_pkg_name(name):
+            """Super-normalize package name: lowercase + replace hyphens with underscores + remove dots."""
+            return name.lower().replace('-', '_').replace('.', '')
+        
+        # Priority 1: Check if base_rule has installed_packages from definition file
+        pre_installed = set()
+        
+        # Try to get from loaded definition file (stored in rule metadata)
+        if 'installed_packages' in base_rule:
+            pre_installed = set(base_rule.get('installed_packages', []))
+            print(f"[Golden Image] Using installed_packages from definition: {pre_installed}")
+        else:
+            # Priority 2: Fallback to library.json golden_images
+            meta = self._load_library_metadata()
+            golden = meta.get("golden_images", {})
+            
+            image_tag = base_rule.get('image')
+            if image_tag in golden:
+                pre_installed = set(golden[image_tag].get("pre_installed", []))
+                if pre_installed:
+                    print(f"[Golden Image] Using pre_installed from library.json for '{image_tag}': {pre_installed}")
+        
+        if not pre_installed:
+            return packages, []  # Return tuple with empty removed list
+        
+        # Create normalized lookup for pre-installed packages
+        normalized_installed = {normalize_pkg_name(pkg): pkg for pkg in pre_installed}
+        
+        # Filter out packages that are already installed
+        # Need to extract base package name for comparison
+        filtered = []
+        removed = []
+        conflicts = []  # Track version conflicts
+        
+        for pkg in packages:
+            pkg_name = pkg.split('==')[0].split('>=')[0].split('<=')[0].strip()
+            
+            # Check both exact and normalized match
+            is_installed = False
+            matched_name = None
+            
+            if pkg_name in pre_installed:
+                is_installed = True
+                matched_name = pkg_name
+            else:
+                # Try normalized match
+                normalized = normalize_pkg_name(pkg_name)
+                if normalized in normalized_installed:
+                    is_installed = True
+                    matched_name = normalized_installed[normalized]
+            
+            if is_installed:
+                # Check for version conflict
+                if '==' in pkg or '>=' in pkg or '<=' in pkg:
+                    # User is trying to install specific version of already-installed package
+                    conflicts.append(pkg)
+                removed.append(matched_name)  # Store the matched installed name
+            else:
+                filtered.append(pkg)
+        
+        if removed:
+            print(f"\n[Excluded - Pre-installed] The following {len(removed)} package(s) are already in the base image '{base_rule.get('id', 'unknown')}' and will NOT be reinstalled:")
+            for pkg in removed:
+                print(f"  ✗ {pkg} (already in Layer 2)")
+            print()
+        
+        if conflicts:
+            print(f"[WARNING] Version conflicts detected! Attempting to override stable Layer 2 packages: {', '.join(conflicts)}")
+            print(f"[WARNING] Recommendation: Remove these from your custom environment to avoid breaking the base image.")
+        
+        return filtered, removed  # Return tuple
 
     
     def validate_environment(self):
@@ -528,7 +760,29 @@ class ContainerManager:
         if not base_rule:
             # Fallback to latest python
             base_rule = self.IMAGE_RULES[-1]
+        
+        print(f"[synthesize_definition_config] Using base_rule: {base_rule['id']}, installed_packages: {base_rule.get('installed_packages', [])}")
             
+        # --- [Lazy Hydration] 既設パッケージリストが空の場合の救済措置 ---
+        installed = set(base_rule.get('installed_packages', []))
+
+        # もしリストが空で、かつベースイメージが既知のGolden Imageである場合
+        if not installed:
+            base_image = base_rule.get('base_image') or base_rule.get('image', '')
+            # 既知のゴールデン・イメージ (py36-ds等) を探す
+            # self.IMAGE_RULES (ハードコード/ライブラリ定義) から、同じイメージを使う親ルールを探す
+            parent_rule = next((r for r in self.IMAGE_RULES 
+                                if r.get('image') == base_image and r.get('installed_packages')), None)
+            
+            if parent_rule:
+                installed = set(parent_rule.get('installed_packages', []))
+                print(f"[Info] Hot-fixed missing packages for '{base_rule['id']}' using parent '{parent_rule['id']}'")
+                
+                # Apply to base_rule for downstream usage (diff calculation, etc.)
+                base_rule = base_rule.copy()
+                base_rule['installed_packages'] = list(installed)
+        # ----------------------------------------------------------------
+
         # 1. Resolve Detected Packages to Pip/Apt names
         from lcr.core.detector.analyzer import CodeAnalyzer
         # We need an instance to access the loaded mappings
@@ -536,38 +790,64 @@ class ContainerManager:
         detected_imports = analysis_result.get('libraries', [])
         resolved = analyzer.resolve_packages(detected_imports)
         
-        detected_pip = resolved['pip']
-        detected_apt = resolved['apt']
+        detected_pip = set(resolved['pip'])
+        detected_apt = set(resolved['apt'])
         
-        # 2. Get Base Image Packages (to avoid duplicates)
-        # Try to load the definition of the base image to find what it already has
-        base_pip = set()
-        base_apt = set()
+        # 2. Extract version from base rule for legacy pins
+        version = self._extract_version(base_rule)
         
-        # If the base rule points to a known definition file, we could load it.
-        # However, IMAGE_RULES are just runtime metadata.
-        # Heuristic: if ID matches one we loaded, we might have access to its config?
-        # A robust way is to re-load the JSON if the rule ID corresponds to a file stem.
-        # But for now, we'll assume the base is barebones OR rely on pip to skip existing.
-        # "Pure Diff" requirement suggests we SHOULD try to exclude.
+        # 3. Subtract packages pre-installed in golden images
+        # This uses installed_packages field synced from library.json
+        # Returns tuple: (filtered_packages, removed_packages)
+        needed_pip, skipped_packages = self._subtract_golden_packages(list(detected_pip), base_rule)
         
-        # Let's try to match ID to a loaded definition file pattern if possible
-        # Actually Manager doesn't store the full loaded config relative to ID efficiently yet.
-        # Optimization: Just proceed with what we detected. Pip handles duplicates gracefully.
-        # User requested "Pure Diff", but without Base Info it is hard.
-        # Compromise: We simply pass the detected set. 
-        # (If user insists on pure diff, we need Base Definition Knowledge Base).
+        # 4. Then apply legacy version pins if applicable
+        if version:
+            needed_pip = self._apply_legacy_pins(needed_pip, version)
+                 
+        # 5. Construct Config with Layer Inheritance
+        # Copy installed_packages from base rule so Layer 3 remembers Layer 2 contents
+        base_installed = base_rule.get('installed_packages', [])
         
-        # 3. Construct Config
+        # Combine Layer 2 packages with newly installed packages for Layer 3 definition
+        # This ensures that if Layer 3 becomes a base for Layer 4, the full package list is known
+        new_installed_packages = base_installed.copy() if isinstance(base_installed, list) else list(base_installed)
+        
+        # Add the packages we're about to install to the installed_packages list
+        # This way, Layer 3's definition will have the complete list of what's inside it
+        for pkg in needed_pip:
+            # Extract package name without version spec
+            pkg_name = pkg.split('==')[0].split('>=')[0].split('<=')[0].strip()
+            if pkg_name not in new_installed_packages:
+                new_installed_packages.append(pkg_name)
+        
+        # Log the inheritance and accumulation
+        if base_installed:
+            print(f"\n[Layer Inheritance] New environment (Layer 3) inherits {len(base_installed)} package(s) from base '{base_rule['id']}' (Layer 2):")
+            for pkg in base_installed:
+                print(f"  ← {pkg}")
+        
+        if needed_pip:
+            print(f"\n[New Installations] Layer 3 will install {len(needed_pip)} additional package(s):")
+            for pkg in needed_pip:
+                print(f"  + {pkg}")
+        
+        if new_installed_packages:
+            print(f"\n[Total Package Inventory] Layer 3 will contain {len(new_installed_packages)} package(s) total.")
+            print()
+        
         config = {
             "tag": "custom-auto-gen", # Placeholder, user should override
             "base_image": base_rule.get('image', 'python:3.10-slim'),
             "apt_packages": list(detected_apt),
-            "pip_packages": list(detected_pip),
+            "pip_packages": needed_pip,
+            "installed_packages": new_installed_packages,  # Full inventory: Layer 2 + Layer 3 additions
             "env_vars": {"PYTHONUNBUFFERED": "1"},
             "run_commands": [],
             "_resolution_reasons": resolved.get("reasons", {}), # Metadata for UI
-            "_unresolved": list(resolved.get("unresolved", [])) # Metadata for UI
+            "_unresolved": list(resolved.get("unresolved", [])), # Metadata for UI
+            "_skipped_packages": skipped_packages, # Packages excluded (Layer 2)
+            "_skipped_reason": "Pre-installed in base image (Layer 2)"
         }
         
         return config

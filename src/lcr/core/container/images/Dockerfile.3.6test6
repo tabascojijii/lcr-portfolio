@@ -1,0 +1,43 @@
+FROM lcr-py36-ml-classic
+
+# 1. Archive Repository Settings (if legacy)
+
+
+# 2. System Dependencies
+# 2. System Dependencies
+
+RUN apt-get update && apt-get install -y --force-yes --allow-unauthenticated \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    build-essential \
+    python3-dev \
+    cmake \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+
+# 3. Pip Configuration
+
+RUN mkdir -p /root/.pip && \
+    printf "[global]\ntrusted-host = pypi.python.org pypi.org files.pythonhosted.org\n" > /root/.pip/pip.conf
+
+
+# 4. Python Libraries
+
+RUN pip install --no-cache-dir \
+    "matplotlib==3.3.4" \
+    "scikit-image==0.17.2" \
+    "opencv-python-headless==4.3.0.38" \
+    "pandas"
+    
+
+
+
+
+
+
+ENV PYTHONUNBUFFERED="1"
+
+
+
+WORKDIR /app
+ENTRYPOINT ["python"]

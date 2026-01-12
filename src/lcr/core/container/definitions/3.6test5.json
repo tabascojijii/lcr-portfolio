@@ -1,0 +1,17 @@
+{
+    "tag": "3.6test5",
+    "base_image": "lcr-py36-ml-classic",
+    "pip_packages": [
+        "scikit-image"
+    ],
+    "apt_packages": [
+        "python3-matplotlib",
+        "libgl1-mesa-glx",
+        "libglib2.0-0",
+        "python3-opencv"
+    ],
+    "env_vars": {
+        "PYTHONUNBUFFERED": "1"
+    },
+    "run_commands": []
+}

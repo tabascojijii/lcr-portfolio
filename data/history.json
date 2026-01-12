@@ -20,5 +20,60 @@
     "status": "failed",
     "selection_mode": "Manual",
     "selection_reason": "Manual: python:2.7-slim"
+  },
+  {
+    "id": "ad3bf2d9-af74-4d0f-9be3-fd9e1825e130",
+    "timestamp": "2026-01-12T18:14:59",
+    "script_path": "tests\\test_dialog_reason_display.py",
+    "runtime_name": "3.10-test1 (3.10-test1)",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260112_181457",
+    "status": "failed",
+    "selection_mode": "Manual",
+    "selection_reason": "Manual: 3.10-test1"
+  },
+  {
+    "id": "f348b6e5-2eff-4d5a-ac38-0854610186fb",
+    "timestamp": "2026-01-12T19:10:17",
+    "script_path": "data\\samples\\fish_otolith_analyzer.py",
+    "runtime_name": "Python 3.6 Data Science",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260112_191015",
+    "status": "failed",
+    "selection_mode": "Auto",
+    "selection_reason": "Auto: Detected"
+  },
+  {
+    "id": "4c869ae3-4094-4cbe-bdc9-7f1dd0b022e8",
+    "timestamp": "2026-01-12T19:32:08",
+    "script_path": "data\\samples\\fish_otolith_analyzer.py",
+    "runtime_name": "Python 3.6 Data Science",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260112_193206",
+    "status": "failed",
+    "selection_mode": "Auto",
+    "selection_reason": "Auto: Detected"
+  },
+  {
+    "id": "efe44aba-31f2-425d-8578-6b6c773a558b",
+    "timestamp": "2026-01-12T19:32:44",
+    "script_path": "data\\samples\\fish_otolith_analyzer.py",
+    "runtime_name": "3.6test5 (3.6test5)",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260112_193206",
+    "status": "failed",
+    "selection_mode": "Manual",
+    "selection_reason": "Manual: 3.6test5"
+  },
+  {
+    "id": "2fad55f4-e95d-4070-be8c-61707fc65c77",
+    "timestamp": "2026-01-12T19:37:37",
+    "script_path": "data\\samples\\fish_otolith_analyzer.py",
+    "runtime_name": "3.6test6 (3.6test6)",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260112_193206",
+    "status": "success",
+    "selection_mode": "Manual",
+    "selection_reason": "Manual: 3.6test6"
   }
 ]

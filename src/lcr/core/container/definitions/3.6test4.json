@@ -1,0 +1,20 @@
+{
+    "tag": "3.6test4",
+    "base_image": "lcr-py36-ml-classic",
+    "pip_packages": [
+        "opencv-python-headless",
+        "scikit-image"
+    ],
+    "apt_packages": [
+        "python3-matplotlib",
+        "libglib2.0-0",
+        "libgl1-mesa-glx",
+        "python3-dev",
+        "cmake",
+        "build-essential"
+    ],
+    "env_vars": {
+        "PYTHONUNBUFFERED": "1"
+    },
+    "run_commands": []
+}

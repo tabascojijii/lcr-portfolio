@@ -262,6 +262,12 @@ class MainWindow(QMainWindow):
         
         right_layout.addLayout(actions_layout)
 
+        # Status Label
+        self.status_label = QLabel("Ready")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("font-weight: bold; color: #555; margin-top: 5px;")
+        right_layout.addWidget(self.status_label)
+
         # Add right pane to splitter
         splitter.addWidget(right_widget)
         splitter.setSizes([600, 400])
@@ -363,74 +369,247 @@ class MainWindow(QMainWindow):
     @Slot()
     def _run_analysis(self):
         """Analyze code from editor."""
-        code_text = self.code_editor.toPlainText()
-        if not code_text:
-            return
+        # 1. Lock UI & Set Status
+        self.status_label.setText("Analyzing...")
+        self.status_label.repaint()
+        self.run_btn.setEnabled(False)
+        self.create_env_btn.setEnabled(False)
+        self.runtime_combo.setEnabled(False)
+        self.analyze_btn.setEnabled(False)
+        QApplication.processEvents()
 
         try:
-            result = self.analyzer.summary(code_text)
-            version = result.get('version', 'Unknown')
-            libraries = result.get('libraries', [])
-            
-            self.version_label.setText(f"Detected Version: {version}")
-            self.libraries_label.setText(f"Detected Libraries: {', '.join(libraries) if libraries else 'None'}")
-            
-            stream = io.BytesIO(code_text.encode('utf-8'))
-            total, code, comments = count_lines_python(stream)
-            
-            ratio = 0.0
-            if (code + comments) > 0:
-                ratio = (comments / (code + comments)) * 100
-                
-            self.sloc_label.setText(f"SLOC: {code}")
-            self.ratio_label.setText(f"Comment Ratio: {ratio:.1f}%")
-            
-            self.console_log.append(f"\n[Analysis Completed] Version: {version}, Libs: {len(libraries)}, SLOC: {code}")
-            
-            self.console_log.append(f"\n[Analysis Completed] Version: {version}, Libs: {len(libraries)}, SLOC: {code}")
-            
-            # --- Auto Select Runtime ---
+            code_text = self.code_editor.toPlainText()
+            if not code_text:
+                return
+
             try:
-                # 1. Analyze for features (needed for resolution)
-                # Note: 'result' (summary) keys might differ from 'feature' object.
-                # Ideally running analyzer.analyze() gives full feature object.
-                # Re-running analyze heavily might be redundant but safe.
-                feature = self.analyzer.analyze(code_text)
-                version_hint = feature.version_hint
-                search_terms = feature.imports + feature.keywords
-                if feature.validation_year:
-                     search_terms.append(f"year:{feature.validation_year}")
+                result = self.analyzer.summary(code_text)
+                version = result.get('version', 'Unknown')
+                libraries = result.get('libraries', [])
                 
-                # 2. Resolve
-                selected_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
+                self.version_label.setText(f"Detected Version: {version}")
+                self.libraries_label.setText(f"Detected Libraries: {', '.join(libraries) if libraries else 'None'}")
                 
-                # 3. Update Combo (Silent)
-                self.runtime_combo.blockSignals(True)
-                index = self.runtime_combo.findText(selected_rule['name'])
-                if index >= 0:
-                    self.runtime_combo.setCurrentIndex(index)
-                else:
-                    # Fallback if name not found exactly? Should match if populated from same rules.
-                    self.console_log.append(f"[Warning] Auto-selected rule '{selected_rule['name']}' not found in list.")
-                self.runtime_combo.blockSignals(False)
+                stream = io.BytesIO(code_text.encode('utf-8'))
+                total, code, comments = count_lines_python(stream)
                 
-                # 4. Reset Mode and Update Display
-                self.selection_mode = 'Auto'
-                self._update_runtime_display(selected_rule, is_manual=False)
+                ratio = 0.0
+                if (code + comments) > 0:
+                    ratio = (comments / (code + comments)) * 100
+                    
+                self.sloc_label.setText(f"SLOC: {code}")
+                self.ratio_label.setText(f"Comment Ratio: {ratio:.1f}%")
+                
+                self.console_log.append(f"\n[Analysis Completed] Version: {version}, Libs: {len(libraries)}, SLOC: {code}")
+                
+                # --- Auto Select Runtime ---
+                try:
+                    # 1. Analyze for features (needed for resolution)
+                    feature = self.analyzer.analyze(code_text)
+                    version_hint = feature.version_hint
+                    search_terms = feature.imports + feature.keywords
+                    if feature.validation_year:
+                         search_terms.append(f"year:{feature.validation_year}")
+                    
+                    # 2. Resolve
+                    selected_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
+                    
+                    # 3. Update Combo (Silent)
+                    self.runtime_combo.blockSignals(True)
+                    index = self.runtime_combo.findText(selected_rule['name'])
+                    if index >= 0:
+                        self.runtime_combo.setCurrentIndex(index)
+                    else:
+                        self.console_log.append(f"[Warning] Auto-selected rule '{selected_rule['name']}' not found in list.")
+                    self.runtime_combo.blockSignals(False)
+                    
+                    # 4. Reset Mode and Update Display
+                    self.selection_mode = 'Auto'
+                    self._update_runtime_display(selected_rule, is_manual=False)
+                    
+                except Exception as e:
+                    self.console_log.append(f"[Analysis Error - AutoSelect] {e}")
+                    # Fallback to Manual Mode on error
+                    self.selection_mode = 'Manual'
+                    self.mode_label.setText("Select Runtime (Analysis Failed)")
+                    self.mode_label.setStyleSheet("color: red; font-weight: bold;")
                 
             except Exception as e:
-                self.console_log.append(f"[Analysis Error - AutoSelect] {e}")
-                # Fallback to Manual Mode on error
+                self.console_log.append(f"\n[Analysis Error] {e}")
                 self.selection_mode = 'Manual'
                 self.mode_label.setText("Select Runtime (Analysis Failed)")
                 self.mode_label.setStyleSheet("color: red; font-weight: bold;")
-            
-        except Exception as e:
-            self.console_log.append(f"\n[Analysis Error] {e}")
-            self.selection_mode = 'Manual'
-            self.mode_label.setText("Select Runtime (Analysis Failed)")
-            self.mode_label.setStyleSheet("color: red; font-weight: bold;")
 
+        finally:
+            # Always reset UI state
+            self._reset_buttons()
+
+
+    @Slot()
+    def _show_create_env_dialog(self):
+        """Show the Environment Creation Dialog."""
+        current_content = self.code_editor.toPlainText()
+        if not current_content:
+            QMessageBox.warning(self, "No Code", "Please select or paste code to analyze first.")
+            return
+
+        # 1. Analyze
+        # We assume the user wants to base the env on the CURRENT code
+        analysis = self.analyzer.summary(current_content)
+        
+        # 2. Get Recommendation
+        feature = self.analyzer.analyze(current_content)
+        search_terms = feature.imports + feature.keywords
+        if feature.validation_year:
+             search_terms.append(f"year:{feature.validation_year}")
+        
+        recommended_rule = self.container_manager.resolve_runtime(search_terms, feature.version_hint)
+        rec_id = recommended_rule['id']
+        rec_reason = recommended_rule.get('reason', 'Best match')
+
+        # 3. Synthesize Initial Config
+        # This uses the new logic in manager to calculate diffs
+        initial_config = self.container_manager.synthesize_definition_config(analysis, rec_id)
+        
+        # 4. Show Dialog
+        dialog = EnvironmentCreationDialog(
+            self, 
+            self.container_manager.get_available_runtimes(),
+            initial_config,
+            rec_id,
+            rec_reason
+        )
+        
+        if dialog.exec():
+            # 5. Handle Save & Build
+            new_config = dialog.result_config
+            if new_config:
+                try:
+                    # Save JSON
+                    json_path = save_definition(new_config, new_config['tag'])
+                    self.console_log.append(f"[Generator] Definition saved to {json_path.name}")
+                    
+                    # Generate Dockerfile
+                    tag, dockerfile_path = generate_dockerfile(str(json_path))
+                    
+                    # Run Build
+                    self._run_docker_build(dockerfile_path, tag)
+                    
+                except Exception as e:
+                    QMessageBox.critical(self, "Generation Error", str(e))
+                    self.console_log.append(f"[Generation Error] {e}")
+
+    def _run_jit_build(self, base_rule, code_content):
+        """
+        Triggered when a required image is missing.
+        Pre-fills the creation dialog with the missing image's rule info effectively.
+        """
+        # We can re-use the show dialog logic but maybe tweak the initial reason
+        # Actually simplified: just call _show_create_env_dialog, 
+        # as it analyzes the code and will likely recommend the same thing (or similar).
+        # But to be precise, we pass the rule we TRIED to use as the recommendation.
+        
+        analysis = self.analyzer.summary(code_content)
+        rec_id = base_rule['id']
+        rec_reason = "Required for execution (Missing Image)"
+        
+        initial_config = self.container_manager.synthesize_definition_config(analysis, rec_id)
+        
+        dialog = EnvironmentCreationDialog(
+            self, 
+            self.container_manager.get_available_runtimes(),
+            initial_config,
+            rec_id,
+            rec_reason
+        )
+        
+        if dialog.exec():
+            new_config = dialog.result_config
+            if new_config:
+                try:
+                    json_path = save_definition(new_config, new_config['tag'])
+                    self.console_log.append(f"[JIT] Definition saved to {json_path.name}")
+                    tag, dockerfile_path = generate_dockerfile(str(json_path))
+                    self._run_docker_build(dockerfile_path, tag)
+                except Exception as e:
+                    QMessageBox.critical(self, "Build Error", str(e))
+                    self._reset_buttons()
+        else:
+            # If user cancels JIT dialog, we must unlock the UI (locked in _run_container)
+            self._reset_buttons()
+
+    def _run_docker_build(self, dockerfile_path: str, tag: str):
+        """Execute docker build command via Worker."""
+        build_args = self.container_manager.get_build_command(dockerfile_path, tag)
+        
+        self.console_log.append(f"\n[Builder] Starting build for '{tag}'...")
+        self.console_log.append(f"Command: {' '.join(build_args)}")
+        
+        # Switch to console
+        self.tabs.setCurrentIndex(0)
+        self.run_btn.setEnabled(False)
+        self.analyze_btn.setEnabled(False) # Lock analyze
+        self.create_env_btn.setEnabled(False) # Lock new
+        self.stop_btn.setEnabled(True) # Allow cancelling build
+        
+        self.status_label.setText(f"Building Image: {tag}...")
+        self.status_label.setStyleSheet("font-weight: bold; color: #d84315;")
+        
+        # Reuse ContainerWorker since it just runs a subprocess
+        self.worker = ContainerWorker(
+            docker_args=build_args,
+            script_name=f"BUILD:{tag}"
+        )
+        
+        # We need a special finished handler to reload definitions after build
+        self.worker.log_updated.connect(self._on_worker_output)
+        self.worker.error_occurred.connect(self._on_worker_error)
+        self.worker.finished.connect(self._ensure_ui_reset)  # Backup cleanup
+        
+        # Define a closure or separate slot for build completion
+        # Using lambda strictly for the slot connection might be risky if we need robust teardown
+        # So we'll use a specific slot but we need to know it was a build.
+        # Hack: Check script_name in _on_worker_finished? 
+        # Better: create a dedicated _on_build_finished wrapper
+        
+        self.worker.finished_with_code.connect(lambda c: self._on_build_finished(c, tag))
+        
+        self.worker.start()
+
+    def _on_build_finished(self, exit_code, tag):
+        """Handle build completion."""
+        status = "Success" if exit_code == 0 else "Failed"
+        color = "lime" if exit_code == 0 else "red"
+        self.console_log.append(f"<font color='{color}'>[Builder] Build {status} for '{tag}'</font>")
+        
+        self._reset_buttons()  # This now includes create_env_btn and runtime_combo
+        
+        if exit_code == 0:
+            # Reload Manager
+            self.container_manager.reload_definitions()
+            self._populate_runtime_combo()
+            
+            # Select the new tag
+            self.runtime_combo.blockSignals(True)
+            idx = self.runtime_combo.findText(f"{tag} ({tag})") # Name format might vary
+            # Our name format in manager is "{stem} ({tag})"
+            # We don't know the exact stem (filename) easily here without logic.
+            # Loose search by tag in item data
+            found = False
+            for i in range(self.runtime_combo.count()):
+                rule = self.runtime_combo.itemData(i, Qt.UserRole)
+                if rule and rule.get('image') == tag:
+                    self.runtime_combo.setCurrentIndex(i)
+                    self._update_runtime_display(rule, is_manual=True) # treat as manual selection of the new env
+                    found = True
+                    break
+            
+            if not found:
+                self.console_log.append(f"[Builder] Warning: Could not auto-select new image '{tag}'. Please select manually.")
+                
+            self.runtime_combo.blockSignals(False)
+            QMessageBox.information(self, "Build Complete", f"Environment '{tag}' created and selected.")
 
     @Slot()
     def _run_container(self):
@@ -463,10 +642,16 @@ class MainWindow(QMainWindow):
         data_dir = self.data_dir_edit.text() or None
         output_dir = self.output_dir_edit.text() or None
         
+        self.run_btn.setText("Running...")
         self.run_btn.setEnabled(False)
         self.analyze_btn.setEnabled(False)
+        self.create_env_btn.setEnabled(False) # Lock New button
         self.stop_btn.setEnabled(True)
         self.runtime_combo.setEnabled(False) # Lock selection
+
+        script_name = Path(script_path).name
+        self.status_label.setText(f"Executing: {script_name}...")
+        self.status_label.setStyleSheet("font-weight: bold; color: #1976D2;")
 
         # Switch to Console Tab
         self.tabs.setCurrentIndex(0)
@@ -597,6 +782,7 @@ class MainWindow(QMainWindow):
             self.worker.log_updated.connect(self._on_worker_output)
             self.worker.error_occurred.connect(self._on_worker_error)
             self.worker.finished_with_code.connect(self._on_worker_finished)
+            self.worker.finished.connect(self._ensure_ui_reset)  # Backup cleanup
             
             self.worker.start()
             
@@ -763,10 +949,59 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.console_log.append(f"[Error] Failed to open folder: {e}")
 
-    def _reset_buttons(self):
-        self.run_btn.setEnabled(True)
-        self.analyze_btn.setEnabled(True)
-        self.stop_btn.setEnabled(False)
+    def update_ui_state(self, state="idle"):
+        """Centralized UI state management.
+        
+        Args:
+            state: One of "idle", "running", "building", "analyzing"
+        """
+        if state == "idle":
+            self.run_btn.setText("Run in Container")
+            self.run_btn.setEnabled(True)
+            self.analyze_btn.setEnabled(True)
+            self.stop_btn.setEnabled(False)
+            self.create_env_btn.setEnabled(True)
+            self.runtime_combo.setEnabled(True)
+            self.status_label.setText("Ready")
+            self.status_label.setStyleSheet("font-weight: bold; color: #555;")
+        
+        elif state == "running":
+            self.run_btn.setText("Running...")
+            self.run_btn.setEnabled(False)
+            self.analyze_btn.setEnabled(False)
+            self.create_env_btn.setEnabled(False)
+            self.stop_btn.setEnabled(True)
+            self.runtime_combo.setEnabled(False)
+            self.status_label.setText("Executing...")
+            self.status_label.setStyleSheet("font-weight: bold; color: #2e7d32;")
+        
+        elif state == "building":
+            self.run_btn.setEnabled(False)
+            self.analyze_btn.setEnabled(False)
+            self.create_env_btn.setEnabled(False)
+            self.stop_btn.setEnabled(True)
+            self.runtime_combo.setEnabled(False)
+            self.status_label.setText("Building...")
+            self.status_label.setStyleSheet("font-weight: bold; color: #d84315;")
+        
+        elif state == "analyzing":
+            self.run_btn.setEnabled(False)
+            self.analyze_btn.setText("Analyzing...")
+            self.analyze_btn.setEnabled(False)
+            self.create_env_btn.setEnabled(False)
+            self.runtime_combo.setEnabled(False)
+            self.status_label.setText("Analyzing code...")
+            self.status_label.setStyleSheet("font-weight: bold; color: #1976d2;")
+    
+    @Slot()
+    def _ensure_ui_reset(self):
+        """Backup cleanup called on Worker.finished signal (always fires).
+        
+        This ensures UI is reset even if other signal handlers fail or aren't connected properly.
+        """
+        # Only reset if buttons are still locked to avoid double-reset
+        if not self.run_btn.isEnabled():
+            self.update_ui_state("idle")
 
     @Slot()
     def _refresh_history_list(self):
