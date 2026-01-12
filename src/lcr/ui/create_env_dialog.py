@@ -18,13 +18,16 @@ class EnvironmentCreationDialog(QDialog):
     and customize installed packages.
     """
     
-    def __init__(self, parent=None, base_images: List[ImageRule] = [], initial_config: Dict = {}):
+    def __init__(self, parent=None, base_images: List[ImageRule] = [], initial_config: Dict = {}, 
+                 recommended_base_id: Optional[str] = None, recommendation_reason: Optional[str] = None):
         super().__init__(parent)
         self.setWindowTitle("Create New Runtime Environment")
-        self.resize(500, 600)
+        self.resize(600, 700) # Slightly larger
         
         self.base_images = base_images
         self.initial_config = initial_config
+        self.recommended_base_id = recommended_base_id
+        self.recommendation_reason = recommendation_reason
         self.result_config = None
         
         self._setup_ui()
@@ -53,7 +56,40 @@ class EnvironmentCreationDialog(QDialog):
             self.base_combo.addItem(rule['name'], rule['id'])
         form_layout.addRow("Base Image:", self.base_combo)
         
+        # Recommendation Label
+        if self.recommendation_reason:
+            rec_label = QLabel(f"ℹ️ {self.recommendation_reason}")
+            rec_label.setStyleSheet("color: #2e7d32; font-size: 11px; margin-left: 5px;")
+            rec_label.setWordWrap(True)
+            form_layout.addRow("", rec_label)
+        
         layout.addLayout(form_layout)
+        
+        # Reasons & Unresolved Info (if available)
+        reasons = self.initial_config.get("_resolution_reasons", {})
+        unresolved = self.initial_config.get("_unresolved", [])
+        
+        if reasons or unresolved:
+            reason_group = QGroupBox("Resolution Details")
+            reason_layout = QVBoxLayout(reason_group)
+            
+            if unresolved:
+                alert = QLabel(f"⚠️ Unresolved / Unconfirmed on PyPI: {', '.join(unresolved)}")
+                alert.setStyleSheet("color: red; font-weight: bold;")
+                alert.setWordWrap(True)
+                reason_layout.addWidget(alert)
+                
+            if reasons:
+                details_edit = QTextEdit()
+                details_edit.setReadOnly(True)
+                details_edit.setMaximumHeight(100)
+                details_content = "Resolution Map:\n"
+                for pkg, r in reasons.items():
+                    details_content += f"• {pkg}: {r}\n"
+                details_edit.setPlainText(details_content)
+                reason_layout.addWidget(details_edit)
+            
+            layout.addWidget(reason_group)
         
         # Packages
         pkgs_group = QGroupBox("Detected Dependency Gaps", self)
@@ -95,10 +131,23 @@ class EnvironmentCreationDialog(QDialog):
     def _populate_fields(self):
         """Populate fields with initial config."""
         # Set base image
-        base_img = self.initial_config.get('base_image', '')
-        # Try to match base image logic - here we use ID match if possible or find closest
-        # Simplification: Just default to 0 index or match 'python:3.x' logic if implemented later
-        # For now, we trust the caller passed sorted/prioritized list
+        # Priority: Recommended ID -> Config Base (if mapped to ID) -> First
+        
+        target_id = self.recommended_base_id
+        
+        # If no recommendation, try to reverse-lookup from config base image string?
+        # But 'base_image' in config is a docker tag (e.g. python:3.6), 'id' is internal rule id.
+        # So we really rely on recommended_base_id passed in.
+        
+        if target_id:
+            idx = self.base_combo.findData(target_id)
+            if idx >= 0:
+                self.base_combo.setCurrentIndex(idx)
+        else:
+            # Fallback default
+            pass # Keep 0 index
+        
+        # Set packages
         
         # Set packages
         pip_pkgs = self.initial_config.get('pip_packages', [])

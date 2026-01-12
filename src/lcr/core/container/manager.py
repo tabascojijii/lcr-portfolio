@@ -167,48 +167,130 @@ class ContainerManager:
         """Return list of available runtimes from rules."""
         return self.IMAGE_RULES
 
-    def resolve_runtime(self, search_terms: List[str], version_hint: str = "unknown") -> ImageRule:
+    def resolve_runtime(self, search_terms, version_hint: str = "unknown") -> ImageRule:
         """
         Resolve best runtime based on search terms (keywords/libs) and version.
         Replaces 'select_image' with more robust matching.
-        """
-        best_rule = self.IMAGE_RULES[-1] # Default to latest 3.x
-        best_score = -999
         
-        # Search Terms Set
-        terms_set = set(search_terms)
+        Args:
+            search_terms: Either List[str] of search terms, or Dict (analysis result)
+            version_hint: Version string (optional if search_terms is a dict)
+        
+        CRITICAL: Major version (2.x vs 3.x) compatibility is the PRIMARY criterion.
+        Images with incompatible major versions receive overwhelming penalties.
+        """
+        # Handle both list and dict inputs for backward compatibility
+        if isinstance(search_terms, dict):
+            # Dict format: extract info from analysis result
+            version_hint = search_terms.get('version', 'unknown')
+            libs = search_terms.get('libraries', search_terms.get('imports', []))
+            keywords = search_terms.get('keywords', [])
+            terms_set = set(libs + keywords)
+        else:
+            # List format: use as-is
+            terms_set = set(search_terms)
+        
+        best_rule = self.IMAGE_RULES[-1]  # Default to latest 3.x
+        best_score = -999999  # Very low default to allow penalties
+        best_reasons = []
+        
+        # Scoring details for each rule
+        scoring_log = []
 
         for rule in self.IMAGE_RULES:
-            # 1. Version Compatibility
-            if not self._check_version_compat(version_hint, rule['version']):
-                continue
-                
-            # 2. Score Calculation
-            score = 0
-            if rule['version'] == version_hint:
-                score += 50
+            # Extract major version from both code and rule
+            code_major = self._get_major_version(version_hint)
+            rule_major = self._get_major_version(rule['version'])
             
-            # Library/Keyword Matching
+            # 1. CRITICAL: Major Version Compatibility Check
+            # Apply overwhelming penalty if major versions are incompatible
+            score = 0
+            reasons = []
+            
+            if code_major != 'unknown' and rule_major != 'unknown':
+                if code_major == rule_major:
+                    # Same major version: huge bonus (overrides all other factors)
+                    score += 10000
+                    reasons.append(f"Major version match (Python {code_major}.x)")
+                else:
+                    # Different major version: massive penalty (makes this rule almost impossible to select)
+                    score -= 100000
+                    reasons.append(f"INCOMPATIBLE: Code needs Python {code_major}.x, image provides {rule_major}.x")
+            elif code_major == 'unknown' or rule_major == 'unknown':
+                # Unknown version: neutral (no bonus/penalty)
+                reasons.append("Version unknown - neutral scoring")
+                
+            # 2. Exact Version Match Bonus (secondary to major version)
+            if version_hint != 'unknown' and rule['version'] == version_hint:
+                score += 500
+                reasons.append(f"Exact version match ({version_hint})")
+            
+            # 3. Library/Keyword Matching (tertiary)
             rule_libs = set(rule.get('libs', []))
             rule_triggers = set(rule.get('triggers', []))
             all_criteria = rule_libs.union(rule_triggers)
             
             if all_criteria:
                 matched = all_criteria.intersection(terms_set)
-                missing = rule_libs - terms_set # Only penalize missing 'required' libs
+                missing = rule_libs - terms_set  # Only penalize missing 'required' libs
                 
-                score += len(matched) * 20
-                score -= len(missing) * 10
+                if matched:
+                    score += len(matched) * 20
+                    reasons.append(f"Matched libraries: {', '.join(matched)}")
+                
+                if missing:
+                    score -= len(missing) * 10
+                    reasons.append(f"Missing libraries: {', '.join(missing)}")
                 
                 # Bonus for trigger match
                 if rule_triggers.intersection(terms_set):
                     score += 30
+                    reasons.append("Trigger keywords matched")
+            
+            scoring_log.append({
+                'rule': rule['id'],
+                'score': score,
+                'reasons': reasons
+            })
             
             if score > best_score:
                 best_score = score
-                best_rule = rule
+                best_rule = rule.copy()  # Copy to avoid mutating original
+                best_reasons = reasons.copy()
+        
+        # Add reasoning to the returned rule
+        best_rule['reason'] = " | ".join(best_reasons) if best_reasons else "Default selection"
+        best_rule['score'] = best_score
+        
+        # Log scoring details for debugging
+        print(f"\n[ContainerManager] Runtime Selection for Python {version_hint}:")
+        for log in scoring_log:
+            print(f"  - {log['rule']}: Score={log['score']} | {' | '.join(log['reasons'])}")
+        print(f"  => SELECTED: {best_rule['id']} (Score: {best_score})")
+        print(f"  => REASON: {best_rule['reason']}\n")
                 
         return best_rule
+    
+    def _get_major_version(self, version_str: str) -> str:
+        """
+        Extract major version from version string.
+        
+        Args:
+            version_str: Version string like "2.7", "3.x", "3.10", "unknown"
+            
+        Returns:
+            Major version as "2" or "3", or "unknown"
+        """
+        if not version_str or version_str == 'unknown':
+            return 'unknown'
+            
+        # Handle "3.x" format
+        if version_str.startswith('3'):
+            return '3'
+        elif version_str.startswith('2'):
+            return '2'
+        else:
+            return 'unknown'
         
     def _check_version_compat(self, code_ver, rule_ver):
         if code_ver == 'unknown' or rule_ver == 'unknown': return True
@@ -454,14 +536,27 @@ class ContainerManager:
         detected_imports = analysis_result.get('libraries', [])
         resolved = analyzer.resolve_packages(detected_imports)
         
-        detected_pip = set(resolved['pip'])
-        detected_apt = set(resolved['apt'])
+        detected_pip = resolved['pip']
+        detected_apt = resolved['apt']
         
         # 2. Get Base Image Packages (to avoid duplicates)
-        # Note: ImageRule objects currently don't store full package lists of the underlying image
-        # We can implement a naive check against 'libs' if present, or just let pip handle existing reqs (it usually says 'Requirement already satisfied')
-        # Ideally, we would load the base definition JSON to see what's in it, but ImageRule is a summary.
-        # For now, we trust pip to handle overlapping installs gracefully.
+        # Try to load the definition of the base image to find what it already has
+        base_pip = set()
+        base_apt = set()
+        
+        # If the base rule points to a known definition file, we could load it.
+        # However, IMAGE_RULES are just runtime metadata.
+        # Heuristic: if ID matches one we loaded, we might have access to its config?
+        # A robust way is to re-load the JSON if the rule ID corresponds to a file stem.
+        # But for now, we'll assume the base is barebones OR rely on pip to skip existing.
+        # "Pure Diff" requirement suggests we SHOULD try to exclude.
+        
+        # Let's try to match ID to a loaded definition file pattern if possible
+        # Actually Manager doesn't store the full loaded config relative to ID efficiently yet.
+        # Optimization: Just proceed with what we detected. Pip handles duplicates gracefully.
+        # User requested "Pure Diff", but without Base Info it is hard.
+        # Compromise: We simply pass the detected set. 
+        # (If user insists on pure diff, we need Base Definition Knowledge Base).
         
         # 3. Construct Config
         config = {
@@ -470,7 +565,9 @@ class ContainerManager:
             "apt_packages": list(detected_apt),
             "pip_packages": list(detected_pip),
             "env_vars": {"PYTHONUNBUFFERED": "1"},
-            "run_commands": []
+            "run_commands": [],
+            "_resolution_reasons": resolved.get("reasons", {}), # Metadata for UI
+            "_unresolved": list(resolved.get("unresolved", [])) # Metadata for UI
         }
         
         return config

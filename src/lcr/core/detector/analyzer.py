@@ -9,8 +9,11 @@ This module provides the CodeAnalyzer class which can:
 
 import ast
 import re
-from typing import List, Dict, Optional
+import json
+import urllib.request
+from typing import List, Dict, Optional, Set
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -162,51 +165,137 @@ class CodeAnalyzer:
             print(f"[CodeAnalyzer] Warning: Failed to load library mappings: {e}")
         return {}
 
-    def resolve_packages(self, imports: List[str]) -> Dict[str, List[str]]:
+    def guess_package_name(self, import_name: str) -> tuple[Optional[str], bool]:
+        """
+        Guess PyPI package name from import name using PyPI JSON API.
+        
+        Returns:
+            (package_name, is_confirmed_on_pypi)
+        """
+        # 1. Try exact match
+        if self._check_pypi(import_name):
+            return import_name, True
+            
+        # 2. Try hyphen/underscore swap
+        swapped = import_name.replace('_', '-')
+        if swapped != import_name and self._check_pypi(swapped):
+            return swapped, True
+            
+        return import_name, False
+
+    def _check_pypi(self, package_name: str) -> bool:
+        """Check if package exists on PyPI via JSON API."""
+        url = f"https://pypi.org/pypi/{package_name}/json"
+        try:
+            with urllib.request.urlopen(url, timeout=3) as response:
+                # response.status doesn't exist - use getcode() instead
+                return response.getcode() == 200
+        except Exception:
+            return False
+
+    def resolve_packages(self, imports: List[str]) -> Dict:
         """
         Resolve import names to Pip and Apt packages.
-        
-        Args:
-            imports: List of imported module names (e.g. ['cv2', 'numpy'])
-            
-        Returns:
-            Dict with keys 'pip' and 'apt', containing lists of package names.
+        Returns detailed resolution map:
+        {
+            "pip": set(),
+            "apt": set(),
+            "unresolved": set(),
+            "reasons": {}
+        }
         """
         resolved = {
-            "pip": [],
-            "apt": []
+            "pip": set(),
+            "apt": set(),
+            "unresolved": set(),
+            "reasons": {}
         }
         
-        # known stdlib exclusions (basic list, could be expanded)
         stdlib = {'os', 'sys', 're', 'json', 'math', 'datetime', 'time', 'random', 
                  'collections', 'itertools', 'functools', 'logging', 'pathlib',
-                 'typing', 'subprocess', 'ast', 'shutil', 'hashlib', 'csv'}
+                 'typing', 'subprocess', 'ast', 'shutil', 'hashlib', 'csv', 'argparse'}
 
         for imp in imports:
+            # Skip standard library modules
             if imp in stdlib:
                 continue
                 
             if imp in self.mappings:
+                # Mapped locally in library.json
                 mapping = self.mappings[imp]
-                # Add Pip package
-                pypi_name = mapping.get("pypi")
-                if pypi_name:
-                    resolved["pip"].append(pypi_name)
                 
-                # Add Apt dependencies
-                apt_deps = mapping.get("apt", [])
-                resolved["apt"].extend(apt_deps)
+                # Pip packages (list)
+                pip_pkgs = mapping.get("pip", [])
+                if isinstance(pip_pkgs, str): # Legacy/Migration safety
+                    pip_pkgs = [pip_pkgs]
+                elif pip_pkgs is None: # Explicit None safety
+                    pip_pkgs = []
+                    
+                for pkg in pip_pkgs:
+                    resolved["pip"].add(pkg)
+                    resolved["reasons"][pkg] = f"Mapped from import '{imp}'"
+                
+                # Apt packages
+                apt_pkgs = mapping.get("apt", [])
+                if isinstance(apt_pkgs, str):
+                    apt_pkgs = [apt_pkgs]
+                elif apt_pkgs is None:
+                    apt_pkgs = []
+                    
+                for pkg in apt_pkgs:
+                    resolved["apt"].add(pkg)
+                    resolved["reasons"][pkg] = f"System dependency for '{imp}'"
             else:
-                # If no mapping, assume import name == package name (heuristic)
-                # But typically verify if it's standard lib first? 
-                # For now, pass through as pip package (user can edit in dialog)
-                resolved["pip"].append(imp)
+                # Unknown import - Not in library.json
+                # Try to find it on PyPI using guess_package_name
+                candidate, confirmed = self.guess_package_name(imp)
                 
-        # Deduplicate
-        resolved["pip"] = sorted(list(set(resolved["pip"])))
-        resolved["apt"] = sorted(list(set(resolved["apt"])))
-        
+                if confirmed:
+                    # CRITICAL: Package found on PyPI, add to pip set
+                    resolved["pip"].add(candidate)
+                    resolved["reasons"][candidate] = f"PyPI confirmed package for import '{imp}'"
+                    print(f"[CodeAnalyzer] PyPI Match: '{imp}' -> '{candidate}' (confirmed)")
+                else:
+                    # Not found on PyPI either
+                    resolved["unresolved"].add(candidate)
+                    resolved["reasons"][candidate] = f"Unconfirmed import '{imp}' (not in library.json, not found on PyPI)"
+                    print(f"[CodeAnalyzer] Unresolved: '{imp}' (candidate: '{candidate}')")
+
         return resolved
+
+    def update_mapping(self, import_name: str, package_config: Dict):
+        """
+        Update local mapping file with new package info.
+        
+        Args:
+            import_name: The import name (e.g., "cv2")
+            package_config: Dict like {"pip": ["opencv-python"], "apt": []}
+        """
+        try:
+           mapping_path = Path(__file__).parent / "mappings" / "library.json"
+           
+           # Load current
+           if mapping_path.exists():
+               with open(mapping_path, 'r', encoding='utf-8') as f:
+                   data = json.load(f)
+           else:
+               data = {}
+               
+           # Update
+           data[import_name] = package_config
+           
+           # Save atomic-ish
+           temp_path = mapping_path.with_suffix('.tmp')
+           with open(temp_path, 'w', encoding='utf-8') as f:
+               json.dump(data, f, indent=4, ensure_ascii=False)
+           
+           temp_path.replace(mapping_path)
+           
+           # Update in-memory
+           self.mappings[import_name] = package_config
+           
+        except Exception as e:
+            print(f"[CodeAnalyzer] Failed to update mapping: {e}")
 
     def summary(self, code_text: str) -> Dict[str, any]:
         """Legacy compatibility wrapper for summary dict."""

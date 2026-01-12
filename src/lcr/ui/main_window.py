@@ -826,25 +826,35 @@ class MainWindow(QMainWindow):
         feature = self.analyzer.analyze(code_text)
         summary = self.analyzer.summary(code_text)
         
-        # 2. Get available bases (filtered to LCR bases? or just all)
-        # We want "Base" candidates. Usually rules with "prepend_python": False (custom ones) or explicit base images.
-        # For simplicity, pass all rules, but dialog can filter by ID convention if needed.
-        # Actually, let's pass a curated list of "Base Candidates" from Manager?
-        # For now, pass all rules.
+        # 2. Get available bases
         all_rules = self.container_manager.get_available_runtimes()
         
-        # 3. Synthesize Config
-        # Which base to default vs? Auto resolve base
-        # Heuristic: resolve_runtime usually picks a precise match. 
-        # But for synthesis we want a generic base (e.g. python:3.6).
-        # Let's try to resolve to a 'standard' base.
-        # For now, just pick the top-scored one from resolve_runtime logic as "Default Base"
-        ver_hint = feature.version_hint
-        std_base_rule = next((r for r in all_rules if 'slim' in r['id'] and r['version'].startswith(ver_hint[0])), all_rules[-1])
+        # 3. Smart Base Recommendation
+        # Use existing logical resolution to pick the best base
+        version_hint = feature.version_hint
+        search_terms = feature.imports + feature.keywords
+        if feature.validation_year:
+             search_terms.append(f"year:{feature.validation_year}")
+             
+        recommended_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
+        recommended_id = recommended_rule.get('id')
         
-        config_suggestion = self.container_manager.synthesize_definition_config(summary, std_base_rule['id'])
+        # Formulate reason
+        ver_reason = f"Version {version_hint}"
+        term_reason = f"Matches: {', '.join(search_terms[:3])}..." if search_terms else "Generic"
+        rec_reason = f"Recommended based on: {ver_reason}. {term_reason}"
+
+        # 4. Synthesize Config
+        config_suggestion = self.container_manager.synthesize_definition_config(summary, recommended_id)
         
-        dialog = EnvironmentCreationDialog(self, base_images=all_rules, initial_config=config_suggestion)
+        dialog = EnvironmentCreationDialog(
+            self, 
+            base_images=all_rules, 
+            initial_config=config_suggestion,
+            recommended_base_id=recommended_id,
+            recommendation_reason=rec_reason
+        )
+        
         if dialog.exec():
             final_config = dialog.result_config
             if final_config:
