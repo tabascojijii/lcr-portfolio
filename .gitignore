@@ -11,6 +11,7 @@ ENV/
 
 # LCR Runtime Data (Crucial for Security)
 src/data/history.json
+enterprise.json
 data/results/*
 !data/results/.gitkeep
 *.log

@@ -14,6 +14,10 @@ This module provides ContainerManager which:
 from typing import Dict, Optional, List
 from pathlib import Path
 import subprocess
+import os
+import json
+import logging
+from lcr.utils.path_helper import get_resource_path
 
 from .types import ImageRule, RunConfig, AnalysisResult
 
@@ -75,10 +79,97 @@ class ContainerManager:
     
     def __init__(self):
         """Initialize the ContainerManager."""
+        self.definitions_dir = get_resource_path('definitions')
         self._metadata = None  # Lazy-loaded library metadata
         self._sync_installed_packages()  # Sync from library.json to hardcoded rules
         self._load_definitions()
+        # トランザクション中のIDを追跡するセット
+        self._pending_transactions = set()
     
+    # --- [Phase 3] Atomic Build & Rollback Logic ---
+
+    def get_definition(self, def_id):
+        """Retrieve a definition by ID from memory."""
+        return next((r for r in self.IMAGE_RULES if r.get('id') == def_id), None)
+
+    def save_definition_provisional(self, config):
+        """
+        [Transaction Start]
+        定義を「仮保存」状態でディスクに書き込む。
+        この時点ではメモリ上のリスト(IMAGE_RULES)には正式登録しない、
+        あるいは 'pending' フラグ付きで管理することを想定。
+        """
+        def_id = config.get("id")
+        if not def_id:
+            raise ValueError("Definition ID is required for atomic save.")
+
+        # 1. 既存チェック (上書き防止)
+        if self.get_definition(def_id):
+            raise FileExistsError(f"Definition '{def_id}' already exists.")
+
+        # 2. ファイル書き込み
+        filepath = os.path.join(self.definitions_dir, f"{def_id}.json")
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=4, ensure_ascii=False)
+            
+            # 3. トランザクション追跡開始
+            self._pending_transactions.add(def_id)
+            
+            # 4. メモリ上のルールリストにも一時的に追加 (ビルドプロセスが参照できるようにするため)
+            # ※ installed_packages の補完などは load_definitions と同様に行う必要あり
+            # ここでは簡易的に追加
+            self.IMAGE_RULES.append(config)
+            
+            logging.info(f"[Transaction] Started for '{def_id}'. File created at {filepath}")
+            return filepath
+            
+        except Exception as e:
+            # 書き込み失敗なら即座にクリーンアップ
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            raise e
+
+    def commit_definition(self, def_id):
+        """
+        [Transaction Commit]
+        ビルド成功時に呼び出す。定義を正式なものとして確定させる。
+        """
+        if def_id in self._pending_transactions:
+            self._pending_transactions.remove(def_id)
+            logging.info(f"[Transaction] Committed '{def_id}'. Environment is ready.")
+            # 必要であればここで library.json の更新や再ロードを行う
+            return True
+        else:
+            logging.warning(f"[Transaction] Attempted to commit unknown transaction '{def_id}'")
+            return False
+
+    def rollback_definition(self, def_id):
+        """
+        [Transaction Rollback]
+        ビルド失敗時に呼び出す。作成したJSONファイルを削除し、メモリからも消去する。
+        """
+        logging.warning(f"[Transaction] Rolling back '{def_id}'...")
+        
+        # 1. ファイル削除
+        filepath = os.path.join(self.definitions_dir, f"{def_id}.json")
+        if os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+                logging.info(f"[Transaction] Deleted file {filepath}")
+            except OSError as e:
+                logging.error(f"[Transaction] Failed to delete file {filepath}: {e}")
+
+        # 2. メモリから削除
+        self.IMAGE_RULES = [r for r in self.IMAGE_RULES if r['id'] != def_id]
+        
+        # 3. トランザクション管理から除外
+        if def_id in self._pending_transactions:
+            self._pending_transactions.remove(def_id)
+
+    def is_transaction_pending(self, def_id):
+        return def_id in self._pending_transactions
+
     def _load_definitions(self):
         """
         Load external JSON definitions from the definitions/ resource directory.
@@ -100,7 +191,8 @@ class ContainerManager:
                         data = json.load(f)
                     
                     # Hydration Prep
-                    meta = self._load_library_metadata()
+                    full_lib_data = self._load_library_metadata()
+                    meta = full_lib_data.get("_meta", {})
                     golden = meta.get("golden_images", {})
                     
                     # Validation: Check required keys
@@ -144,7 +236,8 @@ class ContainerManager:
                         
                         # Fallback: Try Golden Image lookup by Base Image
                         if not new_rule.get('installed_packages'):
-                             meta = self._load_library_metadata()
+                             full_lib_data = self._load_library_metadata()
+                             meta = full_lib_data.get("_meta", {})
                              golden = meta.get("golden_images", {})
                              if base_img in golden:
                                  new_rule['installed_packages'] = golden[base_img].get('pre_installed', [])
@@ -192,7 +285,7 @@ class ContainerManager:
         This ensures hardcoded rules have accurate pre-installed package lists
         without manual duplication.
         """
-        meta = self._load_library_metadata()
+        meta = self._load_library_metadata().get("_meta", {})
         golden = meta.get("golden_images", {})
         
         for rule in self.IMAGE_RULES:
@@ -205,21 +298,61 @@ class ContainerManager:
                 # No golden image data, set empty list
                 rule['installed_packages'] = []
     
+    def _deep_merge(self, base: Dict, overlay: Dict) -> Dict:
+        """
+        Recursive merge of overlay dictionary into base dictionary.
+        Modifies base in-place to ensure all references are updated.
+        """
+        for key, value in overlay.items():
+            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+                self._deep_merge(base[key], value)
+            else:
+                base[key] = value
+        return base
+
+    def get_library_info(self):
+        """Return the loaded library metadata (including overlays)."""
+        return self._load_library_metadata()
+
     def _load_library_metadata(self):
-        """Load library.json metadata for version pins and golden images."""
+        """Load library.json metadata and apply enterprise.json overlay if present."""
         if self._metadata is not None:
             return self._metadata
             
+        import json
+        from pathlib import Path
+        
+        # 1. Standard Load
         try:
-            import json
-            from pathlib import Path
             mapping_path = Path(__file__).parent.parent / "detector" / "mappings" / "library.json"
             with open(mapping_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            self._metadata = data.get("_meta", {})
         except Exception as e:
             print(f"[ContainerManager] Warning: Failed to load library metadata: {e}")
-            self._metadata = {}
+            data = {}
+
+        # 2. Enterprise Overlay
+        overlay_candidates = [
+            mapping_path.parent / "enterprise.json", # Same dir as library.json
+            Path.cwd() / "enterprise.json"           # Project root (CWD)
+        ]
+        
+        for overlay_path in overlay_candidates:
+            if overlay_path.exists():
+                try:
+                    with open(overlay_path, 'r', encoding='utf-8') as f:
+                        overlay_data = json.load(f)
+                    
+                    self._deep_merge(data, overlay_data)
+                    print(f"[Enterprise] Enterprise overlay mapping applied from {overlay_path.name}")
+                    
+                except json.JSONDecodeError:
+                    print(f"[Enterprise] Warning: Invalid JSON in {overlay_path}. Skipping.")
+                except Exception as e:
+                    print(f"[Enterprise] Warning: Failed to load {overlay_path}: {e}")
+
+        # Store FULL data, not just _meta, to support custom library definitions
+        self._metadata = data
         return self._metadata
     
     def _extract_version(self, base_rule):
@@ -255,7 +388,7 @@ class ContainerManager:
             return []
 
         # 1. library.json から該当バージョンのピン留めテーブルを取得
-        meta = self._load_library_metadata()
+        meta = self._load_library_metadata().get("_meta", {})
         legacy_map = meta.get('legacy_versions', {})
         
         # バージョンキー (例: "3.6") の部分一致検索
@@ -322,7 +455,7 @@ class ContainerManager:
             print(f"[Golden Image] Using installed_packages from definition: {pre_installed}")
         else:
             # Priority 2: Fallback to library.json golden_images
-            meta = self._load_library_metadata()
+            meta = self._load_library_metadata().get("_meta", {})
             golden = meta.get("golden_images", {})
             
             image_tag = base_rule.get('image')
@@ -786,7 +919,8 @@ class ContainerManager:
         # 1. Resolve Detected Packages to Pip/Apt names
         from lcr.core.detector.analyzer import CodeAnalyzer
         # We need an instance to access the loaded mappings
-        analyzer = CodeAnalyzer() 
+        # Pass our loaded metadata (with overlays) to the analyzer
+        analyzer = CodeAnalyzer(mappings=self._load_library_metadata()) 
         detected_imports = analysis_result.get('libraries', [])
         resolved = analyzer.resolve_packages(detected_imports)
         
@@ -836,12 +970,18 @@ class ContainerManager:
             print(f"\n[Total Package Inventory] Layer 3 will contain {len(new_installed_packages)} package(s) total.")
             print()
         
+        # Fetch global pip config if available (e.g. from enterprise.json)
+        full_lib_data = self._load_library_metadata()
+        meta = full_lib_data.get("_meta", {})
+        pip_config = meta.get("pip_config", {})
+
         config = {
             "tag": "custom-auto-gen", # Placeholder, user should override
             "base_image": base_rule.get('image', 'python:3.10-slim'),
             "apt_packages": list(detected_apt),
             "pip_packages": needed_pip,
             "installed_packages": new_installed_packages,  # Full inventory: Layer 2 + Layer 3 additions
+            "pip_config": pip_config, # Private Registry Settings
             "env_vars": {"PYTHONUNBUFFERED": "1"},
             "run_commands": [],
             "_resolution_reasons": resolved.get("reasons", {}), # Metadata for UI

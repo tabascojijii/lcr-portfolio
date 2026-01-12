@@ -26,6 +26,10 @@ RUN mkdir -p /root/.pip && \
 # 4. Python Libraries
 {% if pip_packages %}
 RUN pip install --no-cache-dir \
+{% if pip_config.index_url %}    --index-url {{ pip_config.index_url }} \
+{% endif -%}
+{% if pip_config.trusted_host %}    --trusted-host {{ pip_config.trusted_host }} \
+{% endif -%}
     {% for pkg in pip_packages -%}
     "{{ pkg }}"{{ " \\" if not loop.last else "" }}
     {% endfor %}

@@ -17,6 +17,7 @@ def render_dockerfile(config: Dict) -> str:
         "system_packages": config.get("system_packages", []) or config.get("apt_packages", []),
         "trusted_hosts": config.get("trusted_hosts", ["pypi.python.org", "pypi.org", "files.pythonhosted.org"]),
         "pip_packages": config.get("pip_packages", []),
+        "pip_config": config.get("pip_config", {}),
         "env_vars": config.get("env_vars", {}),
         "run_commands": config.get("run_commands", [])
     }

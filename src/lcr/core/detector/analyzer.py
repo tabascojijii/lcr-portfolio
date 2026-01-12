@@ -52,10 +52,14 @@ class CodeAnalyzer:
         r'#\s*-\*-\s*coding:\s*utf-8\s*-\*-', # Encoding declaration (common in py2)
     ]
     
-    def __init__(self, code_text=None):
+    def __init__(self, code_text=None, mappings=None):
         """Initialize the CodeAnalyzer."""
         self.py2_pattern = re.compile('|'.join(self.PY2_PATTERNS))
-        self.mappings = self._load_mappings()
+        
+        if mappings is not None:
+            self.mappings = mappings
+        else:
+            self.mappings = self._load_mappings()
         
         # Initial code text if provided (User request style)
         self.code = code_text
