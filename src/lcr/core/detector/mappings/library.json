@@ -1,0 +1,37 @@
+{
+    "_meta": {
+        "description": "Mapping from Python import names to PyPI packages and APT dependencies.",
+        "version": "1.0"
+    },
+    "cv2": {
+        "pypi": "opencv-python-headless",
+        "apt": [
+            "libgl1-mesa-glx",
+            "libglib2.0-0"
+        ]
+    },
+    "sklearn": {
+        "pypi": "scikit-learn",
+        "apt": []
+    },
+    "PIL": {
+        "pypi": "Pillow",
+        "apt": []
+    },
+    "yaml": {
+        "pypi": "PyYAML",
+        "apt": []
+    },
+    "bs4": {
+        "pypi": "beautifulsoup4",
+        "apt": []
+    },
+    "dateutil": {
+        "pypi": "python-dateutil",
+        "apt": []
+    },
+    "dotenv": {
+        "pypi": "python-dotenv",
+        "apt": []
+    }
+}

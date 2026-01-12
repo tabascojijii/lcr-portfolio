@@ -40,6 +40,8 @@ class CodeAnalyzer:
     def __init__(self, code_text=None):
         """Initialize the CodeAnalyzer."""
         self.py2_pattern = re.compile('|'.join(self.PY2_PATTERNS))
+        self.mappings = self._load_mappings()
+        
         # Initial code text if provided (User request style)
         self.code = code_text
         self.tree = None
@@ -145,6 +147,66 @@ class CodeAnalyzer:
             if match_from:
                 libraries.add(match_from.group(1))
         return libraries
+
+    def _load_mappings(self) -> Dict:
+        """Load library mappings from JSON file."""
+        import json
+        from pathlib import Path
+        try:
+            # Locate mapping file relative to this file
+            mapping_path = Path(__file__).parent / "mappings" / "library.json"
+            if mapping_path.exists():
+                with open(mapping_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[CodeAnalyzer] Warning: Failed to load library mappings: {e}")
+        return {}
+
+    def resolve_packages(self, imports: List[str]) -> Dict[str, List[str]]:
+        """
+        Resolve import names to Pip and Apt packages.
+        
+        Args:
+            imports: List of imported module names (e.g. ['cv2', 'numpy'])
+            
+        Returns:
+            Dict with keys 'pip' and 'apt', containing lists of package names.
+        """
+        resolved = {
+            "pip": [],
+            "apt": []
+        }
+        
+        # known stdlib exclusions (basic list, could be expanded)
+        stdlib = {'os', 'sys', 're', 'json', 'math', 'datetime', 'time', 'random', 
+                 'collections', 'itertools', 'functools', 'logging', 'pathlib',
+                 'typing', 'subprocess', 'ast', 'shutil', 'hashlib', 'csv'}
+
+        for imp in imports:
+            if imp in stdlib:
+                continue
+                
+            if imp in self.mappings:
+                mapping = self.mappings[imp]
+                # Add Pip package
+                pypi_name = mapping.get("pypi")
+                if pypi_name:
+                    resolved["pip"].append(pypi_name)
+                
+                # Add Apt dependencies
+                apt_deps = mapping.get("apt", [])
+                resolved["apt"].extend(apt_deps)
+            else:
+                # If no mapping, assume import name == package name (heuristic)
+                # But typically verify if it's standard lib first? 
+                # For now, pass through as pip package (user can edit in dialog)
+                resolved["pip"].append(imp)
+                
+        # Deduplicate
+        resolved["pip"] = sorted(list(set(resolved["pip"])))
+        resolved["apt"] = sorted(list(set(resolved["apt"])))
+        
+        return resolved
 
     def summary(self, code_text: str) -> Dict[str, any]:
         """Legacy compatibility wrapper for summary dict."""

@@ -4,7 +4,7 @@ block_cipher = None
 
 a = Analysis(
     ['run_gui.py'],
-    pathex=[],
+    pathex=['.', 'src'],
     binaries=[],
     datas=[
         # Bundle templates and definitions from source to root of dist

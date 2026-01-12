@@ -1,1 +1,24 @@
-[]
+[
+  {
+    "id": "5a937751-72c4-4c9c-b174-ddb55af129be",
+    "timestamp": "2026-01-12T02:32:12",
+    "script_path": "data\\samples\\legacy_cv_calc.py",
+    "runtime_name": "Python 2.7 + OpenCV 2.x",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260112_023209",
+    "status": "success",
+    "selection_mode": "Auto",
+    "selection_reason": "Auto: Detected"
+  },
+  {
+    "id": "29c0f50d-871a-44b6-90e1-c184d36507b1",
+    "timestamp": "2026-01-12T02:41:36",
+    "script_path": "data\\samples\\legacy_cv_calc.py",
+    "runtime_name": "Python 2.7 (Slim)",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260112_024135",
+    "status": "failed",
+    "selection_mode": "Manual",
+    "selection_reason": "Manual: python:2.7-slim"
+  }
+]

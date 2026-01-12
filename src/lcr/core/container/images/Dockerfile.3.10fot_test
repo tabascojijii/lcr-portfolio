@@ -1,0 +1,28 @@
+FROM python:3.10-slim
+
+# 1. Archive Repository Settings (if legacy)
+
+
+# 2. System Dependencies
+# 2. System Dependencies
+
+
+# 3. Pip Configuration
+
+RUN mkdir -p /root/.pip && \
+    printf "[global]\ntrusted-host = pypi.python.org pypi.org files.pythonhosted.org\n" > /root/.pip/pip.conf
+
+
+# 4. Python Libraries
+
+
+
+
+
+
+ENV PYTHONUNBUFFERED="1"
+
+
+
+WORKDIR /app
+ENTRYPOINT ["python"]

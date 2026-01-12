@@ -75,7 +75,80 @@ class ContainerManager:
     
     def __init__(self):
         """Initialize the ContainerManager."""
-        pass
+        self._load_definitions()
+    
+    def _load_definitions(self):
+        """
+        Load external JSON definitions from the definitions/ resource directory.
+        Robustness: Skips invalid files and handles missing directories gracefully.
+        """
+        import json
+        from lcr.utils.path_helper import get_resource_path
+        
+        try:
+            def_dir = get_resource_path('definitions')
+            if not def_dir.exists():
+                print(f"[ContainerManager] Warning: Definitions directory not found: {def_dir}")
+                return
+
+            loaded_count = 0
+            for json_file in def_dir.glob('*.json'):
+                try:
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    # Validation: Check required keys
+                    if 'tag' not in data or 'base_image' not in data:
+                        print(f"[ContainerManager] Skipping invalid definition {json_file.name}: Missing 'tag' or 'base_image'")
+                        continue
+                        
+                    # Avoid duplicates
+                    if any(r['image'] == data['tag'] for r in self.IMAGE_RULES):
+                        continue
+                        
+                    # Create Rule
+                    # definitions currently lack runtime metadata (libs, triggers), so we leave them empty.
+                    # This means they won't be auto-selected easily, which is desired for Manual-only visibility initially.
+                    new_rule: ImageRule = {
+                        "id": json_file.stem,
+                        "name": f"{json_file.stem} ({data.get('tag')})",
+                        "version": "unknown", # Metadata missing in current definitions
+                        "libs": [],
+                        "image": data['tag'],
+                        "prepend_python": False, # LCR images
+                        "triggers": [],
+                        # Store extra info for UI tooltips if needed
+                        "description": f"Base: {data.get('base_image')}"
+                    }
+                    self.IMAGE_RULES.append(new_rule)
+                    loaded_count += 1
+                    
+                except Exception as e:
+                    print(f"[ContainerManager] Error loading {json_file.name}: {e}")
+            
+            if loaded_count > 0:
+                print(f"[ContainerManager] Loaded {loaded_count} external definitions.")
+                
+        except Exception as e:
+            print(f"[ContainerManager] Critical Error loading definitions: {e}")
+
+    def reload_definitions(self):
+        """
+        Reload all definitions from disk and update internal rules list.
+        Preserves the hardcoded rules (first set of rules) but refreshes loaded ones.
+        """
+        # Keep hardcoded rules (assuming they are first 4 in current implementation)
+        # Better strategy: Filter list to only keep those WITHOUT 'id' matching file pattern or use explicit mark
+        # For this phase, we'll reset to initial Hardcoded Set manually or via Filter
+        
+        # Hardcoded IDs: py27-cv2, py27-slim, py36-ds, py310-slim
+        hardcoded_ids = {"py27-cv2", "py27-slim", "py36-ds", "py310-slim"}
+        self.IMAGE_RULES = [r for r in self.IMAGE_RULES if r['id'] in hardcoded_ids]
+        
+        # Reload from disk
+        self._load_definitions()
+        print("[ContainerManager] Definitions reloaded.")
+
     
     def validate_environment(self):
         """
@@ -160,15 +233,26 @@ class ContainerManager:
         script_path: str,
         work_dir: Optional[str] = None,
         data_dir: Optional[str] = None,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        override_image_rule: Optional[ImageRule] = None
     ) -> RunConfig:
         """
         Prepare Docker run configuration with separate input/output mounts.
+        Supports manual override of the image selection.
         """
         import datetime
         
         # Select image rule
-        rule = self.select_image(analysis_result)
+        if override_image_rule:
+            rule = override_image_rule
+            # Compatibility Check (Warning Log)
+            detected_ver = analysis_result.get('version', 'unknown')
+            rule_ver = rule.get('version', 'unknown')
+            if not self._check_version_compat(detected_ver, rule_ver):
+                print(f"[RunConfig] WARNING: Version mismatch detected! Code: {detected_ver}, Image: {rule_ver}")
+        else:
+            rule = self.select_image(analysis_result)
+            
         image = rule['image']
         
         # Logic to check if we should prepend python
@@ -345,3 +429,61 @@ class ContainerManager:
         pip_cmd = ['pip', 'install'] + external_libs
         
         return [pip_cmd]
+
+    def synthesize_definition_config(self, analysis_result: Dict, base_rule_id: str) -> Dict:
+        """
+        Create a new environment configuration based on analysis and a selected base image.
+        
+        Args:
+            analysis_result: Result from CodeAnalyzer
+            base_rule_id: ID of the base image rule to extend
+            
+        Returns:
+            Dict containing the new definition config (ready for JSON save)
+        """
+        # Find base rule
+        base_rule = next((r for r in self.IMAGE_RULES if r['id'] == base_rule_id), None)
+        if not base_rule:
+            # Fallback to latest python
+            base_rule = self.IMAGE_RULES[-1]
+            
+        # 1. Resolve Detected Packages to Pip/Apt names
+        from lcr.core.detector.analyzer import CodeAnalyzer
+        # We need an instance to access the loaded mappings
+        analyzer = CodeAnalyzer() 
+        detected_imports = analysis_result.get('libraries', [])
+        resolved = analyzer.resolve_packages(detected_imports)
+        
+        detected_pip = set(resolved['pip'])
+        detected_apt = set(resolved['apt'])
+        
+        # 2. Get Base Image Packages (to avoid duplicates)
+        # Note: ImageRule objects currently don't store full package lists of the underlying image
+        # We can implement a naive check against 'libs' if present, or just let pip handle existing reqs (it usually says 'Requirement already satisfied')
+        # Ideally, we would load the base definition JSON to see what's in it, but ImageRule is a summary.
+        # For now, we trust pip to handle overlapping installs gracefully.
+        
+        # 3. Construct Config
+        config = {
+            "tag": "custom-auto-gen", # Placeholder, user should override
+            "base_image": base_rule.get('image', 'python:3.10-slim'),
+            "apt_packages": list(detected_apt),
+            "pip_packages": list(detected_pip),
+            "env_vars": {"PYTHONUNBUFFERED": "1"},
+            "run_commands": []
+        }
+        
+        return config
+
+    def get_build_command(self, dockerfile_path: str, tag: str) -> list:
+        """Construct docker build command."""
+        # Use absolute path for safety
+        path_obj = Path(dockerfile_path).resolve()
+        context_dir = path_obj.parent
+        
+        return [
+            "docker", "build",
+            "-t", tag,
+            "-f", str(path_obj),
+            str(context_dir)
+        ]

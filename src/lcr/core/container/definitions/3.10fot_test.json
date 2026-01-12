@@ -1,0 +1,10 @@
+{
+    "tag": "3.10fot_test",
+    "base_image": "python:3.10-slim",
+    "pip_packages": [],
+    "apt_packages": [],
+    "env_vars": {
+        "PYTHONUNBUFFERED": "1"
+    },
+    "run_commands": []
+}

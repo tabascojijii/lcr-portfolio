@@ -73,13 +73,23 @@ class HistoryManager:
     def load_history(self) -> List[ExecutionHistory]:
         """
         Load history records with UTF-8 encoding.
+        Handles schema evolution by injecting default values for missing fields.
         """
         if not self.storage_path.exists():
             return []
         
         try:
             with open(self.storage_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                
+            # Schema Evolution: Ensure new fields exist
+            for record in data:
+                if 'selection_mode' not in record:
+                    record['selection_mode'] = 'Unknown'
+                if 'selection_reason' not in record:
+                    record['selection_reason'] = 'Legacy Record'
+                    
+            return data
         except (json.JSONDecodeError, IOError) as e:
             self._log_error(f"Failed to load history: {e}")
             return []

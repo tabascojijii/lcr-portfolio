@@ -20,16 +20,20 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QLineEdit, QPlainTextEdit, QTextEdit,
     QGroupBox, QFileDialog, QMessageBox, QApplication, QTabWidget,
-    QScrollArea, QTableWidget, QTableWidgetItem, QHeaderView, QListWidget, QListWidgetItem
+    QScrollArea, QTableWidget, QTableWidgetItem, QHeaderView, QListWidget, QListWidgetItem, QComboBox
 )
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtCore import Qt, Slot, QUrl
 
 from lcr.core.detector.analyzer import CodeAnalyzer
 from lcr.core.container.manager import ContainerManager
+from lcr.core.detector.analyzer import CodeAnalyzer
+from lcr.core.container.manager import ContainerManager
 from lcr.core.container.worker import ContainerWorker
+from lcr.core.container.generator import generate_dockerfile, save_definition
 from lcr.core.history.manager import HistoryManager
 from lcr.core.history.types import ExecutionHistory
+from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 from utils.count_loc import count_lines_python
 
 
@@ -46,7 +50,10 @@ class MainWindow(QMainWindow):
         self.container_manager = ContainerManager()
         self.history_manager = HistoryManager()
         self.worker = None
+        self.worker = None
         self.current_output_dir = None
+        self.selection_mode = 'Auto'
+
 
         # setup UI
         self._setup_ui()
@@ -134,7 +141,43 @@ class MainWindow(QMainWindow):
         env_layout.addWidget(self.version_label)
         env_layout.addWidget(self.libraries_label)
         env_layout.addWidget(self.sloc_label)
+        env_layout.addWidget(self.version_label)
+        env_layout.addWidget(self.libraries_label)
+        env_layout.addWidget(self.sloc_label)
         env_layout.addWidget(self.ratio_label)
+        
+        # Runtime Selection Combo
+        env_layout.addWidget(QLabel("Runtime Environment:"))
+        self.runtime_combo = QComboBox()
+        self.runtime_combo.setToolTip("Select the Docker environment for execution.")
+        self.runtime_combo.activated.connect(self._on_runtime_combo_activated)
+        
+        # Populate initially
+        self._populate_runtime_combo()
+        
+        env_combo_layout = QHBoxLayout()
+        env_combo_layout.addWidget(self.runtime_combo)
+        
+        # New Env Button
+        self.create_env_btn = QPushButton("New")
+        self.create_env_btn.setToolTip("Synthesize a new runtime environment")
+        self.create_env_btn.setMaximumWidth(50)
+        self.create_env_btn.clicked.connect(self._show_create_env_dialog)
+        env_combo_layout.addWidget(self.create_env_btn)
+        
+        env_layout.addLayout(env_combo_layout)
+        
+        # Runtime Info Label (Dynamic)
+        self.runtime_info_label = QLabel("")
+        self.runtime_info_label.setWordWrap(True)
+        self.runtime_info_label.setStyleSheet("color: #555;")
+        env_layout.addWidget(self.runtime_info_label)
+
+        # Mode Label
+        self.mode_label = QLabel("Mode: Auto")
+        self.mode_label.setStyleSheet("color: gray; font-style: italic;")
+        env_layout.addWidget(self.mode_label)
+
         self.env_group.setLayout(env_layout)
         
         right_layout.addWidget(self.env_group)
@@ -223,6 +266,66 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right_widget)
         splitter.setSizes([600, 400])
 
+    def _populate_runtime_combo(self):
+        """Populate the runtime combobox from ContainerManager rules."""
+        self.runtime_combo.clear()
+        rules = self.container_manager.get_available_runtimes()
+        for i, rule in enumerate(rules):
+            self.runtime_combo.addItem(rule['name'])
+            # Store full rule in UserRole
+            self.runtime_combo.setItemData(i, rule, Qt.UserRole)
+            # Tooltip: Base Image
+            desc = rule.get('description', f"Image: {rule['image']}")
+            self.runtime_combo.setItemData(i, desc, Qt.ToolTipRole)
+
+    @Slot(int)
+    def _on_runtime_combo_activated(self, index):
+        """Handle manual user selection."""
+        # Guard: Check valid index
+        if index < 0:
+            return
+            
+        # Retrieve rule data
+        rule = self.runtime_combo.itemData(index, Qt.UserRole)
+        if not rule:
+            self.console_log.append("[Warning] Invalid runtime selection - no data found.")
+            return
+        
+        # Update state
+        self.selection_mode = 'Manual'
+        
+        # Update UI display
+        self._update_runtime_display(rule, is_manual=True)
+
+    def _update_runtime_display(self, rule, is_manual=False):
+        """Update runtime environment display with selected rule info.
+        
+        Args:
+            rule: ImageRule dictionary with runtime information
+            is_manual: True if manual selection, False if auto-detected
+        """
+        # Update Runtime Info Label
+        display_text = f"Image: {rule['image']}\nTag: {rule.get('tag', 'latest')}"
+        self.runtime_info_label.setText(display_text)
+
+        # Update mode label and Combo style
+        if is_manual:
+            self.mode_label.setText("Mode: Manual (Override)")
+            self.mode_label.setStyleSheet("color: orange; font-weight: bold;")
+            # Visual feedback on combo - Specify color to prevent white-on-white
+            self.runtime_info_label.setStyleSheet("color: #d84315;") # Dark orange text
+            self.runtime_combo.setStyleSheet("QComboBox { background-color: #fff3e0; color: black; }")
+        else:
+            self.mode_label.setText("Mode: Auto")
+            self.mode_label.setStyleSheet("color: green;")
+            self.runtime_info_label.setStyleSheet("color: #2e7d32;") # Green text
+            self.runtime_combo.setStyleSheet("")  # Reset style
+        
+        # Log to console for transparency
+        selection_type = "Manual" if is_manual else "Auto"
+        self.console_log.append(f"[Runtime {selection_type}] Selected: {rule['name']} (Image: {rule['image']})")
+
+
     @Slot()
     def _select_script(self):
         """Open file dialog to select script."""
@@ -284,8 +387,50 @@ class MainWindow(QMainWindow):
             
             self.console_log.append(f"\n[Analysis Completed] Version: {version}, Libs: {len(libraries)}, SLOC: {code}")
             
+            self.console_log.append(f"\n[Analysis Completed] Version: {version}, Libs: {len(libraries)}, SLOC: {code}")
+            
+            # --- Auto Select Runtime ---
+            try:
+                # 1. Analyze for features (needed for resolution)
+                # Note: 'result' (summary) keys might differ from 'feature' object.
+                # Ideally running analyzer.analyze() gives full feature object.
+                # Re-running analyze heavily might be redundant but safe.
+                feature = self.analyzer.analyze(code_text)
+                version_hint = feature.version_hint
+                search_terms = feature.imports + feature.keywords
+                if feature.validation_year:
+                     search_terms.append(f"year:{feature.validation_year}")
+                
+                # 2. Resolve
+                selected_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
+                
+                # 3. Update Combo (Silent)
+                self.runtime_combo.blockSignals(True)
+                index = self.runtime_combo.findText(selected_rule['name'])
+                if index >= 0:
+                    self.runtime_combo.setCurrentIndex(index)
+                else:
+                    # Fallback if name not found exactly? Should match if populated from same rules.
+                    self.console_log.append(f"[Warning] Auto-selected rule '{selected_rule['name']}' not found in list.")
+                self.runtime_combo.blockSignals(False)
+                
+                # 4. Reset Mode and Update Display
+                self.selection_mode = 'Auto'
+                self._update_runtime_display(selected_rule, is_manual=False)
+                
+            except Exception as e:
+                self.console_log.append(f"[Analysis Error - AutoSelect] {e}")
+                # Fallback to Manual Mode on error
+                self.selection_mode = 'Manual'
+                self.mode_label.setText("Select Runtime (Analysis Failed)")
+                self.mode_label.setStyleSheet("color: red; font-weight: bold;")
+            
         except Exception as e:
             self.console_log.append(f"\n[Analysis Error] {e}")
+            self.selection_mode = 'Manual'
+            self.mode_label.setText("Select Runtime (Analysis Failed)")
+            self.mode_label.setStyleSheet("color: red; font-weight: bold;")
+
 
     @Slot()
     def _run_container(self):
@@ -299,6 +444,9 @@ class MainWindow(QMainWindow):
             # New Validation Method
             self.container_manager.validate_environment()
         except Exception as e:
+            # JIT: If validating environment logic fails (e.g. docker down), stop.
+            # But here we want to catch "Image Missing" in prepare_run_config later?
+            # validate_environment only checks Docker Daemon.
             QMessageBox.critical(self, "Docker Error", str(e))
             return
 
@@ -318,6 +466,8 @@ class MainWindow(QMainWindow):
         self.run_btn.setEnabled(False)
         self.analyze_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self.runtime_combo.setEnabled(False) # Lock selection
+
         # Switch to Console Tab
         self.tabs.setCurrentIndex(0)
         
@@ -339,7 +489,33 @@ class MainWindow(QMainWindow):
             # We will use it directly to get standard config but we can double check the reasoning here for display
             
             # Get reasoning explicitly for UI display
-            selected_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
+            # If Manual, use the ComboBox selected item
+            idx = self.runtime_combo.currentIndex()
+            if idx >= 0:
+                 selected_rule = self.runtime_combo.itemData(idx, Qt.UserRole)
+            else:
+                 selected_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
+
+            # Manual Compatibility Check UI
+            if self.selection_mode == 'Manual':
+                 rule_ver = selected_rule.get('version', 'unknown')
+                 feature = self.analyzer.analyze(current_content)
+                 code_ver = feature.version_hint
+                 
+                 if not self.container_manager._check_version_compat(code_ver, rule_ver):
+                     res = QMessageBox.warning(
+                         self, 
+                         "Compatibility Warning",
+                         f"You selected {rule_ver} but the code appears to be {code_ver}.\n\nUsage mistakes may cause errors. Continue?",
+                         QMessageBox.Yes | QMessageBox.No,
+                         QMessageBox.No
+                     )
+                     if res == QMessageBox.No:
+                         self._reset_buttons()
+                         self.runtime_combo.setEnabled(True)
+                         return
+            
+            # Construct explanation
             
             # Construct explanation
             reasons = []
@@ -356,15 +532,50 @@ class MainWindow(QMainWindow):
                 
             reason_text = " / ".join(reasons) if reasons else "Default selection"
 
-            # Use Manager to prepare config (it will re-resolve but consistency is fine)
-            # Future refactor: pass 'rule' to prepare_run_config to avoid double resolution
+            # Use Manager to prepare config
+            # Check for image existence before running
             config = self.container_manager.prepare_run_config(
-                self.analyzer.summary(current_content), # Pass legacy summary for compatibility
+                self.analyzer.summary(current_content), 
                 script_path, 
                 data_dir=data_dir,
-                output_dir=output_dir
+                output_dir=output_dir,
+                override_image_rule=selected_rule 
             )
+            
+            # --- JIT Image Check ---
+            # Try to verify if image exists using 'docker image inspect'
+            image_name = config['image']
+            
+            # Note: prepare_run_config doesn't return existence, so we check here manually or via helper
+            # For robustness, we'll try a lightweight subprocess check
+            try:
+                subprocess.run(
+                    ["docker", "image", "inspect", image_name], 
+                    stdout=subprocess.DEVNULL, 
+                    stderr=subprocess.DEVNULL, 
+                    check=True
+                )
+            except subprocess.CalledProcessError:
+                # Image missing! Prompt JIT Build
+                ans = QMessageBox.question(
+                    self,
+                    "Environment Missing",
+                    f"The required runtime image '{image_name}' is not built yet.\n\n"
+                    "Would you like to synthesize and build it now?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                
+                if ans == QMessageBox.Yes:
+                    self._run_jit_build(selected_rule, current_content) 
+                    return # Exit run flow, switch to build flow
+                else:
+                    self._reset_buttons()
+                    return
+
+
             docker_args = self.container_manager.get_docker_run_args(config)
+
             
             # Store output dir for result loading
             self.current_output_dir = config['host_work_dir']
@@ -424,35 +635,41 @@ class MainWindow(QMainWindow):
         
         # Save History
         try:
-            if self.current_output_dir: # Ensure we have context
+            if self.current_output_dir: 
                 import uuid
-                # Reconstruct context (ideally worker should pass this back, but we have UI state)
-                # Note: We rely on self.script_path_edit.text() assuming it hasn't changed.
-                # A safer way is to store the run context when starting the worker.
-                # For now, we use current UI state which is generally fine for single worker.
                 
-                # Check Console Log for runtime info we printed earlier? 
-                # Better: Use what we stored or just generic info if missing.
-                # Since we don't persist the 'config' object in self, we'll approximate 
-                # or just use what we have.
-                # Actually, relying on UI state is risky if user changed it during run.
-                # But LCR is modal-ish (buttons disabled).
+                # Determine detailed reason
+                reason = "Unknown"
+                if self.selection_mode == 'Manual':
+                    # Get selected tag
+                    idx = self.runtime_combo.currentIndex()
+                    rule = self.runtime_combo.itemData(idx, Qt.UserRole)
+                    tag = rule['image'] if rule else "unknown"
+                    reason = f"Manual: {tag}"
+                else:
+                    # Auto reason (would be nice to capture from resolve_runtime log, but for now simple)
+                    reason = "Auto: Detected"
                 
                 record: ExecutionHistory = {
                     "id": str(uuid.uuid4()),
                     "timestamp": datetime.datetime.now().replace(microsecond=0).isoformat(),
                     "script_path": self.script_path_edit.text(),
-                    "runtime_name": "Docker Container", # Simplified
-                    "image_tag": "unknown", # We didn't save this in self
+                    "runtime_name": self.runtime_combo.currentText(),
+                    "image_tag": "docker", # Placeholder or actual image
                     "output_dir": self.current_output_dir,
-                    "status": "success" if exit_code == 0 else "failed"
+                    "status": "success" if exit_code == 0 else "failed",
+                    "selection_mode": self.selection_mode,
+                    "selection_reason": reason
                 }
                 self.history_manager.save_record(record)
                 self._refresh_history_list()
-                self.console_log.append(f"[History] Record saved.")
+                self.console_log.append(f"[History] Record saved ({self.selection_mode}).")
                 
         except Exception as e:
             self.console_log.append(f"[History Error] Failed to save record: {e}")
+        
+        # Unlock Combo
+        self.runtime_combo.setEnabled(True)
         
         if exit_code == 0 and self.current_output_dir:
             self.open_res_btn.setEnabled(True)
@@ -595,6 +812,118 @@ class MainWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(abs_path))
         else:
             QMessageBox.warning(self, "Missing Path", f"Directory not found:\n{abs_path}")
+
+    @Slot()
+    def _show_create_env_dialog(self):
+        """Open dialog to create new environment based on current code."""
+        code_text = self.code_editor.toPlainText()
+        if not code_text:
+            QMessageBox.warning(self, "Info", "Please load a script first to detect dependencies.")
+            return
+
+        # 1. Analyze
+        # Reuse logic?
+        feature = self.analyzer.analyze(code_text)
+        summary = self.analyzer.summary(code_text)
+        
+        # 2. Get available bases (filtered to LCR bases? or just all)
+        # We want "Base" candidates. Usually rules with "prepend_python": False (custom ones) or explicit base images.
+        # For simplicity, pass all rules, but dialog can filter by ID convention if needed.
+        # Actually, let's pass a curated list of "Base Candidates" from Manager?
+        # For now, pass all rules.
+        all_rules = self.container_manager.get_available_runtimes()
+        
+        # 3. Synthesize Config
+        # Which base to default vs? Auto resolve base
+        # Heuristic: resolve_runtime usually picks a precise match. 
+        # But for synthesis we want a generic base (e.g. python:3.6).
+        # Let's try to resolve to a 'standard' base.
+        # For now, just pick the top-scored one from resolve_runtime logic as "Default Base"
+        ver_hint = feature.version_hint
+        std_base_rule = next((r for r in all_rules if 'slim' in r['id'] and r['version'].startswith(ver_hint[0])), all_rules[-1])
+        
+        config_suggestion = self.container_manager.synthesize_definition_config(summary, std_base_rule['id'])
+        
+        dialog = EnvironmentCreationDialog(self, base_images=all_rules, initial_config=config_suggestion)
+        if dialog.exec():
+            final_config = dialog.result_config
+            if final_config:
+                self._execute_save_and_build(final_config)
+
+    def _execute_save_and_build(self, config):
+        """Save config and trigger build."""
+        try:
+            name = config['tag']
+            # 1. Save
+            json_path = save_definition(config, name)
+            self.console_log.append(f"[Synthesizer] Definition saved: {json_path}")
+            
+            # 2. Reload Manager
+            self.container_manager.reload_definitions()
+            self._populate_runtime_combo()
+            
+            # 3. Select New Env
+            # Find the new rule
+            self.runtime_combo.blockSignals(True)
+            index = self.runtime_combo.findText(f"{name} ({name})") # Name format in manager logic: stem (tag)
+            # Actually name logic in manager: f"{json_file.stem} ({data.get('tag')})"
+            # Our file stem is safe_name.
+            # Best effort find:
+            if index == -1:
+                 # Try finding by data tag
+                 for i in range(self.runtime_combo.count()):
+                     r = self.runtime_combo.itemData(i, Qt.UserRole)
+                     if r['image'] == name:
+                         index = i
+                         break
+            
+            if index >= 0:
+                self.runtime_combo.setCurrentIndex(index)
+                self.selection_mode = 'Manual'
+                # Update display
+                self._update_runtime_display(self.runtime_combo.itemData(index, Qt.UserRole), is_manual=True)
+            self.runtime_combo.blockSignals(False)
+            
+            # 4. Generate Dockerfile (for build context)
+            tag, dockerfile_path = generate_dockerfile(config)
+            
+            # 5. Trigger Build
+            build_args = self.container_manager.get_build_command(dockerfile_path, tag)
+            
+            self.console_log.append(f"[Build] Starting build for {tag}...")
+            self.tabs.setCurrentIndex(0) # Show Console
+            
+            self._start_worker(build_args, f"Build: {tag}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Build Error", f"Failed to initiate build: {e}")
+            self.console_log.append(f"[Build Error] {e}")
+
+    def _run_jit_build(self, rule, code_content):
+        """Handle JIT build from Run flow."""
+        # 1. Open Dialog pre-filled with this rule?
+        # Or if "Synthesize" was clicked, maybe we should offer to Synthesize FROM the missing rule 
+        # OR just offer to create a NEW one. 
+        # The prompt said "Synthesize and build".
+        # Let's open the Dialog, pre-set with what we know.
+        self._show_create_env_dialog()
+
+    def _start_worker(self, args, script_name):
+        """Common worker starter."""
+        self.run_btn.setEnabled(False)
+        self.analyze_btn.setEnabled(False)
+        self.create_env_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.runtime_combo.setEnabled(False)
+        
+        self.worker = ContainerWorker(
+            docker_args=args,
+            script_name=script_name
+        )
+        self.worker.log_updated.connect(self._on_worker_output)
+        self.worker.error_occurred.connect(self._on_worker_error)
+        self.worker.finished_with_code.connect(self._on_worker_finished)
+        self.worker.start()
 
     def closeEvent(self, event):
         """Handle window close event to ensure cleanup."""

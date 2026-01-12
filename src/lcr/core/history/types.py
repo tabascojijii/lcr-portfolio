@@ -12,3 +12,5 @@ class ExecutionHistory(TypedDict):
     image_tag: str    # e.g. lcr-py27-cv-apt
     output_dir: str   # Relative path to output directory
     status: str       # success, failed, etc.
+    selection_mode: str # 'Auto' | 'Manual'
+    selection_reason: str # Justification

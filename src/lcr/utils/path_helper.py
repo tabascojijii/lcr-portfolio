@@ -16,7 +16,7 @@ from pathlib import Path
 
 def is_frozen():
     """Check if running in PyInstaller frozen mode."""
-    return getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+    return getattr(sys, 'frozen', False)
 
 
 def get_resource_path(relative_path: str) -> Path:
@@ -39,8 +39,19 @@ def get_resource_path(relative_path: str) -> Path:
         # Dev: C:/dev/lcr/src/lcr/core/container/templates
     """
     if is_frozen():
-        # In frozen mode, resources are extracted to sys._MEIPASS
-        base_path = Path(sys._MEIPASS)
+        # In frozen mode, resources are typically in sys._MEIPASS (onefile)
+        # or in '_internal' directory next to executable (onedir, PyInstaller 6+)
+        if hasattr(sys, '_MEIPASS'):
+            base_path = Path(sys._MEIPASS)
+        else:
+            # Fallback for onedir without _MEIPASS (look for _internal)
+            exe_dir = Path(sys.executable).parent
+            internal_dir = exe_dir / '_internal'
+            if internal_dir.exists():
+                base_path = internal_dir
+            else:
+                base_path = exe_dir
+                
         return base_path / relative_path
     else:
         # In development mode, locate resources from source structure

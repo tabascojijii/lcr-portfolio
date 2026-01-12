@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Dict, Union, Optional
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from lcr.utils.path_helper import get_resource_path
@@ -7,18 +8,8 @@ from lcr.utils.path_helper import get_resource_path
 TEMPLATE_DIR = get_resource_path("templates")
 IMAGE_DIR = Path(__file__).parent / "images"  # Images are generated artifacts, keep local
 
-def generate_dockerfile(config_path: str, output_dir: str = str(IMAGE_DIR)):
-    """
-    Generate a Dockerfile from a JSON definition using the base template.
-    """
-    config_path_obj = Path(config_path)
-    if not config_path_obj.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-        
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    
-    # Defaults and Pre-processing
+def render_dockerfile(config: Dict) -> str:
+    """Render Dockerfile content from configuration dictionary."""
     context = {
         "base_image": config.get("base_image", "python:3.10-slim"),
         "use_archive_repo": config.get("use_archive_repo", False),
@@ -34,21 +25,65 @@ def generate_dockerfile(config_path: str, output_dir: str = str(IMAGE_DIR)):
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
     template = env.get_template("base.Dockerfile.j2")
     
-    rendered = template.render(context)
+    return template.render(context)
+
+def save_definition(config: Dict, name: str) -> Path:
+    """
+    Save configuration dictionary to definitions directory as JSON.
+    
+    Args:
+        config: Configuration dictionary
+        name: Environment name (used for filename)
+        
+    Returns:
+        Path to saved JSON file
+    """
+    definitions_dir = get_resource_path("definitions")
+    
+    # Ensure tag matches name if not set
+    if "tag" not in config:
+        config["tag"] = name
+        
+    safe_name = name.replace(" ", "_").lower()
+    if not safe_name.endswith(".json"):
+        safe_name += ".json"
+        
+    save_path = definitions_dir / safe_name
+    
+    with open(save_path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, indent=4, ensure_ascii=False)
+        
+    return save_path
+
+def generate_dockerfile(config_source: Union[str, Dict], output_dir: str = str(IMAGE_DIR)) -> tuple[str, str]:
+    """
+    Generate a Dockerfile from a JSON definition or config dict.
+    Returns (tag, dockerfile_path).
+    """
+    if isinstance(config_source, str) or isinstance(config_source, Path):
+        # Load from file
+        config_path_obj = Path(config_source)
+        if not config_path_obj.exists():
+            raise FileNotFoundError(f"Config file not found: {config_source}")
+            
+        with open(config_source, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    else:
+        # Use provided dict
+        config = config_source
+    
+    rendered = render_dockerfile(config)
     
     # Determine Output Filename
-    # Tag format: lcr-py36-ml-classic -> Dockerfile.py36_ml_classic (approx mapping)
-    # The build script expects specific mapping, but usually we define tag -> file in build script.
-    # Here let's save as 'Dockerfile.<tag_safe>'
-    
     tag = config.get("tag", "custom-image")
-    # Clean tag for filename (e.g., lcr-py36-ml-classic -> lcr_py36_ml_classic)
-    # But usually build_images.py maps tags manually. 
-    # We will output the file and return the filename + tag so the caller can update build mappings.
-    
     safe_tag = tag.replace("-", "_").replace(":", "_")
     filename = f"Dockerfile.{safe_tag}"
-    output_path = Path(output_dir) / filename
+    
+    # Create output directory if needed
+    out_path_obj = Path(output_dir)
+    out_path_obj.mkdir(parents=True, exist_ok=True)
+    
+    output_path = out_path_obj / filename
     
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(rendered)
