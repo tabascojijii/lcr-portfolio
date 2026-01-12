@@ -473,8 +473,10 @@ class MainWindow(QMainWindow):
         initial_config = self.container_manager.synthesize_definition_config(analysis, rec_id)
         
         # 4. Show Dialog
+        # 4. Show Dialog
         dialog = EnvironmentCreationDialog(
             self, 
+            self.container_manager,  # [UPDATED] Pass manager for in-dialog build
             self.container_manager.get_available_runtimes(),
             initial_config,
             rec_id,
@@ -482,23 +484,30 @@ class MainWindow(QMainWindow):
         )
         
         if dialog.exec():
-            # 5. Handle Save & Build
+            # 5. Handle Success
+            # The dialog now handles the build process internally.
+            # If we get here, the build was successful and the definition is committed.
+            
+            # Reload definitions to see the new image
+            self.container_manager.reload_definitions()
+            self._populate_docker_images()
+            
+            # Select the new environment
             new_config = dialog.result_config
             if new_config:
-                try:
-                    # Save JSON
-                    json_path = save_definition(new_config, new_config['tag'])
-                    self.console_log.append(f"[Generator] Definition saved to {json_path.name}")
-                    
-                    # Generate Dockerfile
-                    tag, dockerfile_path = generate_dockerfile(str(json_path))
-                    
-                    # Run Build
-                    self._run_docker_build(dockerfile_path, tag)
-                    
-                except Exception as e:
-                    QMessageBox.critical(self, "Generation Error", str(e))
-                    self.console_log.append(f"[Generation Error] {e}")
+                tag = new_config.get('tag')
+                if tag:
+                    # Find and select the new item
+                    for i in range(self.image_combo.count()):
+                        # Combo items: "Name (ID)" or just "Name" depending on implementation
+                        # But findText usually works if we match the display.
+                        # Actually, let's use the explicit logic from populate.
+                        # For now, simplistic attempt:
+                        if tag in self.image_combo.itemText(i):
+                            self.image_combo.setCurrentIndex(i)
+                            break
+            
+            QMessageBox.information(self, "Ready", f"Environment '{tag}' is ready to use.")
 
     def _run_jit_build(self, base_rule, code_content):
         """
@@ -518,64 +527,50 @@ class MainWindow(QMainWindow):
         
         dialog = EnvironmentCreationDialog(
             self, 
+            self.container_manager, # [UPDATED] Pass manager
             self.container_manager.get_available_runtimes(),
             initial_config,
             rec_id,
             rec_reason
         )
         
+        # JIT Dialog handling
         if dialog.exec():
+            # Success - Image built
+            self.container_manager.reload_definitions()
+            self._populate_docker_images()
+            
             new_config = dialog.result_config
             if new_config:
-                try:
-                    json_path = save_definition(new_config, new_config['tag'])
-                    self.console_log.append(f"[JIT] Definition saved to {json_path.name}")
-                    tag, dockerfile_path = generate_dockerfile(str(json_path))
-                    self._run_docker_build(dockerfile_path, tag)
-                except Exception as e:
-                    QMessageBox.critical(self, "Build Error", str(e))
-                    self._reset_buttons()
+                tag = new_config.get('tag')
+                self.console_log.append(f"[JIT] Environment '{tag}' created successfully.")
+                
+                # Update selection
+                for i in range(self.image_combo.count()):
+                    if tag in self.image_combo.itemText(i):
+                        self.image_combo.setCurrentIndex(i)
+                        break
+            
+            # Important: JIT flow usually implies we want to run immediately, 
+            # but since we just had a blocking dialog, user might want to check things.
+            # We reset buttons to allow them to click Run again.
+            self._reset_buttons()
+            
         else:
-            # If user cancels JIT dialog, we must unlock the UI (locked in _run_container)
+            # Cancelled
             self._reset_buttons()
 
-    def _run_docker_build(self, dockerfile_path: str, tag: str):
-        """Execute docker build command via Worker."""
-        build_args = self.container_manager.get_build_command(dockerfile_path, tag)
-        
-        self.console_log.append(f"\n[Builder] Starting build for '{tag}'...")
-        self.console_log.append(f"Command: {' '.join(build_args)}")
-        
-        # Switch to console
-        self.tabs.setCurrentIndex(0)
-        self.run_btn.setEnabled(False)
-        self.analyze_btn.setEnabled(False) # Lock analyze
-        self.create_env_btn.setEnabled(False) # Lock new
-        self.stop_btn.setEnabled(True) # Allow cancelling build
-        
-        self.status_label.setText(f"Building Image: {tag}...")
-        self.status_label.setStyleSheet("font-weight: bold; color: #d84315;")
-        
-        # Reuse ContainerWorker since it just runs a subprocess
-        self.worker = ContainerWorker(
-            docker_args=build_args,
-            script_name=f"BUILD:{tag}"
-        )
-        
-        # We need a special finished handler to reload definitions after build
-        self.worker.log_updated.connect(self._on_worker_output)
-        self.worker.error_occurred.connect(self._on_worker_error)
-        self.worker.finished.connect(self._ensure_ui_reset)  # Backup cleanup
-        
-        # Define a closure or separate slot for build completion
-        # Using lambda strictly for the slot connection might be risky if we need robust teardown
-        # So we'll use a specific slot but we need to know it was a build.
-        # Hack: Check script_name in _on_worker_finished? 
-        # Better: create a dedicated _on_build_finished wrapper
-        
-        self.worker.finished_with_code.connect(lambda c: self._on_build_finished(c, tag))
+
         
         self.worker.start()
+
+    def _reset_buttons(self):
+        """Reset UI buttons to active state after operation."""
+        self.analyze_btn.setEnabled(True)
+        self.run_btn.setEnabled(True)
+        self.create_env_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        print("[UI] Buttons reset to active state.")
 
     def _on_build_finished(self, exit_code, tag):
         """Handle build completion."""

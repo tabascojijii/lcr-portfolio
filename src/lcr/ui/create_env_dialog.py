@@ -7,10 +7,15 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
     QLineEdit, QComboBox, QTextEdit, QPushButton, 
     QMessageBox, QFormLayout, QGroupBox, QListWidget, QListWidgetItem,
-    QInputDialog, QWidget
+    QInputDialog, QWidget, QProgressBar
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
+from PySide6.QtGui import QTextCursor, QColor
+
 from lcr.core.container.types import ImageRule
+from lcr.core.container.manager import ContainerManager
+from lcr.core.container.generator import save_definition, generate_dockerfile
+from lcr.ui.workers import BuildWorker
 
 class EnvironmentCreationDialog(QDialog):
     """
@@ -19,18 +24,24 @@ class EnvironmentCreationDialog(QDialog):
     and customize installed packages.
     """
     
-    def __init__(self, parent=None, base_images: List[ImageRule] = [], initial_config: Dict = {}, 
+    def __init__(self, parent=None, container_manager: ContainerManager = None, base_images: List[ImageRule] = [], initial_config: Dict = {}, 
                  recommended_base_id: Optional[str] = None, recommendation_reason: Optional[str] = None):
         super().__init__(parent)
         self.setWindowTitle("Create New Runtime Environment")
-        self.resize(700, 800)
+        self.resize(700, 850)
         
+        self.container_manager = container_manager
         self.base_images = base_images
         self.initial_config = initial_config
         self.recommended_base_id = recommended_base_id
         self.recommendation_reason = recommendation_reason
         self.result_config = None
         self.apt_warnings = {}  # Loaded metadata for warnings
+        
+        # Build State
+        self.worker: Optional[BuildWorker] = None
+        self.is_building = False
+        self.current_def_id = None  # Track ID for rollback
         
         self._load_apt_warnings()
         self._setup_ui()
@@ -146,6 +157,19 @@ class EnvironmentCreationDialog(QDialog):
         
         layout.addWidget(pkgs_group)
         
+        # [REQ-1] Log Console (Initially Hidden)
+        self.log_group = QGroupBox("Build Progress")
+        self.log_group.setVisible(False)
+        log_layout = QVBoxLayout(self.log_group)
+        
+        self.log_console = QTextEdit()
+        self.log_console.setReadOnly(True)
+        self.log_console.setStyleSheet("background-color: black; color: white; font-family: Consolas; font-size: 10pt;")
+        self.log_console.setMinimumHeight(200)
+        log_layout.addWidget(self.log_console)
+        
+        layout.addWidget(self.log_group)
+
         # Disclaimer
         note = QLabel("Note: 'Save & Build' will save this definition to 'definitions/' "
                       "and immediately start building the container image.")
@@ -299,88 +323,230 @@ class EnvironmentCreationDialog(QDialog):
         return config
 
     def accept(self):
-        """Validate before accepting."""
+        """
+        Validate and start build process inside dialog window.
+        Overrides standard accept to prevent closing.
+        """
+        # If already building, do nothing (button should be disabled anyway)
+        if self.is_building:
+            return
+
         result = self.get_config()
-        if result:
-            pip_pkgs = result.get('pip_packages', [])
-            apt_pkgs = result.get('apt_packages', [])
-            base_image = result.get('base_image', '')
+        if not result:
+            return
 
-            # --- Strategy 0: Legacy Version Pinning (New) ---
-            # If base image is Python 3.6, apply known version pins from library.json
-            if "3.6" in base_image:
-                try:
-                    import json
-                    from pathlib import Path
-                    # Load library.json relative to this file's known location in src/lcr/ui -> src/lcr/core/detector/mappings
-                    # Or reuse the one from core if available. But here we load it directly to be safe.
-                    # Assuming we are in src/lcr/ui/create_env_dialog.py
-                    # library.json is in ../core/detector/mappings/library.json
-                    mapping_path = Path(__file__).parent.parent / "core" / "detector" / "mappings" / "library.json"
-                    if mapping_path.exists():
-                        with open(mapping_path, 'r', encoding='utf-8') as f:
-                            lib_data = json.load(f)
-                            legacy_pins = lib_data.get("_meta", {}).get("legacy_versions", {}).get("3.6", {})
-                            
-                            # Apply pins
-                            new_pip = []
-                            for pkg in pip_pkgs:
-                                # Strip existing version info if any (though usually just name)
-                                pkg_name = pkg.split('==')[0].split('>=')[0].split('<=')[0]
-                                if pkg_name in legacy_pins:
-                                    pin = legacy_pins[pkg_name]
-                                    new_pkg = f"{pkg_name}{pin}"
-                                    new_pip.append(new_pkg)
-                                else:
-                                    new_pip.append(pkg)
-                            
-                            result['pip_packages'] = new_pip
-                            pip_pkgs = new_pip # Update reference
-                except Exception as e:
-                    print(f"Warning: Failed to apply legacy pins: {e}")
+        # --- Validation & Pre-processing (Copy of original logic) ---
+        pip_pkgs = result.get('pip_packages', [])
+        apt_pkgs = result.get('apt_packages', [])
+        base_image = result.get('base_image', '')
 
-            # --- Strategy 1: Dependency Cleanup ---
-            # If python3-opencv (Apt) is selected, explicit build tools are likely unnecessary/redundant.
-            if "python3-opencv" in apt_pkgs:
-                unnecessary = {'build-essential', 'cmake'}
-                # Filter them out
-                result['apt_packages'] = [p for p in apt_pkgs if p not in unnecessary]
-                apt_pkgs = result['apt_packages'] # Update reference
-                
-                # Log or subtle notice could go here, but silent optimization is preferred by user request ("automatically exclude")
+        # Legacy Pins (3.6)
+        if "3.6" in base_image:
+            try:
+                import json
+                from pathlib import Path
+                mapping_path = Path(__file__).parent.parent / "core" / "detector" / "mappings" / "library.json"
+                if mapping_path.exists():
+                    with open(mapping_path, 'r', encoding='utf-8') as f:
+                        lib_data = json.load(f)
+                        legacy_pins = lib_data.get("_meta", {}).get("legacy_versions", {}).get("3.6", {})
+                        new_pip = []
+                        for pkg in pip_pkgs:
+                            pkg_name = pkg.split('==')[0].split('>=')[0].split('<=')[0]
+                            if pkg_name in legacy_pins:
+                                pin = legacy_pins[pkg_name]
+                                new_pip.append(f"{pkg_name}{pin}")
+                            else:
+                                new_pip.append(pkg)
+                        result['pip_packages'] = new_pip
+                        pip_pkgs = new_pip
+            except Exception as e:
+                print(f"Warning: Failed to apply legacy pins: {e}")
 
-            # --- Strategy 2: Build Time Warning ---
-            # If using pip opencv, warn about build time on legacy systems.
-            opencv_pip = [p for p in pip_pkgs if "opencv" in p and "python" in p]
-            if opencv_pip:
-                msg = ("<b>Run-Time Warning: Source Build Likely</b><br><br>"
-                       "You have selected <code>opencv-python</code> via pip.<br>"
-                       "On legacy environments (e.g. Python 3.6), this often triggers a source build "
-                       "that can take <b>20-40 minutes</b>.<br><br>"
-                       "<b>Recommendation:</b> Use <code>python3-opencv</code> (Apt) instead.")
-                reply = QMessageBox.warning(self, "Build Time Warning", msg, 
-                                            QMessageBox.Ok | QMessageBox.Cancel)
-                if reply == QMessageBox.Cancel:
-                    return
+        # Opt Dependency Cleanup
+        if "python3-opencv" in apt_pkgs:
+            unnecessary = {'build-essential', 'cmake'}
+            result['apt_packages'] = [p for p in apt_pkgs if p not in unnecessary]
+            apt_pkgs = result['apt_packages']
 
-            # --- Strategy 3: Auto-Add Build Tools ---
-            # Existing logic, but skipped if we are in "Apt OpenCV" mode (assuming clean environment)
-            # or if we just removed them. 
-            if pip_pkgs and "python3-opencv" not in apt_pkgs:
-                needed_tools = {'build-essential', 'cmake', 'python3-dev'}
-                current_apt = set(apt_pkgs)
-                missing = needed_tools - current_apt
-                
-                if missing:
-                    # Auto-add them
-                    msg = (f"Detected pip packages ({len(pip_pkgs)} items). \n"
-                           f"To ensure successful build, I am adding the following build tools to Apt packages:\n"
-                           f"{', '.join(missing)}")
-                    
-                    QMessageBox.information(self, "Apt-First Assist", msg)
-                    
-                    # Add to config
-                    result['apt_packages'].extend(list(missing))
-                    
-            self.result_config = result
+        # Warnings
+        opencv_pip = [p for p in pip_pkgs if "opencv" in p and "python" in p]
+        if opencv_pip:
+            msg = ("<b>Run-Time Warning: Source Build Likely</b><br><br>"
+                   "You have selected <code>opencv-python</code> via pip.<br>"
+                   "On legacy environments (e.g. Python 3.6), this often triggers a source build "
+                   "that can take <b>20-40 minutes</b>.<br><br>"
+                   "<b>Recommendation:</b> Use <code>python3-opencv</code> (Apt) instead.")
+            reply = QMessageBox.warning(self, "Build Time Warning", msg, 
+                                        QMessageBox.Ok | QMessageBox.Cancel)
+            if reply == QMessageBox.Cancel:
+                return
+
+        # Auto-Add Tools
+        if pip_pkgs and "python3-opencv" not in apt_pkgs:
+            needed_tools = {'build-essential', 'cmake', 'python3-dev'}
+            current_apt = set(apt_pkgs)
+            missing = needed_tools - current_apt
+            if missing:
+                msg = (f"Detected pip packages ({len(pip_pkgs)} items). \n"
+                       f"To ensure successful build, I am adding the following build tools to Apt packages:\n"
+                       f"{', '.join(missing)}")
+                QMessageBox.information(self, "Apt-First Assist", msg)
+                result['apt_packages'].extend(list(missing))
+        
+        self.result_config = result
+        
+        # --- Start Build Sequence ---
+        self._start_build(result)
+
+    def _start_build(self, config):
+        """Initialize build process with Worker."""
+        tag = config['tag']
+        self.current_def_id = tag # Assuming tag is ID for now
+        
+        try:
+            # 1. Provisional Save (Transaction Start)
+            # Use provisional save if manager supports it, or standard save with manual rollback
+            if self.container_manager:
+                 # Note: manager.save_definition_provisional not fully implemented in previous context
+                 # user said "Create newly generated image tag" etc. 
+                 # We will use save_definition from generator but track it manually for rollback
+                 json_path = save_definition(config, tag)
+                 
+                 # Register transaction start in manager if needed, or just track locally
+                 # manager.save_definition_provisional(config) # If this existed
+                 pass
+            else:
+                 json_path = save_definition(config, tag)
+            
+            self.log_console.clear()
+            self.log_console.append(f"[Generator] Definition saved to {json_path.name}")
+            
+            # 2. Generate Dockerfile
+            tag, dockerfile_path = generate_dockerfile(str(json_path))
+            
+            # 3. Get Build Command
+            if self.container_manager:
+                build_args = self.container_manager.get_build_command(dockerfile_path, tag)
+            else:
+                # Fallback if manager missing (unlikely)
+                raise ValueError("ContainerManager not initialized")
+
+            # 4. Prepare UI
+            self.is_building = True
+            self.setCursor(Qt.WaitCursor)
+            
+            # Lock UI
+            self.name_input.setEnabled(False)
+            self.base_combo.setEnabled(False)
+            self.pip_list.setEnabled(False)
+            self.apt_list.setEnabled(False)
+            self.save_btn.setEnabled(False) # Disable Save
+            self.cancel_btn.setText("Stop Build") # Change Cancel to Stop
+            self.cancel_btn.setStyleSheet("color: red; font-weight: bold;")
+            
+            # Show Console
+            self.log_group.setVisible(True)
+            self.log_console.append(f"\n[Builder] Starting build for '{tag}'...")
+            
+            # 5. Start Worker
+            self.worker = BuildWorker(build_args, tag)
+            self.worker.log_received.connect(self._append_log)
+            self.worker.build_finished.connect(self._on_build_finished)
+            self.worker.start()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Start Error", str(e))
+            self._reset_ui_state()
+
+    @Slot(str)
+    def _append_log(self, text):
+        """Append log text from worker."""
+        # [REQ-4] Buffer Limit
+        self.log_console.append(text)
+        if self.log_console.document().blockCount() > 1000:
+            cursor = self.log_console.textCursor()
+            cursor.movePosition(QTextCursor.Start)
+            cursor.movePosition(QTextCursor.Down, QTextCursor.KeepAnchor, 100) # Remove oldest 100 lines
+            cursor.removeSelectedText()
+        
+        # Auto-scroll
+        self.log_console.ensureCursorVisible()
+
+    @Slot(int, str)
+    def _on_build_finished(self, exit_code, tag):
+        """Handle build completion."""
+        self.setCursor(Qt.ArrowCursor)
+        self.is_building = False
+        
+        if exit_code == 0:
+            # Success
+            self.log_console.append(f"\n[Builder] Build Success! (Tag: {tag})")
+            
+            # Commit Transaction
+            if self.container_manager:
+                self.container_manager.commit_definition(tag)
+            
+            QMessageBox.information(self, "Build Complete", f"Environment '{tag}' created successfully.")
+            
+            # Close dialog returning Success
             super().accept()
+            
+        else:
+            # Failure
+            self.log_console.append(f"\n[Builder] Build Failed (Exit Code: {exit_code})")
+            
+            # Rollback
+            if self.container_manager and exit_code != -1: # -1 is manual cancel, handled in reject
+                 # For actual failures, we rollback definition to prevent broken usage
+                 self.container_manager.rollback_definition(tag)
+                 self.log_console.append(f"[Transaction] Definition rolled back.")
+            
+            # Keep Dialog Open, Enable Interaction
+            self.cancel_btn.setText("Close")
+            self.cancel_btn.setStyleSheet("")
+            self.save_btn.setEnabled(True) # Allow retry? Or maybe user wants to edit config
+            
+            # Unlock inputs for editing
+            self.name_input.setEnabled(True)
+            self.base_combo.setEnabled(True)
+            self.pip_list.setEnabled(True)
+            self.apt_list.setEnabled(True)
+            
+            QMessageBox.warning(self, "Build Failed", 
+                                "Docker build failed. Check logs below for details.\n"
+                                "You can modify settings and try again.")
+
+    def reject(self):
+        """Handle Cancel / Close events."""
+        if self.is_building and self.worker:
+            # [REQ-3] Stop & Rollback
+            ans = QMessageBox.question(self, "Stop Build?", 
+                                      "Build is in progress. Stopping it will discard changes.\nContinue?",
+                                      QMessageBox.Yes | QMessageBox.No)
+            
+            if ans == QMessageBox.Yes:
+                self.log_console.append("\n[User] Stopping build...")
+                self.worker.stop()
+                self.worker.wait() # Wait for thread to finish cleanup
+                
+                # Rollback
+                if self.container_manager and self.current_def_id:
+                     self.container_manager.rollback_definition(self.current_def_id)
+                
+                super().reject()
+        else:
+            # Normal close
+            super().reject()
+
+    def _reset_ui_state(self):
+        """Reset UI to non-building state."""
+        self.setCursor(Qt.ArrowCursor)
+        self.is_building = False
+        self.name_input.setEnabled(True)
+        self.base_combo.setEnabled(True)
+        self.pip_list.setEnabled(True)
+        self.apt_list.setEnabled(True)
+        self.save_btn.setEnabled(True)
+        self.cancel_btn.setText("Cancel")
+        self.cancel_btn.setStyleSheet("")
