@@ -389,37 +389,35 @@ class CodeAnalyzer:
 
     def update_mapping(self, import_name: str, package_config: Dict):
         """
-        Update local mapping file with new package info.
+        [DEPRECATED] This method no longer updates library.json.
+        
+        To preserve the integrity of the base knowledge layer (library.json),
+        this method has been disabled. Use ContainerManager.save_user_knowledge() instead
+        to save user-validated mappings to user_knowledge.json.
+        
+        **Role Separation**:
+        - library.json: Protected base knowledge (standard mappings)
+        - user_knowledge.json: User-validated knowledge (custom/corrected mappings)
+        - history.json: Action log (what was analyzed when)
         
         Args:
             import_name: The import name (e.g., "cv2")
             package_config: Dict like {"pip": ["opencv-python"], "apt": []}
+            
+        Migration Example:
+            # Old (disabled):
+            # analyzer.update_mapping("cv2", {"pip": ["opencv-python"], "apt": []})
+            
+            # New (recommended):
+            # container_manager.save_user_knowledge("cv2", {"pip": ["opencv-python"], "apt": []})
         """
-        try:
-           mapping_path = Path(__file__).parent / "mappings" / "library.json"
-           
-           # Load current
-           if mapping_path.exists():
-               with open(mapping_path, 'r', encoding='utf-8') as f:
-                   data = json.load(f)
-           else:
-               data = {}
-               
-           # Update
-           data[import_name] = package_config
-           
-           # Save atomic-ish
-           temp_path = mapping_path.with_suffix('.tmp')
-           with open(temp_path, 'w', encoding='utf-8') as f:
-               json.dump(data, f, indent=4, ensure_ascii=False)
-           
-           temp_path.replace(mapping_path)
-           
-           # Update in-memory
-           self.mappings[import_name] = package_config
-           
-        except Exception as e:
-            print(f"[CodeAnalyzer] Failed to update mapping: {e}")
+        print(
+            f"[CodeAnalyzer] WARNING: update_mapping() is deprecated and does nothing.\n"
+            f"  Import: {import_name}\n"
+            f"  To save user knowledge, use: container_manager.save_user_knowledge()\n"
+            f"  Note: history.json continues to log actions normally."
+        )
+        # No-op: Do not write to library.json
 
     def summary(self, code_text: str) -> Dict[str, any]:
         """Legacy compatibility wrapper for summary dict."""

@@ -298,6 +298,8 @@ class ContainerManager:
                 # No golden image data, set empty list
                 rule['installed_packages'] = []
     
+
+    
     def _deep_merge(self, base: Dict, overlay: Dict) -> Dict:
         """
         Recursive merge of overlay dictionary into base dictionary.
@@ -351,10 +353,157 @@ class ContainerManager:
                 except Exception as e:
                     print(f"[Enterprise] Warning: Failed to load {overlay_path}: {e}")
 
+        # 3. User Knowledge Layer (Highest Priority - Overwrites lists, not appends)
+        user_knowledge_path = Path.cwd() / "user_knowledge.json"
+        if user_knowledge_path.exists():
+            try:
+                with open(user_knowledge_path, 'r', encoding='utf-8') as f:
+                    user_data = json.load(f)
+                
+                # Special handling for user_knowledge: OVERWRITE lists, don't deep merge
+                # This ensures user's "final decision" takes absolute priority
+                for import_name, config in user_data.items():
+                    if import_name == "_meta":
+                        # Merge metadata normally
+                        self._deep_merge(data.get("_meta", {}), config)
+                        continue
+                    
+                    # Normalize key for lookup consistency (scikit-image → skimage)
+                    normalized_key = self._normalize_import_name(import_name)
+                    
+                    # Store with normalized key AND mark source
+                    data[normalized_key] = {
+                        **config,
+                        "_source": "User Knowledge"  # Add source marker for debugging
+                    }
+                    
+                    pip_list = config.get('pip', [])
+                    apt_list = config.get('apt', [])
+                    print(f"[User Knowledge] Override: {import_name} → pip: {pip_list}, apt: {apt_list} (Source: User Knowledge)")
+                
+                print(f"[User Knowledge] User knowledge overlay applied from {user_knowledge_path.name}")
+                    
+            except json.JSONDecodeError:
+                print(f"[User Knowledge] Warning: Invalid JSON in {user_knowledge_path}. Skipping.")
+            except Exception as e:
+                print(f"[User Knowledge] Warning: Failed to load {user_knowledge_path}: {e}")
+
         # Store FULL data, not just _meta, to support custom library definitions
         self._metadata = data
         return self._metadata
     
+    def _normalize_import_name(self, name: str) -> str:
+        """
+        Normalize import name for consistent storage in user_knowledge.json.
+        
+        Uses aggressive normalization: removes ALL separators (hyphens, underscores, dots).
+        This ensures maximum consistency across different naming conventions.
+        Examples:
+            - 'scikit-image' → 'scikitimage'
+            - 'scikit_image' → 'scikitimage'
+            - 'custom_lib' → 'customlib'
+            - 'opencv-python' → 'opencvpython'
+        
+        Args:
+            name: Original import name
+            
+        Returns:
+            Normalized name (lowercase, all separators removed)
+        """
+        # 1. Convert to lowercase
+        # 2. Remove all separators: hyphens (-), underscores (_), dots (.)
+        return name.lower().replace('-', '').replace('_', '').replace('.', '')
+    
+    def save_user_knowledge(self, import_name: str, package_config: Dict) -> None:
+        """
+        Save user-approved mapping to user_knowledge.json.
+        
+        Uses atomic write (temp + os.replace) for Windows crash safety.
+        Normalizes import names for consistency with Phase 2 logic.
+        
+        Args:
+            import_name: The import name (e.g., "cv2" or "scikit-image")
+            package_config: Dict like {"pip": ["opencv-python"], "apt": []}
+        """
+        import tempfile
+        import sys
+        import os # Added for os.remove and os.replace
+        from pathlib import Path
+        
+        # Normalize the import name for consistency
+        normalized_name = self._normalize_import_name(import_name)
+        
+        # Target file location
+        target_path = Path.cwd() / "user_knowledge.json"
+        
+        try:
+            # Load existing data or create new structure
+            if target_path.exists():
+                with open(target_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            else:
+                data = {
+                    "_meta": {
+                        "description": "User-specific knowledge learned from successful builds",
+                        "version": "1.0",
+                        "created_by": "LCR Knowledge Persistence System"
+                    }
+                }
+            
+            # Update the mapping with normalized key
+            data[normalized_name] = package_config
+            
+            # Ensure parent directory exists
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # ATOMIC WRITE: Write to temporary file first, then replace
+            # This prevents corruption if app crashes during save
+            temp_fd, temp_path = tempfile.mkstemp(
+                dir=target_path.parent,
+                prefix='.user_knowledge_temp_',
+                suffix='.json',
+                text=True
+            )
+            
+            try:
+                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                
+                # Atomic replace (overwrites target if exists)
+                os.replace(temp_path, target_path)
+                
+                pip_list = package_config.get('pip', [])
+                print(f"[User Knowledge] Saved: {normalized_name} (original: {import_name}) → pip: {pip_list}")
+                
+                # Invalidate cache so next load picks up the new data
+                self.invalidate_metadata_cache()
+                
+            except Exception as e:
+                # Clean up temp file if save failed
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+                raise e
+                
+        except Exception as e:
+            error_msg = (
+                f"[User Knowledge ERROR] Failed to save user knowledge:\n"
+                f"  Path: {target_path}\n"
+                f"  Error: {e}\n"
+                f"  Import: {import_name} → {package_config}"
+            )
+            print(error_msg, file=sys.stderr)
+            # Don't crash the application - just log the error
+    
+    def invalidate_metadata_cache(self) -> None:
+        """
+        Force reload of library metadata on next access.
+        Call this after updating user_knowledge.json to ensure fresh data.
+        """
+        self._metadata = None
+        print("[ContainerManager] Metadata cache invalidated. Will reload on next access.")
+     
     def _extract_version(self, base_rule):
         """Extract major.minor version from rule (e.g., '3.6', '2.7').
         
