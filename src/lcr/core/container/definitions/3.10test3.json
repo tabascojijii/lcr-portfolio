@@ -1,0 +1,19 @@
+{
+    "tag": "3.10test3",
+    "base_image": "python:3.10-slim",
+    "pip_packages": [
+        "scikit-image",
+        "pandas",
+        "numpy"
+    ],
+    "apt_packages": [
+        "python3-matplotlib",
+        "libgl1-mesa-glx",
+        "python3-opencv",
+        "libglib2.0-0"
+    ],
+    "env_vars": {
+        "PYTHONUNBUFFERED": "1"
+    },
+    "run_commands": []
+}

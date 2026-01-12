@@ -56,8 +56,10 @@ class ContainerWorker(QThread):
         self.process: Optional[subprocess.Popen] = None
         self._stop_requested = False
     
+
     def run(self):
         """Execute the Docker container (runs in background thread)."""
+        exit_code = -1
         try:
             self.log_updated.emit("=" * 70)
             self.log_updated.emit(f"Starting container execution: {self.script_name}")
@@ -87,19 +89,17 @@ class ContainerWorker(QThread):
             
             # Wait for process to complete
             if not self._stop_requested:
-                returncode = self.process.wait()
+                exit_code = self.process.wait()
                 
                 self.log_updated.emit("")
                 self.log_updated.emit("=" * 70)
-                if returncode == 0:
-                    self.log_updated.emit(f"Container execution completed successfully (exit code: {returncode})")
+                if exit_code == 0:
+                    self.log_updated.emit(f"Container execution completed successfully (exit code: {exit_code})")
                 else:
-                    self.log_updated.emit(f"Container execution failed (exit code: {returncode})")
+                    self.log_updated.emit(f"Container execution failed (exit code: {exit_code})")
                 self.log_updated.emit("=" * 70)
-                
-                self.finished_with_code.emit(returncode)
             else:
-                self.finished_with_code.emit(-1)
+                exit_code = -1
         
         except FileNotFoundError:
             error_msg = (
@@ -107,16 +107,17 @@ class ContainerWorker(QThread):
                 "available in your system PATH."
             )
             self.error_occurred.emit(error_msg)
-            self.finished_with_code.emit(-1)
+            exit_code = -1
         
         except Exception as e:
             import traceback
             error_msg = f"Error executing container:\n{traceback.format_exc()}"
             self.error_occurred.emit(error_msg)
-            self.finished_with_code.emit(-1)
+            exit_code = -1
         
         finally:
             self._cleanup()
+            self.finished_with_code.emit(exit_code)
             
     def stop(self):
         """Request the worker to stop execution and kill the container process."""

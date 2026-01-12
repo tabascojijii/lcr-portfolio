@@ -48,6 +48,8 @@ class MainWindow(QMainWindow):
         # backend components
         self.analyzer = CodeAnalyzer()
         self.container_manager = ContainerManager()
+        if not self.container_manager:
+            raise RuntimeError("Failed to initialize ContainerManager")
         self.history_manager = HistoryManager()
         self.worker = None
         self.worker = None
@@ -153,7 +155,7 @@ class MainWindow(QMainWindow):
         self.runtime_combo.activated.connect(self._on_runtime_combo_activated)
         
         # Populate initially
-        self._populate_runtime_combo()
+        self._refresh_env_list()
         
         env_combo_layout = QHBoxLayout()
         env_combo_layout.addWidget(self.runtime_combo)
@@ -272,8 +274,8 @@ class MainWindow(QMainWindow):
         splitter.addWidget(right_widget)
         splitter.setSizes([600, 400])
 
-    def _populate_runtime_combo(self):
-        """Populate the runtime combobox from ContainerManager rules."""
+    def _refresh_env_list(self):
+        """ContainerManager から最新の定義を読み込み、コンボボックスを更新する"""
         self.runtime_combo.clear()
         rules = self.container_manager.get_available_runtimes()
         for i, rule in enumerate(rules):
@@ -283,6 +285,7 @@ class MainWindow(QMainWindow):
             # Tooltip: Base Image
             desc = rule.get('description', f"Image: {rule['image']}")
             self.runtime_combo.setItemData(i, desc, Qt.ToolTipRole)
+        print(f"[UI] Environment list refreshed. {len(rules)} items found.")
 
     @Slot(int)
     def _on_runtime_combo_activated(self, index):
@@ -486,11 +489,10 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             # 5. Handle Success
             # The dialog now handles the build process internally.
-            # If we get here, the build was successful and the definition is committed.
             
             # Reload definitions to see the new image
             self.container_manager.reload_definitions()
-            self._populate_docker_images()
+            self._refresh_env_list() # [FIX] Use correct method name
             
             # Select the new environment
             new_config = dialog.result_config
@@ -498,16 +500,18 @@ class MainWindow(QMainWindow):
                 tag = new_config.get('tag')
                 if tag:
                     # Find and select the new item
-                    for i in range(self.image_combo.count()):
-                        # Combo items: "Name (ID)" or just "Name" depending on implementation
-                        # But findText usually works if we match the display.
-                        # Actually, let's use the explicit logic from populate.
-                        # For now, simplistic attempt:
-                        if tag in self.image_combo.itemText(i):
-                            self.image_combo.setCurrentIndex(i)
-                            break
+                    # Try to match the name (which comes from tag usually)
+                    # Our _refresh_env_list adds items by rule['name']
+                    # For generated envs, rule['name'] is usually the tag.
+                    index = self.runtime_combo.findText(tag)
+                    if index >= 0:
+                        self.runtime_combo.setCurrentIndex(index)
+                        # Trigger update explicitly
+                        self._on_runtime_combo_activated(index)
             
             QMessageBox.information(self, "Ready", f"Environment '{tag}' is ready to use.")
+            
+
 
     def _run_jit_build(self, base_rule, code_content):
         """
@@ -538,7 +542,7 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             # Success - Image built
             self.container_manager.reload_definitions()
-            self._populate_docker_images()
+            self._refresh_env_list()
             
             new_config = dialog.result_config
             if new_config:
@@ -546,10 +550,10 @@ class MainWindow(QMainWindow):
                 self.console_log.append(f"[JIT] Environment '{tag}' created successfully.")
                 
                 # Update selection
-                for i in range(self.image_combo.count()):
-                    if tag in self.image_combo.itemText(i):
-                        self.image_combo.setCurrentIndex(i)
-                        break
+                index = self.runtime_combo.findText(tag)
+                if index >= 0:
+                    self.runtime_combo.setCurrentIndex(index)
+                    self._on_runtime_combo_activated(index)
             
             # Important: JIT flow usually implies we want to run immediately, 
             # but since we just had a blocking dialog, user might want to check things.
@@ -562,14 +566,16 @@ class MainWindow(QMainWindow):
 
 
         
-        self.worker.start()
-
     def _reset_buttons(self):
         """Reset UI buttons to active state after operation."""
         self.analyze_btn.setEnabled(True)
         self.run_btn.setEnabled(True)
+        self.run_btn.setText("Run in Container") # [FIX] Restore text
         self.create_env_btn.setEnabled(True)
+        self.runtime_combo.setEnabled(True)  # [FIX] Re-enable combo
         self.stop_btn.setEnabled(False)
+        self.status_label.setText("Ready")   # [FIX] Reset status
+        self.status_label.setStyleSheet("font-weight: bold; color: #555; margin-top: 5px;")
         print("[UI] Buttons reset to active state.")
 
     def _on_build_finished(self, exit_code, tag):
@@ -583,7 +589,7 @@ class MainWindow(QMainWindow):
         if exit_code == 0:
             # Reload Manager
             self.container_manager.reload_definitions()
-            self._populate_runtime_combo()
+            self._refresh_env_list()
             
             # Select the new tag
             self.runtime_combo.blockSignals(True)

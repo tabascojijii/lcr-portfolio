@@ -75,5 +75,38 @@
     "status": "success",
     "selection_mode": "Manual",
     "selection_reason": "Manual: 3.6test6"
+  },
+  {
+    "id": "880e1e7e-92e7-4557-8299-661d1a4b130e",
+    "timestamp": "2026-01-13T01:26:12",
+    "script_path": "data\\samples\\fish_otolith_analyzer.py",
+    "runtime_name": "Python 3.10 (Latest)",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260113_012608",
+    "status": "failed",
+    "selection_mode": "Auto",
+    "selection_reason": "Auto: Detected"
+  },
+  {
+    "id": "826e6306-b6ba-4f4b-8df8-ccd564630245",
+    "timestamp": "2026-01-13T01:33:23",
+    "script_path": "data\\samples\\fish_otolith_analyzer.py",
+    "runtime_name": "Python 3.10 (Latest)",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260113_013321",
+    "status": "failed",
+    "selection_mode": "Auto",
+    "selection_reason": "Auto: Detected"
+  },
+  {
+    "id": "3e991ac2-3549-449c-b9b7-51d6d26450f5",
+    "timestamp": "2026-01-13T01:33:46",
+    "script_path": "data\\samples\\fish_otolith_analyzer.py",
+    "runtime_name": "3.6test6 (3.6test6)",
+    "image_tag": "docker",
+    "output_dir": "data\\results\\20260113_013340",
+    "status": "success",
+    "selection_mode": "Manual",
+    "selection_reason": "Manual: 3.6test6"
   }
 ]
