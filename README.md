@@ -2,24 +2,48 @@
 
 > **"Resurrecting broken research code with absolute Data Integrity."**
 
-LCR (Legacy Code Reviver) is a specialized execution engine designed to safely run "abandoned" research code (e.g., Python 2.7 + OpenCV 2.4 scripts) on modern systems without modification.
+LCR (Legacy Code Reviver) is a professional execution engine designed to bridge the gap between "abandoned" research assets (e.g., Python 2.7 + OpenCV 2.4) and modern computational pipelines. It transforms technical debt into reproducible research assets in just 48 hours.
 
 ---
-### 🛡️ プロジェクトの公開制限と位置付けについて (Disclosure)
 
-> **注記：プロジェクトの公開制限について**
-> 
-> 私が並行して開発しているコアプロジェクト **『Maltilabeler』** は、1.3万行を超える規模であり、特定の研究ドメインにおける高度な機密性を含んでいます。プロフェッショナルとしての情報管理の観点から、コードの全容は非公開としております。
-> 
-> 本 **『LCR』** は、その開発過程で培ったアーキテクチャ設計能力を証明するための、**「汎用的かつ非侵入的なレガシー救済ソリューション」** として、その全容を公開（OSS化）しております。
+## 🛡️ Disclosure: Project Positioning
+
+**Note on Public Access:** The core project I am currently developing, **"Maltilabeler"** (over 13k lines of code), involves high-stakes proprietary domain logic for biological research and remains private for confidentiality reasons.  
+
+**LCR** is an open-source (OSS) demonstration of the architectural expertise and "non-invasive" integration strategies developed during the creation of Maltilabeler. It serves as a professional proof-of-concept for enterprise-grade legacy system revival.
+
 ---
 
-## Key Features
+## 🚀 Key Pillars of LCR
 
-- **Supply Chain Recovery**: Restore abandoned libraries (like OpenCV 2.4) using APT-based archive mapping.
-- **Automatic Path Sanitization**: Detects and rewrites hardcoded absolute paths (e.g., `C:\Users\...`) to container-compatible paths on the fly.
-- **Containerized Safety**: Execute legacy scripts in isolated Docker environments to prevent host pollution.
-- **DI-First Architecture**: Strict separation of Read-Only inputs and Timestamped outputs, ensuring Data Integrity for pharmaceutical research.
+### 1. Environmental Time Travel (Supply Chain Recovery)
+* **APT Archive Mapping:** Automatically restores abandoned libraries by mapping missing dependencies to historical APT archives.
+* **Intelligent Dependency Discovery:** Features a built-in "Guessing" engine that utilizes the **PyPI API** to automatically identify and verify packages for unknown imports.
+
+### 2. Audit-Ready Reproducibility (Data Integrity)
+* **Automatic Source Snapshots:** Every execution triggers an automatic snapshot of the source code (`source_snapshot.py`), ensuring that the exact logic used for a result is preserved forever.
+* **Portable Execution History:** History logs utilize **strict relative path conversion**, allowing entire project folders to be moved across different workstations without breaking the audit trail.
+
+### 3. Enterprise-Grade Governance & Scalability
+* **Enterprise Overlay Mapping:** Supports `enterprise.json` for deep-merging proprietary corporate libraries into the public LCR knowledge base without modifying the core engine.
+* **Private Registry Support:** Seamlessly integrates with corporate private indices (e.g., Artifactory, Nexus) via custom `pip_config` injection.
+
+---
+
+## 🛠️ Architecture Overview
+
+The system follows a DI-First (Data Integrity First) architecture, ensuring that legacy code runs in a "read-only" context regarding its source, while all outputs are timestamped and isolated.
+
+```text
+src/lcr/
+├── core/
+│   ├── container/      # Docker orchestration & Config generation
+│   ├── detector/       # Script analysis & PyPI API Guessing
+│   └── history/        # Portable Audit Trail management
+├── ui/                 # Qt-based Interface (MainWindow & Env Dialog)
+└── utils/              # Deployment helpers (sys.frozen path handling)
+
+```
 
 ## Quick Start
 
