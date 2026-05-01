@@ -1,5 +1,5 @@
 {
-    "tag": "3.10test5",
+    "tag": "3.10test6",
     "base_image": "python:3.10-slim",
     "pip_packages": [
         "scikit-image",
@@ -7,10 +7,10 @@
         "numpy"
     ],
     "apt_packages": [
-        "python3-matplotlib",
-        "libgl1-mesa-glx",
+        "libglib2.0-0",
         "python3-opencv",
-        "libglib2.0-0"
+        "python3-matplotlib",
+        "libgl1-mesa-glx"
     ],
     "env_vars": {
         "PYTHONUNBUFFERED": "1"

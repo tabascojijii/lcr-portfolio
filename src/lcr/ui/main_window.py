@@ -287,6 +287,23 @@ class MainWindow(QMainWindow):
             self.runtime_combo.setItemData(i, desc, Qt.ToolTipRole)
         print(f"[UI] Environment list refreshed. {len(rules)} items found.")
 
+    def _refresh_env_list(self):
+        """Reload definitions and update runtime combo dropdown."""
+        self.runtime_combo.clear()
+        rules = self.container_manager.get_available_runtimes()
+        for i, rule in enumerate(rules):
+            self.runtime_combo.addItem(rule['name'])
+            # Store full rule in UserRole
+            self.runtime_combo.setItemData(i, rule, Qt.UserRole)
+            # Tooltip: Base Image
+            desc = rule.get('description', f"Image: {rule['image']}")
+            self.runtime_combo.setItemData(i, desc, Qt.ToolTipRole)
+        print(f"[UI] Environment list refreshed. {len(rules)} items found.")
+
+    def _populate_runtime_combo(self):
+        """Compatibility alias for _refresh_env_list."""
+        self._refresh_env_list()
+
     @Slot(int)
     def _on_runtime_combo_activated(self, index):
         """Handle manual user selection."""
@@ -478,12 +495,12 @@ class MainWindow(QMainWindow):
         # 4. Show Dialog
         # 4. Show Dialog
         dialog = EnvironmentCreationDialog(
-            self, 
-            self.container_manager,  # [UPDATED] Pass manager for in-dialog build
-            self.container_manager.get_available_runtimes(),
-            initial_config,
-            rec_id,
-            rec_reason
+            parent=self,
+            manager=self.container_manager,
+            base_images=self.container_manager.get_available_runtimes(),
+            initial_config=initial_config,
+            recommended_base_id=rec_id,
+            recommendation_reason=rec_reason
         )
         
         if dialog.exec():
@@ -503,11 +520,17 @@ class MainWindow(QMainWindow):
                     # Try to match the name (which comes from tag usually)
                     # Our _refresh_env_list adds items by rule['name']
                     # For generated envs, rule['name'] is usually the tag.
-                    index = self.runtime_combo.findText(tag)
-                    if index >= 0:
-                        self.runtime_combo.setCurrentIndex(index)
-                        # Trigger update explicitly
-                        self._on_runtime_combo_activated(index)
+                    # Find and select the new item robustly
+                    found_idx = -1
+                    for i in range(self.runtime_combo.count()):
+                        rule = self.runtime_combo.itemData(i, Qt.UserRole)
+                        if rule and rule.get('image') == tag:
+                            found_idx = i
+                            break
+                    
+                    if found_idx >= 0:
+                        self.runtime_combo.setCurrentIndex(found_idx)
+                        self._on_runtime_combo_activated(found_idx)
             
             QMessageBox.information(self, "Ready", f"Environment '{tag}' is ready to use.")
             
@@ -516,26 +539,54 @@ class MainWindow(QMainWindow):
     def _run_jit_build(self, base_rule, code_content):
         """
         Triggered when a required image is missing.
-        Pre-fills the creation dialog with the missing image's rule info effectively.
+        Loads existing definition if available, or synthesizes new config.
         """
-        # We can re-use the show dialog logic but maybe tweak the initial reason
-        # Actually simplified: just call _show_create_env_dialog, 
-        # as it analyzes the code and will likely recommend the same thing (or similar).
-        # But to be precise, we pass the rule we TRIED to use as the recommendation.
-        
-        analysis = self.analyzer.summary(code_content)
         rec_id = base_rule['id']
         rec_reason = "Required for execution (Missing Image)"
         
-        initial_config = self.container_manager.synthesize_definition_config(analysis, rec_id)
+        # Try to load existing definition from disk via Manager
+        existing_config = self.container_manager.get_definition(rec_id)
+        
+        if existing_config:
+            print(f"[JIT] Loaded existing definition for '{rec_id}'")
+            rec_reason = "Using existing definition (Image not built yet)"
+            # [FIX] Explicitly inject ID to ensure dialog locks it
+            existing_config['id'] = rec_id
+        # Else: existing_config is None, will fall through to synthesis below
+        
+        # If no existing definition, synthesize new one
+        if existing_config is None:
+            analysis = self.analyzer.summary(code_content)
+            existing_config = self.container_manager.synthesize_definition_config(analysis, rec_id)
+            rec_reason = "Synthesized from code analysis (Missing Image)"
+            print(f"[JIT] Synthesized config for '{rec_id}' (Fallback)")
+
+        # [CRITICAL FIX] Always inject the requested ID into config
+        # This ensures the Dialog treats it as an "Existing Definition" (Locked Name)
+        # preventing it from reverting to 'custom-auto-gen' or timestamp.
+        if existing_config:
+            existing_config['id'] = rec_id
+            existing_config['tag'] = rec_id
+        
+        # === DEBUG LOGGING ===
+        print(f"--- [DEBUG] Pre-Dialog Check ---")
+        print(f"1. Selected ID from base_rule: '{rec_id}'")
+        print(f"2. Config prepared for dialog: {existing_config is not None}")
+        if existing_config:
+            print(f"3. Config has 'id' key: {'id' in existing_config}")
+            print(f"4. Config['id'] value: '{existing_config.get('id', 'MISSING')}'")
+            print(f"5. Config['tag'] value: '{existing_config.get('tag', 'MISSING')}'")
+        else:
+            print("3. Config is None!")
+        # === END DEBUG ===
         
         dialog = EnvironmentCreationDialog(
-            self, 
-            self.container_manager, # [UPDATED] Pass manager
-            self.container_manager.get_available_runtimes(),
-            initial_config,
-            rec_id,
-            rec_reason
+            parent=self,
+            manager=self.container_manager,
+            base_images=self.container_manager.get_available_runtimes(),
+            initial_config=existing_config,
+            recommended_base_id=rec_id,
+            recommendation_reason=rec_reason
         )
         
         # JIT Dialog handling
@@ -549,11 +600,17 @@ class MainWindow(QMainWindow):
                 tag = new_config.get('tag')
                 self.console_log.append(f"[JIT] Environment '{tag}' created successfully.")
                 
-                # Update selection
-                index = self.runtime_combo.findText(tag)
-                if index >= 0:
-                    self.runtime_combo.setCurrentIndex(index)
-                    self._on_runtime_combo_activated(index)
+                # Update selection robustly
+                found_idx = -1
+                for i in range(self.runtime_combo.count()):
+                    rule = self.runtime_combo.itemData(i, Qt.UserRole)
+                    if rule and rule.get('image') == tag:
+                        found_idx = i
+                        break
+                
+                if found_idx >= 0:
+                    self.runtime_combo.setCurrentIndex(found_idx)
+                    self._on_runtime_combo_activated(found_idx)
             
             # Important: JIT flow usually implies we want to run immediately, 
             # but since we just had a blocking dialog, user might want to check things.
@@ -578,39 +635,7 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("font-weight: bold; color: #555; margin-top: 5px;")
         print("[UI] Buttons reset to active state.")
 
-    def _on_build_finished(self, exit_code, tag):
-        """Handle build completion."""
-        status = "Success" if exit_code == 0 else "Failed"
-        color = "lime" if exit_code == 0 else "red"
-        self.console_log.append(f"<font color='{color}'>[Builder] Build {status} for '{tag}'</font>")
-        
-        self._reset_buttons()  # This now includes create_env_btn and runtime_combo
-        
-        if exit_code == 0:
-            # Reload Manager
-            self.container_manager.reload_definitions()
-            self._refresh_env_list()
-            
-            # Select the new tag
-            self.runtime_combo.blockSignals(True)
-            idx = self.runtime_combo.findText(f"{tag} ({tag})") # Name format might vary
-            # Our name format in manager is "{stem} ({tag})"
-            # We don't know the exact stem (filename) easily here without logic.
-            # Loose search by tag in item data
-            found = False
-            for i in range(self.runtime_combo.count()):
-                rule = self.runtime_combo.itemData(i, Qt.UserRole)
-                if rule and rule.get('image') == tag:
-                    self.runtime_combo.setCurrentIndex(i)
-                    self._update_runtime_display(rule, is_manual=True) # treat as manual selection of the new env
-                    found = True
-                    break
-            
-            if not found:
-                self.console_log.append(f"[Builder] Warning: Could not auto-select new image '{tag}'. Please select manually.")
-                
-            self.runtime_combo.blockSignals(False)
-            QMessageBox.information(self, "Build Complete", f"Environment '{tag}' created and selected.")
+
 
     @Slot()
     def _run_container(self):
@@ -734,15 +759,17 @@ class MainWindow(QMainWindow):
             
             # Note: prepare_run_config doesn't return existence, so we check here manually or via helper
             # For robustness, we'll try a lightweight subprocess check
-            try:
-                subprocess.run(
-                    ["docker", "image", "inspect", image_name], 
-                    stdout=subprocess.DEVNULL, 
-                    stderr=subprocess.DEVNULL, 
-                    check=True
-                )
-            except subprocess.CalledProcessError:
+            # Check if image exists
+            result = subprocess.run(
+                ["docker", "image", "inspect", image_name], 
+                capture_output=True,
+                text=True,
+                check=False  # Don't raise exception if image doesn't exist
+            )
+            
+            if result.returncode != 0:
                 # Image missing! Prompt JIT Build
+                print(f"[Info] Image {image_name} not found. Build is required.")
                 ans = QMessageBox.question(
                     self,
                     "Environment Missing",
@@ -752,9 +779,53 @@ class MainWindow(QMainWindow):
                     QMessageBox.Yes
                 )
                 
+                
                 if ans == QMessageBox.Yes:
-                    self._run_jit_build(selected_rule, current_content) 
-                    return # Exit run flow, switch to build flow
+                    # [FIX] Prioritize loading existing definition by environment ID
+                    env_id = selected_rule['id']  # User-selected environment (e.g., "3.10test5")
+                    
+                    # Try to load existing definition first
+                    existing_config = self.container_manager.get_definition(env_id)
+                    
+                    if existing_config:
+                        # Existing definition found - use it with ID injection
+                        print(f"[UI] Loading existing definition for: {env_id}")
+                        existing_config['id'] = env_id
+                        existing_config['tag'] = env_id
+                        
+                        dialog = EnvironmentCreationDialog(
+                            parent=self,
+                            manager=self.container_manager,
+                            base_images=self.container_manager.get_available_runtimes(),
+                            initial_config=existing_config,
+                            recommended_base_id=env_id,
+                            recommendation_reason="Rebuilding existing definition (Image not built)"
+                        )
+                    else:
+                        # No definition exists - synthesize from code analysis
+                        print(f"[UI] Definition not found for '{env_id}', synthesizing from code analysis")
+                        analysis = self.analyzer.summary(current_content)
+                        synthesized_config = self.container_manager.synthesize_definition_config(analysis, env_id)
+                        synthesized_config['id'] = env_id
+                        synthesized_config['tag'] = env_id
+                        
+                        dialog = EnvironmentCreationDialog(
+                            parent=self,
+                            manager=self.container_manager,
+                            base_images=self.container_manager.get_available_runtimes(),
+                            initial_config=synthesized_config,
+                            recommended_base_id=env_id,
+                            recommendation_reason="Synthesized from code analysis (Missing Image)"
+                        )
+                    
+                    # Handle dialog result
+                    if dialog.exec():
+                        self.container_manager.reload_definitions()
+                        self._refresh_env_list()
+                        QMessageBox.information(self, "Build Complete", f"Environment '{env_id}' is ready to use.")
+                    
+                    self._reset_buttons()
+                    return  # Exit run flow, build flow completed
                 else:
                     self._reset_buttons()
                     return
@@ -1084,7 +1155,8 @@ class MainWindow(QMainWindow):
         config_suggestion = self.container_manager.synthesize_definition_config(summary, recommended_id)
         
         dialog = EnvironmentCreationDialog(
-            self, 
+            parent=self,
+            manager=self.container_manager,
             base_images=all_rules, 
             initial_config=config_suggestion,
             recommended_base_id=recommended_id,

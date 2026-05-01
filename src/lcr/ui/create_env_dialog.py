@@ -24,19 +24,35 @@ class EnvironmentCreationDialog(QDialog):
     and customize installed packages.
     """
     
-    def __init__(self, parent=None, container_manager: ContainerManager = None, base_images: List[ImageRule] = [], initial_config: Dict = {}, 
+    def __init__(self, parent=None, manager: ContainerManager = None, base_images: List[ImageRule] = [], initial_config: Dict = {}, 
                  recommended_base_id: Optional[str] = None, recommendation_reason: Optional[str] = None):
         super().__init__(parent)
         self.setWindowTitle("Create New Runtime Environment")
         self.resize(700, 850)
         
-        self.container_manager = container_manager
+        self.container_manager = manager
+        if self.container_manager is None:
+            print("[Error] ContainerManager was not passed to EnvironmentCreationDialog!")
         self.base_images = base_images
         self.initial_config = initial_config
         self.recommended_base_id = recommended_base_id
         self.recommendation_reason = recommendation_reason
         self.result_config = None
         self.apt_warnings = {}  # Loaded metadata for warnings
+        
+        # === DEBUG LOGGING ===
+        print(f"--- [DEBUG] Dialog Init ---")
+        print(f"6. initial_config passed to Dialog: {initial_config is not None}")
+        if initial_config:
+            print(f"7. Config has 'id' key: {'id' in initial_config}")
+            print(f"8. Config has 'tag' key: {'tag' in initial_config}")
+            if 'id' in initial_config:
+                print(f"9. Config['id'] value: '{initial_config['id']}'")
+            if 'tag' in initial_config:
+                print(f"10. Config['tag'] value: '{initial_config['tag']}'")
+        else:
+            print("7. Config is None or empty!")
+        # === END DEBUG ===
         
         # Build State
         self.worker: Optional[BuildWorker] = None
@@ -194,8 +210,41 @@ class EnvironmentCreationDialog(QDialog):
 
     def _populate_fields(self):
         """Populate fields with initial config."""
-        # Set base image
+        config = self.initial_config
+        
+        # 1. Name / Tag - STRICT LOGIC
+        # Determine if this is a Rebuild (Locked) or New (Editable/Auto-gen)
+        
+        # Candidate ID from config
+        candidate_id = config.get('tag') or config.get('id', '')
+        
+        # Check if it's a valid EXISTING ID (not a placeholder)
+        is_placeholder = (candidate_id == "custom-auto-gen") or (not candidate_id)
+        
+        if not is_placeholder:
+            # Case A: Existing Definition (Rebuild)
+            # Use the ID, Lock it.
+            self.name_input.setText(candidate_id)
+            self.name_input.setReadOnly(True)
+            print(f"[UI] Initialized dialog for REBUILD: {candidate_id} (Locked)")
+        else:
+            # Case B: New Creation
+            # Generate fresh unique ID
+            import time
+            new_id = f"custom-env-{int(time.time())}"
+            self.name_input.setText(new_id)
+            self.name_input.setReadOnly(False)
+            print(f"[UI] Initialized dialog for NEW creation: {new_id} (Auto-generated)")
+            
+        # 2. Base Image
         target_id = self.recommended_base_id
+        
+        # If config has explicit base_image string, try to map back to an internal ID
+        if 'base_image' in config:
+            docker_ref = config['base_image']
+            found = next((r for r in self.base_images if r.get('image') == docker_ref), None)
+            if found:
+                target_id = found['id']
         
         if target_id:
             idx = self.base_combo.findData(target_id)
@@ -401,6 +450,10 @@ class EnvironmentCreationDialog(QDialog):
 
     def _start_build(self, config):
         """Initialize build process with Worker."""
+        if not self.container_manager:
+             QMessageBox.critical(self, "Error", "Container Manager not initialized.")
+             return
+
         tag = config['tag']
         self.current_def_id = tag # Assuming tag is ID for now
         

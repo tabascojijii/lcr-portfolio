@@ -1,0 +1,22 @@
+{
+    "tag": "custom-env-1768452379",
+    "base_image": "python:3.10-slim",
+    "pip_packages": [
+        "pandas",
+        "numpy",
+        "scikit-image",
+        "opencv-python"
+    ],
+    "apt_packages": [
+        "libgl1",
+        "libglib2.0-0",
+        "python3-matplotlib",
+        "build-essential",
+        "cmake",
+        "python3-dev"
+    ],
+    "env_vars": {
+        "PYTHONUNBUFFERED": "1"
+    },
+    "run_commands": []
+}

@@ -7,10 +7,12 @@ FROM python:3.10-slim
 # 2. System Dependencies
 
 RUN apt-get update && apt-get install -y --force-yes --allow-unauthenticated \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     python3-matplotlib \
-    python3-opencv \
+    build-essential \
+    cmake \
+    python3-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 
@@ -23,9 +25,10 @@ RUN mkdir -p /root/.pip && \
 # 4. Python Libraries
 
 RUN pip install --no-cache-dir \
-"scikit-image" \
-    "pandas" \
-    "numpy"
+"pandas" \
+    "numpy" \
+    "scikit-image" \
+    "opencv-python"
     
 
 

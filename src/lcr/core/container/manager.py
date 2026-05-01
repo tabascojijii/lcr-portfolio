@@ -88,9 +88,8 @@ class ContainerManager:
     
     # --- [Phase 3] Atomic Build & Rollback Logic ---
 
-    def get_definition(self, def_id):
-        """Retrieve a definition by ID from memory."""
-        return next((r for r in self.IMAGE_RULES if r.get('id') == def_id), None)
+    # Removed duplicate get_definition
+
 
     def save_definition_provisional(self, config):
         """
@@ -169,6 +168,44 @@ class ContainerManager:
 
     def is_transaction_pending(self, def_id):
         return def_id in self._pending_transactions
+
+    def get_definition(self, env_id: str) -> Optional[Dict]:
+        """
+        Retrieve full definition configuration by Environment ID.
+        
+        Args:
+            env_id (str): The ID of the environment (e.g. '3.10test6')
+            
+        Returns:
+            Dict: The configuration dictionary loaded from JSON, or None if not found/hardcoded.
+                  Guarantees keys 'tag', 'image', 'base_image' are present if valid.
+        """
+        # 1. Try to load from definitions folder (Custom Envs)
+        from lcr.utils.path_helper import get_resource_path
+        import json
+        
+        def_path = get_resource_path('definitions') / f"{env_id}.json"
+        print(f"[ContainerManager] DEBUG: Checking definition path for '{env_id}': {def_path}")
+        
+        if def_path.exists():
+            try:
+                with open(def_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    # Normalize / Ensure essential keys
+                    if 'tag' not in config: config['tag'] = env_id
+                    
+                    # Sanitize packages with user knowledge
+                    config = self._sanitize_packages_with_user_knowledge(config)
+                    
+                    return config
+            except Exception as e:
+                print(f"[ContainerManager] Error loading definition for {env_id}: {e}")
+                
+        # 2. Hardcoded/Legacy images fallthrough
+        # Usually these don't need rebuilding via this flow, but if we wanted to support it,
+        # we would return a synthesized config from the rule.
+        # For now, return None to imply "No editable definition found"
+        return None
 
     def _load_definitions(self):
         """
@@ -275,6 +312,9 @@ class ContainerManager:
         hardcoded_ids = {"py27-cv2", "py27-slim", "py36-ds", "py310-slim"}
         self.IMAGE_RULES = [r for r in self.IMAGE_RULES if r['id'] in hardcoded_ids]
         
+        # Clear metadata cache to reload user_knowledge.json
+        self._metadata = None
+        
         # Reload from disk
         self._load_definitions()
         print("[ContainerManager] Definitions reloaded.")
@@ -371,6 +411,12 @@ class ContainerManager:
                     # Normalize key for lookup consistency (scikit-image → skimage)
                     normalized_key = self._normalize_import_name(import_name)
                     
+                    # Check if we're overriding an existing mapping
+                    if normalized_key in data:
+                        old_apt = data[normalized_key].get('apt', [])
+                        new_apt = config.get('apt', [])
+                        print(f"[User Knowledge] OVERRIDE: '{import_name}' APT packages: {old_apt} → {new_apt}")
+                    
                     # Store with normalized key AND mark source
                     data[normalized_key] = {
                         **config,
@@ -379,9 +425,9 @@ class ContainerManager:
                     
                     pip_list = config.get('pip', [])
                     apt_list = config.get('apt', [])
-                    print(f"[User Knowledge] Override: {import_name} → pip: {pip_list}, apt: {apt_list} (Source: User Knowledge)")
+                    print(f"[User Knowledge] Loaded: '{import_name}' (normalized: '{normalized_key}') → pip: {pip_list}, apt: {apt_list}")
                 
-                print(f"[User Knowledge] User knowledge overlay applied from {user_knowledge_path.name}")
+                print(f"[User Knowledge] ✅ User knowledge overlay applied from {user_knowledge_path.name}")
                     
             except json.JSONDecodeError:
                 print(f"[User Knowledge] Warning: Invalid JSON in {user_knowledge_path}. Skipping.")
@@ -391,6 +437,74 @@ class ContainerManager:
         # Store FULL data, not just _meta, to support custom library definitions
         self._metadata = data
         return self._metadata
+    
+    def _sanitize_packages_with_user_knowledge(self, config: Dict) -> Dict:
+        """
+        Apply user_knowledge.json rules to an existing environment definition.
+        
+        This ensures old definitions are automatically updated with latest package mappings.
+        For example, libgl1-mesa-glx → libgl1, python3-matplotlib → matplotlib (pip).
+        
+        Args:
+            config: Environment definition dictionary with 'apt_packages' and 'pip_packages'
+            
+        Returns:
+            Updated config with sanitized package lists
+        """
+        from pathlib import Path
+        import json
+        
+        # Load user knowledge
+        user_knowledge_path = Path.cwd() / "user_knowledge.json"
+        if not user_knowledge_path.exists():
+            return config  # No user knowledge to apply
+        
+        try:
+            with open(user_knowledge_path, 'r', encoding='utf-8') as f:
+                user_knowledge = json.load(f)
+        except Exception as e:
+            print(f"[Sanitize] Failed to load user_knowledge.json: {e}")
+            return config
+        
+        apt_packages = set(config.get('apt_packages', []))
+        pip_packages = set(config.get('pip_packages', []))
+        
+        # Track changes for logging
+        changes = []
+        
+        # Iterate through user knowledge rules
+        for old_name, mapping in user_knowledge.items():
+            if old_name == "_meta":
+                continue
+            
+            # Check if the old package appears in apt_packages
+            if old_name in apt_packages:
+                # Remove old package
+                apt_packages.discard(old_name)
+                changes.append(f"Removed APT: {old_name}")
+                
+                # Add replacement apt packages
+                new_apt = mapping.get('apt', [])
+                for pkg in new_apt:
+                    apt_packages.add(pkg)
+                    changes.append(f"Added APT: {pkg}")
+                
+                # Add replacement pip packages
+                new_pip = mapping.get('pip', [])
+                for pkg in new_pip:
+                    pip_packages.add(pkg)
+                    changes.append(f"Added PIP: {pkg}")
+        
+        # Update config with sanitized lists
+        config['apt_packages'] = sorted(list(apt_packages))
+        config['pip_packages'] = sorted(list(pip_packages))
+        
+        if changes:
+            print(f"[Sanitize] Applied {len(changes)} user knowledge rule(s):")
+            for change in changes:
+                print(f"  - {change}")
+        
+        return config
     
     def _normalize_import_name(self, name: str) -> str:
         """
