@@ -1,39 +1,37 @@
-# 監査レポート（Auditor）
+# 監査報告書（Auditor）
 
-- 監査対象: `docs/plan.md`
-- 基準: `docs/reference_standards.md`（絶対基準）, `docs/requirement.md`
 - 監査日: 2026-05-03
-- 判定: **PASS（問題なし）**
+- 監査対象: `docs/roadmap.md`
+- 基準文書: `docs/plan.md`, `docs/reference_standards.md`
+- 総合判定: **REJECT**
 
-## 総合判定根拠
-`docs/plan.md` を基準文書に照合した結果、REJECT判定に該当する重大/中程度の違反は確認されなかった。基準が要求する主要統制点（Docker再現性、データ完全性、GUIアーキテクチャ、監査運用、客観メトリクス）に対し、計画内で検証可能な形で要件化されている。
+## 判定サマリ
+`docs/roadmap.md` は、マイルストーン構成・DoD連動・規約準拠項目の大半で `docs/plan.md` と整合している。
+一方で、監査運用の入力制約について `docs/reference_standards.md` と厳密不一致があるため、現時点では受け入れ不可と判定する。
 
-## 検証結果（基準別）
+## 指摘事項（重大度順）
 
-1. 監査およびマルチエージェント・ガバナンス標準
-- 客観メトリクスによる判定: 複雑度閾値（>10をFail）と責務逸脱0件を明記し適合。
-- Builder/Validator分離: `requirement + diff + test evidence` のみ参照と明記し適合。
-- 処方的REJECT要件: 「違反箇所・根拠・修正指示」を必須化しており適合。
+### 1. 監査入力制約の基準不一致（重大）
+- 該当箇所: `docs/roadmap.md` セクション「5. 最終統合監査」実施内容4
+  - 記載: 「Validator入力を `requirement + diff + test evidence` に限定」
+- 基準:
+  - `docs/reference_standards.md` セクション「1. 監査およびマルチエージェント・ガバナンス標準」
+  - 記載: 「Builder/Validatorの分離: ... **要件と生成された差分(Diff)のみ**から ... レビュー」
+- 不一致内容:
+  - 基準は Validator 入力を「要件 + Diff」のみに制限しているが、ロードマップは `test evidence` を追加している。
+  - 「のみ」という厳格条件に反するため、運用ルール逸脱。
+- 影響:
+  - 監査プロセスの独立性/敵対性を担保する入力境界が曖昧化し、基準適合性を欠く。
+- 修正指示:
+  1. `docs/roadmap.md` の当該記述を基準に合わせて「`requirement + diff` のみに限定」に修正する。
+  2. もし `test evidence` を監査入力として許可したい場合は、先に `docs/reference_standards.md` を改訂し、整合した規約体系へ更新する。
 
-2. EOLスタックのコンテナ化およびビルド再現性
-- `FROM` digest固定: 必須バリデーション導入を明記し適合。
-- archiveリポジトリ切替: 強制適用を明記し適合。
-- constraints運用: 強制適用を明記し適合。
-- multi-stage: C/C++コンパイルを伴うDockerfileへの強制を明記し適合。
+## 参考（整合を確認できた主項目）
+- クリティカルパス、ゲート運用、REJECTトリガーは `docs/plan.md` と整合。
+- Docker再現性（digest固定/EOL archive/constraints/multi-stage）要件を明記。
+- 監査証跡6項目（`input_hash`, `output_hash`, `param_hash`, `log_hash`, `image_digest`, `git_commit`）を明記。
+- UI規律（Humble Object、Presenter/UseCase分離、`abc.ABC`/`Protocol`、signal/slot命名）を明記。
 
-3. データ完全性と監査証跡
-- `image_digest` と `git_commit` の記録: 必須項目として明記し適合。
-- 入出力/パラメータ/ログのハッシュ: `input_hash`, `output_hash`, `param_hash`, `log_hash` 必須化で適合。
-- 相対パス運用: 監査証跡の相対パス運用を完了条件に明記し適合。
-
-4. PyQt / PySide モダンUIアーキテクチャ
-- Humble Object適用: UIから業務処理分離（Presenter/UseCase経由）を明記し適合。
-- 依存方向: `UI -> Domain` 逆流0件を完了条件・静的検証に明記し適合。
-- インターフェース規律: `abc.ABC` / `Protocol` による境界定義を明記し適合。
-- 命名規約: signal/slot規約の静的チェック導入を明記し適合。
-
-## 指摘事項
-- なし（REJECT相当の違反なし）。
-
-## 監査結論
-本計画は `docs/reference_standards.md` に対して監査上受理可能であり、判定は **AUDIT_PASS_PLAN** とする。
+## 最終判定
+- 判定: **問題あり（REJECT_TO_PM）**
+- 理由: `reference_standards.md` の監査入力制約に対する厳密不一致が1件存在するため。
