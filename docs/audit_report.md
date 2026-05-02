@@ -1,46 +1,49 @@
 # 監査レポート
 
-## 1) pytest 実行結果
-実行コマンド: `pytest tests/`
+## 1. pytest 実行結果
+- 実行コマンド: `pytest tests/`
+- 結果: **31 passed / 0 failed**
+- 抜粋ログ:
 
-結果サマリ:
-- `29 passed in 1.55s`
-- 失敗テスト: なし
+```text
+============================= test session starts =============================
+platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\dev\lcr
+collected 31 items
+...
+============================= 31 passed in 1.51s ==============================
+```
 
-## 2) reference_standards 準拠監査結果（src/・tests/）
+## 2. 基準照合結果（docs/reference_standards.md）
 
-結論:
-- **REJECT**（テストはPassだが、規約違反あり）
+### 判定: **REJECT**
 
-### 指摘1: ベースイメージのダイジェスト固定が実質的に無効
-- 違反基準: `docs/reference_standards.md` セクション2「ダイジェストによる完全固定」
-- 根拠:
-  - [src/lcr/core/container/images/Dockerfile.py27_cv](/C:/dev/lcr/src/lcr/core/container/images/Dockerfile.py27_cv:1)
-  - [src/lcr/core/container/images/Dockerfile.py36_ds](/C:/dev/lcr/src/lcr/core/container/images/Dockerfile.py36_ds:1)
-  - [src/lcr/core/container/definitions/py36_ml.json](/C:/dev/lcr/src/lcr/core/container/definitions/py36_ml.json:3)
-- 事象:
-  - `@sha256:000000...0000`（全ゼロ）のプレースホルダが多数使用されている。
-  - 形式上は `sha256` だが、実在イメージの不変参照になっておらず、再現性保証を満たさない。
-- 修正指示:
-  - 実在する `RepoDigest` を `docker image inspect` 等で取得し、全定義を実ダイジェストへ置換すること。
-  - 生成時バリデーションを「`@sha256:` を含む」だけでなく、全ゼロ値禁止・64hex妥当性・存在確認へ強化すること。
+テストは成功しているが、`2. EOLスタックのコンテナ化およびビルド再現性標準 (Docker)` の
+**「FROM句はSHA256ダイジェストで完全固定」** に違反する実ファイルを確認したため不合格。
 
-### 指摘2: UI層にビジネスロジックが混在（Humble Object違反）
-- 違反基準: `docs/reference_standards.md` セクション4
-  - 「Humble Object パターンの適用」
-  - 「クリーンアーキテクチャと依存の方向」
-- 根拠:
-  - [src/lcr/ui/create_env_dialog.py](/C:/dev/lcr/src/lcr/ui/create_env_dialog.py:374)
-  - [src/lcr/ui/create_env_dialog.py](/C:/dev/lcr/src/lcr/ui/create_env_dialog.py:392)
-  - [src/lcr/ui/create_env_dialog.py](/C:/dev/lcr/src/lcr/ui/create_env_dialog.py:461)
-  - [src/lcr/ui/main_window.py](/C:/dev/lcr/src/lcr/ui/main_window.py:368)
-  - [src/lcr/ui/main_window.py](/C:/dev/lcr/src/lcr/ui/main_window.py:812)
-- 事象:
-  - UIクラス内で依存解決・レガシーピン適用・APT補正・定義保存・Dockerfile生成・ビルド起動まで実施しており、表示層が業務ロジックを保持している。
-- 修正指示:
-  - `Presenter`/`UseCase` 層へロジックを分離し、Dialog/MainWindow は入出力とイベント転送のみに限定すること。
-  - UIからは抽象インターフェース経由で実行し、テスト可能な形で依存注入すること。
+## 3. 指摘事項（違反基準と根拠）
 
-## 3) 監査判定
-- 判定: **REJECT_TO_IMPLEMENT**
-- 理由: テストは全件Passだが、参照規約（特にコンテナ再現性・UIアーキテクチャ）に対する重大違反を確認。
+1. **[重大] FROM句の完全固定違反（ダイジェスト未指定）**
+- 違反基準: `docs/reference_standards.md` セクション2
+  - 「`Dockerfile`の `FROM` 句には可変タグではなくSHA256ダイジェストを使用」
+- 根拠ファイル:
+  - `src/lcr/core/container/images/Dockerfile.3.6test4:1`
+  - `src/lcr/core/container/images/Dockerfile.3.6test5:1`
+  - `src/lcr/core/container/images/Dockerfile.3.6test6:1`
+  - `src/lcr/core/container/images/Dockerfile.3.6_test1:1`
+  - `src/lcr/core/container/images/Dockerfile.3.6_test2:1`
+  - `src/lcr/core/container/images/Dockerfile.3.6_test3:1`
+  - `src/lcr/core/container/images/Dockerfile.3.6_test4:1`
+- 実際の記述: `FROM lcr-py36-ml-classic`
+- 問題点: 参照先イメージがタグ相当の可変参照であり、不変性・再現性を保証できない。
+
+## 4. 処方的修正指示
+
+1. 上記Dockerfile群の `FROM lcr-py36-ml-classic` を、SHA256付きの不変参照へ置換すること。
+2. 生成物を `src/` に残す運用であれば、生成時点でダイジェスト固定を強制する検証（CIテストまたは生成器のバリデーション）を追加すること。
+3. 再発防止として、`src/lcr/core/container/images/` 配下を対象に `^FROM\s+.+@sha256:[0-9a-f]{64}` を必須とする静的チェックを追加すること。
+
+## 5. 最終結論
+- pytest: PASS
+- 基準適合: **FAIL（Docker再現性基準違反）**
+- 監査結論: **REJECT_TO_IMPLEMENT**
