@@ -1,6 +1,6 @@
 {
     "tag": "3.6test4",
-    "base_image": "lcr-py36-ml-classic",
+    "base_image": "python:3.6-slim-stretch@sha256:15c2b35ce4a026d8d52bd4b8ff13904030c2f4c2809b4368f180390b1a18c284",
     "pip_packages": [
         "opencv-python-headless",
         "scikit-image"
@@ -18,3 +18,4 @@
     },
     "run_commands": []
 }
+
