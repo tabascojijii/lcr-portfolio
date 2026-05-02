@@ -1,129 +1,55 @@
-# Audit Report — docs/roadmap.md
+# 監査報告書（Auditor）
 
-- **監査日**: 2026-05-03
-- **監査者**: Auditor
-- **対象文書**: `docs/roadmap.md`
-- **判定**: **REJECT（ロードマップ修正指示）**
-- **基準文書**: `docs/plan.md`、`docs/reference_standards.md`
+- 監査日: 2026-05-03
+- 監査対象: `docs/plan.md`
+- 絶対基準: `docs/reference_standards.md`（全章）
+- 監査結論: **REJECT（差し戻し）**
 
----
+## 指摘事項（重大度順）
 
-## 監査スコープ
+1. **[重大] 監査ガバナンス要件の具体化不足（EMCS客観メトリクス未定義）**  
+該当箇所: `docs/plan.md` 3.2-4, 5-3  
+根拠: `reference_standards.md` 1章では、Auditor判定は「客観的メトリクス（例: SRP違反、複雑度超過）」に基づくことを必須化している。  
+問題: 計画書は「客観メトリクスで判定」と記載するのみで、閾値・評価軸・判定条件（例: 複雑度上限、依存違反検出条件、UI層ロジック判定基準）が未定義。監査の再現性が不足。  
+修正指示: 監査チェックリストを定量化し、最低でも以下をDoDに明記すること。  
+- レイヤ依存違反: `UI -> Domain` 逆流0件  
+- UI層ロジック違反: Presenter/UseCase以外での業務処理0件  
+- 複雑度や責務違反の閾値（使用ツールと基準値）  
+- REJECT判定トリガー（違反1件以上でFail等）
 
-`reference_standards.md` の「§2 コンテナ構築」および「§3 データ完全性」に関連する、
-`docs/roadmap.md` の作業順序・フェーズ分けを検証した。
+2. **[重大] Builder/Validator分離運用が計画に組み込まれていない**  
+該当箇所: `docs/plan.md` 全体（監査実施体制の記述不足）  
+根拠: `reference_standards.md` 1章「Builder/Validatorの分離」は必須。  
+問題: 計画は実装・検証・監査を同一フローで記述しており、誰がどの入力（要件/差分のみ）で監査するかが不明。分離不備はサイレント逸脱を許す。  
+修正指示: 監査フェーズに「Validator入力を requirement + diff + test evidence のみに限定」「実装思考ログ非参照」を明記すること。
 
----
+3. **[重大] 監査証跡のハッシュ鎖要件が不足（ログ自体のハッシュ明記不足）**  
+該当箇所: `docs/plan.md` 3.2-2, 4-Phase D-4  
+根拠: `reference_standards.md` 3章は「入出力、パラメータ、実行ログ自体」にSHA-256適用を必須化。  
+問題: 計画は「各種SHA-256」を示すが、ログ本体・パラメータファイル・ハッシュ計算対象一覧が明文化されていない。実装時に漏れが発生しうる。  
+修正指示: 監査証跡スキーマを明示し、最低限 `input_hash`, `output_hash`, `param_hash`, `log_hash`, `image_digest`, `git_commit` を必須フィールドとして定義すること。
 
-## 指摘事項
+4. **[中] PyQt/PySide命名規約の検証計画欠落**  
+該当箇所: `docs/plan.md` 3.2-3, 5章  
+根拠: `reference_standards.md` 4章はシグナル/スロット命名規則（過去分詞/動詞）を明示。  
+問題: Humble ObjectとI/F分離は記載されるが、命名規約の適合確認が検証項目に入っていない。  
+修正指示: 静的チェックまたはレビュー観点として、シグナル/スロット命名検証を監査項目へ追加すること。
 
-### 【CRITICAL】違反1: M3d 前提条件と実装順序サマリーの矛盾（フェーズ整合性欠如）
+5. **[中] Docker規約の「適用条件」が曖昧**  
+該当箇所: `docs/plan.md` 3.2-1, 4-Phase D-2/3  
+根拠: `reference_standards.md` 2章は digest固定・archive repo切替・constraints・multi-stageを強制。  
+問題: 計画内に「必要時マルチステージ」とあり、適用判定が実装者裁量。OpenCV等C++ビルド時は必須であり、条件分岐定義が必要。  
+修正指示: 「C/C++コンパイルを伴う全Dockerfileはmulti-stage必須」などの強制条件を明文化すること。
 
-**違反箇所**
+## 総合判定
 
-- `docs/roadmap.md` — Milestone 3d 本文: "**前提**: Milestone 3a 完了"
-- `docs/roadmap.md` — 実装順序サマリー依存関係図: `[M3c] → [M3d]`
+`docs/plan.md` は基準への準拠意思は示しているが、`docs/reference_standards.md` が要求する**監査再現性・分離統制・証跡完全性の定義粒度**に未達。  
+したがって現時点では **REJECT_TO_ARCHITECT** と判定する。
 
-**違反した制約**
+## 是正後の再提出条件
 
-`reference_standards.md` §2「ダイジェストによる完全固定」および「pip のデッドロック回避」は、
-コンテナビルドパスを経由するすべての実装に適用される。
-M3d（P2-2 Humble Object）は `generator.py` を呼び出す `Presenter.prepare_execution()` を新規作成するため、
-この呼び出しパスにも M3b（P1-1 ダイジェスト固定・P1-3 constraints.txt）が先行して組み込まれていなければならない。
-
-**問題の詳細**
-
-M3d の本文が「前提: Milestone 3a 完了」のみを記載しているため、Implementer が本文のみを参照した場合、
-M3d を M3b および M3c と並行して開始してもよいと誤解するリスクがある。
-
-これにより以下の危険が生じる:
-
-| リスク | 内容 |
-|--------|------|
-| データ完全性の空白期間 | P2-2 完了後・M3b 完了前の期間、Presenter が呼び出す `generator.py` はダイジェスト固定なし（P1-1 未適用）で Dockerfile を生成する。manifest に記録される `image_digest` は可変タグから生成されたイメージのものとなり、`reference_standards.md` §2「ダイジェストによる完全固定」に違反する |
-| pip デッドロック回避未適用 | 同期間、Presenter が呼び出す Dockerfile テンプレートに `--constraint` が存在せず、EOL スタックビルドで pip バックトラッキングが発生しうる（§2「pip のデッドロック回避」違反） |
-| 二重修正リスク | M3b を後から適用する際、P2-2 で新規作成した Presenter コードも修正が必要になり、実装コストが増加する |
-
-**修正指示**
-
-Milestone 3d の「前提」を以下のとおり修正し、実装順序サマリーの依存関係図と整合させること。
-
-```
-修正前:
-前提: Milestone 3a 完了
-
-修正後:
-前提: Milestone 3c 完了
-（根拠: P1-1 のダイジェスト固定・P1-3 の constraints.txt が generator.py に組み込まれた状態で
- P2-2 の Presenter を実装することで、コンテナビルドパス全体に §2 基準が適用される）
-```
-
----
-
-### 【CRITICAL】違反2: `git_commit: "unknown"` REJECT基準と plan.md 実装コードの矛盾（データ完全性規定の不整合）
-
-**違反箇所**
-
-- `docs/roadmap.md` — Milestone 3a「データ完全性ルール」: `git_commit: "sha" 形式の文字列。"unknown" は REJECT`
-- `docs/plan.md` — P1-2 ヘルパー実装コード `_get_git_commit_hash()`:
-  ```python
-  except Exception:
-      return "unknown"
-  ```
-
-**違反した制約**
-
-`reference_standards.md` §3「環境とコードのハッシュ記録」:
-> 実行ログには、コンテナイメージのダイジェスト値と、実行時のGitコミットハッシュ（`git rev-parse HEAD`）を**必ず記録**し、不変性を担保すること
-
-「必ず記録」は例外発生時の `"unknown"` フォールバックを許容しない。ロードマップの REJECT 基準（`"unknown"` は REJECT）は §3 を正しく解釈しているが、plan.md の実装コードがこの基準を満たさない。
-
-**問題の詳細**
-
-Implementer が `docs/plan.md` の P1-2 実装コードをそのまま実装した場合、
-`git rev-parse HEAD` が失敗する環境（git 未インストール、非 git ディレクトリ等）では
-`execution_manifest.json` に `"git_commit": "unknown"` が記録される。
-
-ロードマップの Auditor チェックは `"unknown"` を REJECT とするため、
-plan.md の実装コードに従っても M3a の合格判定を得られない状態が生じている。
-PM はロードマップで審査基準を厳格化したが、plan.md の実装コードを更新する修正タスクをロードマップに含めていない。
-
-**修正指示**
-
-Milestone 3a に以下のタスクを追加すること:
-
-```
-| 3a-5 | `_get_git_commit_hash()` | 例外発生時に "unknown" を返すフォールバックを削除し、
-|      |                          | RuntimeError を raise するよう修正する。
-|      |                          | git が利用不可な環境ではビルド前に明示的にエラーで停止させる。|
-```
-
-また、plan.md の P1-2 実装コードも同様に修正を要求する旨を Milestone 3a に明記すること。
-
----
-
-## 問題なし確認項目
-
-以下の点については `reference_standards.md` との整合を確認した。
-
-| 項目 | 状態 | 確認内容 |
-|------|------|---------|
-| M3a（データ完全性）全体構成 | **PASS** | `execution_manifest.json`・サイドカー生成・相対パス要件がすべてカバーされている |
-| M3b の内部順序（P1-1 → P1-3 → P1-4）| **PASS** | P1-4 が P1-3 の EOL 検出ロジックに依存することが明示されており、依存関係が正確 |
-| M3c の前提（M3b 完了）| **PASS** | `multistage.Dockerfile.j2` にも P1-1 のダイジェスト固定が必要な点が明示されている |
-| M3a → M3b の順序根拠 | **PASS** | 「移行期間中の実行も含め漏れなく証跡を残せる」根拠が明示されており、§3 に準拠 |
-| M2（Phase 4 再検証）の前提 | **PASS** | M1 完了が前提とされており、後続 Milestone の安全性確認として適切に位置づけられている |
-| データ完全性リスクマトリクス | **PASS** | §3 の全リスク（監査証跡欠落・ハッシュ未記録・サイドカー欠落・絶対パス混入）が網羅されている |
-
----
-
-## 総合判定: REJECT
-
-以下の2件の CRITICAL 指摘によりロードマップを差し戻す。
-
-| No. | 違反種別 | 該当 Milestone | 違反した基準 |
-|-----|---------|---------------|-------------|
-| 1 | M3d 前提条件と依存関係図の矛盾（コンテナビルドパスに §2 が未適用のまま P2-2 実装が許容される） | Milestone 3d | `reference_standards.md` §2（ダイジェスト固定・pip デッドロック回避） |
-| 2 | `git_commit: "unknown"` REJECT 基準と plan.md 実装コードの矛盾（REJECT 基準を満たせる実装タスクが欠如） | Milestone 3a | `reference_standards.md` §3（環境とコードのハッシュ必須記録） |
-
-PM は上記修正指示に従ってロードマップを修正し、再提出すること。
+1. 監査メトリクスを定量閾値付きで明文化。  
+2. Builder/Validator分離運用をプロセスとして追記。  
+3. 監査証跡スキーマ（必須ハッシュ項目）を明示。  
+4. シグナル/スロット命名規約の検証項目を追加。  
+5. multi-stage適用条件を強制ルールとして明記。
