@@ -1151,8 +1151,11 @@ class ContainerManager:
         Returns:
             Dict containing the new definition config (ready for JSON save)
         """
-        # Find base rule
-        base_rule = next((r for r in self.IMAGE_RULES if r['id'] == base_rule_id), None)
+        # Find base rule. Accept both internal rule id and docker image tag for compatibility.
+        base_rule = next(
+            (r for r in self.IMAGE_RULES if r.get('id') == base_rule_id or r.get('image') == base_rule_id),
+            None
+        )
         if not base_rule:
             # Fallback to latest python
             base_rule = self.IMAGE_RULES[-1]

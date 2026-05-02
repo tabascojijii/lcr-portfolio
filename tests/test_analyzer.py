@@ -25,7 +25,7 @@ def print_separator(title: str):
     print("=" * 70)
 
 
-def test_file(filepath: str, expected_version: str = None, expected_libs: list = None):
+def analyze_file(filepath: str, expected_version: str = None, expected_libs: list = None):
     """
     Test a single file with the analyzer.
     
@@ -111,7 +111,7 @@ def main():
     results = []
     for i, test_case in enumerate(test_cases, 1):
         print_separator(f"Test Case {i}: {test_case['description']}")
-        result = test_file(
+        result = analyze_file(
             str(test_case['file']),
             test_case.get('expected_version'),
             test_case.get('expected_libs')

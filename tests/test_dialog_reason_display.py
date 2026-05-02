@@ -20,7 +20,9 @@ from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 
 def test_dialog_with_reason():
     """Test dialog shows recommendation reason properly."""
-    app = QApplication(sys.argv)
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
     
     # Sample Python 3 code with ML libraries
     sample_code = """
@@ -62,19 +64,17 @@ def analyze_otolith(image_path):
     print(f"[Test] Config pip packages: {initial_config.get('pip_packages', [])}")
     print(f"[Test] Config skipped packages: {initial_config.get('_skipped_packages', [])}")
     
-    # Show dialog
+    # Create dialog and verify recommendation reason is rendered
     dialog = EnvironmentCreationDialog(
         None,
+        manager,
         manager.get_available_runtimes(),
         initial_config,
         rec_id,
         rec_reason
     )
-    
-    print("\n[Test] Dialog created successfully. Opening...")
-    dialog.exec()
-    
-    sys.exit(0)
+    assert dialog.reason_label is not None
+    assert rec_reason in dialog.reason_label.text()
 
 if __name__ == "__main__":
     test_dialog_with_reason()

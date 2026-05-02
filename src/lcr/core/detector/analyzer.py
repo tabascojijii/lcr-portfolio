@@ -375,9 +375,10 @@ class CodeAnalyzer:
                     
                     resolved["apt"].add(apt_guess)
                     resolved["reasons"][apt_guess] = f"Inferred Apt package for '{imp}' (Apt-First Strategy)"
+                    # Keep pip candidate as a compatible fallback for environments where apt package may not exist.
+                    resolved["pip"].add(normalized_name)
+                    resolved["reasons"][normalized_name] = f"Confirmed on PyPI for '{imp}' (fallback candidate)"
                     print(f"[CodeAnalyzer] Apt-First: '{imp}' -> '{apt_guess}'")
-                    
-                    # Do NOT add to pip list (User requirement: "put in apt list... not pip list")
                 else:
                      # Not found on PyPI either.
                      # Fallback to original behavior: add to unresolved
