@@ -1,49 +1,45 @@
-# 監査レポート
+# Audit Report
 
-## 1. pytest 実行結果
-- 実行コマンド: `pytest tests/`
-- 結果: **31 passed / 0 failed**
-- 抜粋ログ:
+## 1) Pytest Result
+- Command: `pytest tests/`
+- Result: **32 passed / 0 failed**
+- Runtime: 1.57s
 
-```text
-============================= test session starts =============================
-platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0
-rootdir: C:\dev\lcr
-collected 31 items
-...
-============================= 31 passed in 1.51s ==============================
-```
+## 2) Reference Standards Compliance Check (docs/reference_standards.md)
 
-## 2. 基準照合結果（docs/reference_standards.md）
+### Finding A (Critical): Relative-path portability standard violated
+- Standard: `3. データ完全性と監査証跡` の「相対パスによるポータビリティ: すべて相対パスで記述すること」
+- Evidence:
+  - `src/lcr/core/history/manager.py:150-154`
+  - `_to_relative()` が、プロジェクトルート外のパスに対して絶対パスをそのまま返却する実装になっている。
+- Impact:
+  - 他環境での再検証時に履歴データの移植性を損ない、監査証跡の一貫性が崩れる。
+- Prescriptive fix:
+  - 履歴に保存するパス形式を強制的に相対表現へ正規化する（例: プロジェクト外は保存拒否、または `external/...` の管理下に変換）。
+  - 少なくとも「絶対パスを許容する分岐」を削除し、監査対象データでは常に相対化を保証する。
 
-### 判定: **REJECT**
+### Finding B (Critical): Tamper-detection scope is incomplete
+- Standard: `3. データ完全性と監査証跡` の「すべての入出力データ、パラメータファイル、および実行ログ自体にハッシュ適用」
+- Evidence:
+  - `src/lcr/core/audit/metadata_service.py:9-15` で収集しているのは `image_digest`, `git_commit_hash`, `script_sha256`, `script_path_rel` のみ。
+  - 入力データ、出力成果物、実行ログ本体のハッシュ採取・記録処理が存在しない。
+- Impact:
+  - 生成物・ログの改ざん検知ができず、ALCOA++準拠の監査証跡として不十分。
+- Prescriptive fix:
+  - 実行前後で対象アーティファクト（入力、出力、ログ、主要パラメータ）を列挙し、SHA-256を計算して監査メタデータへ保存する。
+  - 監査レコードに「対象ファイル一覧 + 各ハッシュ + 集約ハッシュ」を追加する。
 
-テストは成功しているが、`2. EOLスタックのコンテナ化およびビルド再現性標準 (Docker)` の
-**「FROM句はSHA256ダイジェストで完全固定」** に違反する実ファイルを確認したため不合格。
+### Finding C (Major): Humble Object pattern violation in UI layer
+- Standard: `4. PyQt / PySide モダンUIアーキテクチャ標準` の「Viewは複雑ロジックを持たない」
+- Evidence:
+  - `src/lcr/ui/main_window.py:448-517` (`_show_create_env_dialog`) で解析・推薦・定義合成ロジックをUIクラスが直接実行。
+  - `src/lcr/ui/main_window.py:619-760` (`_run_container`) で互換性判定・選択理由構築・JITビルド分岐などの業務ロジックをUIに保持。
+- Impact:
+  - UIテストが重くなり、ビジネスロジックの単体検証容易性と保守性が低下。
+- Prescriptive fix:
+  - 上記ロジックをUseCase/Presenterへ移し、`MainWindow` は入力収集・表示更新・イベント配線のみ担当する。
+  - UI層はDTOを受け取るだけの構造に再編し、分岐判定をドメインサービスへ集約する。
 
-## 3. 指摘事項（違反基準と根拠）
-
-1. **[重大] FROM句の完全固定違反（ダイジェスト未指定）**
-- 違反基準: `docs/reference_standards.md` セクション2
-  - 「`Dockerfile`の `FROM` 句には可変タグではなくSHA256ダイジェストを使用」
-- 根拠ファイル:
-  - `src/lcr/core/container/images/Dockerfile.3.6test4:1`
-  - `src/lcr/core/container/images/Dockerfile.3.6test5:1`
-  - `src/lcr/core/container/images/Dockerfile.3.6test6:1`
-  - `src/lcr/core/container/images/Dockerfile.3.6_test1:1`
-  - `src/lcr/core/container/images/Dockerfile.3.6_test2:1`
-  - `src/lcr/core/container/images/Dockerfile.3.6_test3:1`
-  - `src/lcr/core/container/images/Dockerfile.3.6_test4:1`
-- 実際の記述: `FROM lcr-py36-ml-classic`
-- 問題点: 参照先イメージがタグ相当の可変参照であり、不変性・再現性を保証できない。
-
-## 4. 処方的修正指示
-
-1. 上記Dockerfile群の `FROM lcr-py36-ml-classic` を、SHA256付きの不変参照へ置換すること。
-2. 生成物を `src/` に残す運用であれば、生成時点でダイジェスト固定を強制する検証（CIテストまたは生成器のバリデーション）を追加すること。
-3. 再発防止として、`src/lcr/core/container/images/` 配下を対象に `^FROM\s+.+@sha256:[0-9a-f]{64}` を必須とする静的チェックを追加すること。
-
-## 5. 最終結論
-- pytest: PASS
-- 基準適合: **FAIL（Docker再現性基準違反）**
-- 監査結論: **REJECT_TO_IMPLEMENT**
+## 3) Verdict
+- Pytestは全件Passだが、上記基準違反（Critical 2件, Major 1件）により **REJECT**。
+- Final status string: `REJECT_TO_IMPLEMENT`
