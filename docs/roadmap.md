@@ -69,7 +69,7 @@
 1. 自動検証: `pytest tests/`、Phase 4 回帰、Dockerfile生成、監査証跡生成、複雑度チェック（>10 を Fail）。  
 2. 静的検証: レイヤ依存（`UI -> Domain` 逆流）、UI層業務ロジック混入、命名規約。  
 3. 手動検証: GUIリアルタイムログ、即時反映、キャンセル時安定性。  
-4. Validator入力を `requirement + diff` のみに限定し監査判定。
+4. Validator入力を `requirement + diff + test evidence` に限定し監査判定する（3点のいずれか欠落時は即時REJECT）。
 - 完了条件:
 1. `pytest tests/` 全件Pass。  
 2. 再検証シナリオ3件合格。  
@@ -77,7 +77,8 @@
 4. 依存違反0件、UIロジック違反0件、複雑度違反0件。  
 5. 1クラス1責務逸脱0件。  
 6. REJECTトリガー該当0件。  
-7. 監査入力が `requirement + diff` に限定され、基準文書と整合している。
+7. 監査入力が `requirement + diff + test evidence` に限定され、基準文書と整合している。  
+8. `test evidence` 欠落時は未完了（REJECT）として扱われることが判定記録で確認できる。
 
 ## 3. 依存関係とゲート
 
@@ -96,6 +97,12 @@
 5. UI層で Presenter/UseCase を介さない業務処理が1件でも存在。  
 6. 関数循環的複雑度 > 10 が1件でも存在。  
 7. 1クラス1責務逸脱が1件でも存在。  
+8. 監査入力3点セット（`requirement + diff + test evidence`）のいずれかが欠落している。  
+
+## 4.1 正本優先順位（解釈ルール）
+
+1. 仕様解釈の正本優先順位は `docs/plan.md` > `docs/roadmap.md` > `docs/reference_standards.md` とする。  
+2. 下位文書が上位文書と不一致の場合、上位文書を正として是正し、監査時は不一致自体を指摘対象に含める。
 
 ## 5. 成果物
 
