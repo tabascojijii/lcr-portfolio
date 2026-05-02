@@ -17,7 +17,10 @@
 1. `pytest tests/` が `FAILED=0 / ERROR=0`。  
 2. 再検証シナリオ3件がすべて合格。  
 3. 監査証跡（実行ログ、ハッシュ、検証記録）が相対パス運用で再現可能。  
-4. UI層に業務ロジックが残留せず、依存方向が内側（UseCase/Domain）へ向く。
+4. レイヤ依存違反（`UI -> Domain` 逆流）が0件。  
+5. UI層ロジック違反（Presenter/UseCase以外で業務処理）が0件。  
+6. 複雑度/責務違反が閾値以内（関数循環的複雑度 > 10 を0件、1クラス1責務逸脱を0件）。  
+7. 監査REJECTトリガー: 上記 4-6 の違反が1件でもあればFail。
 
 ## 3. 要件トレーサビリティ
 
@@ -32,10 +35,11 @@
 
 ### 3.2 reference_standards.md 由来
 
-1. Docker再現性: `FROM` digest固定、EOLリポジトリ切替、constraints強制、必要時マルチステージ。  
-2. データ完全性: `git_commit`、`image_digest`、入出力ハッシュ、ログハッシュの記録。  
+1. Docker再現性: `FROM` digest固定、EOLリポジトリ切替、constraints強制、かつ C/C++ コンパイルを伴う全Dockerfileでmulti-stage必須。  
+2. データ完全性: 監査証跡スキーマに `input_hash`, `output_hash`, `param_hash`, `log_hash`, `image_digest`, `git_commit` を必須記録。  
 3. GUI設計: Humble Object 徹底、Presenter/UseCase分離、`abc.ABC`/`Protocol` で境界定義。  
-4. 監査運用: 客観メトリクスで判定し、REJECT時は違反箇所・根拠・修正指示を必須化。
+4. 監査運用: Builder/Validator分離を強制し、Validator入力は `requirement + diff + test evidence` のみに限定（実装思考ログは非参照）。  
+5. 監査判定: 客観メトリクスで判定し、REJECT時は違反箇所・根拠・修正指示を必須化。
 
 ## 4. 実装フェーズ
 
@@ -62,15 +66,18 @@
 
 1. Docker生成系に digest 必須バリデーションを導入（タグのみ指定を禁止）。  
 2. EOL定義に archive repo / constraints 適用を強制。  
-3. OpenCV等ビルド定義は multi-stage テンプレートへ統一。  
-4. 実行マニフェストへ `git_commit`、`image_digest`、各種SHA-256を出力。  
-5. UIから業務処理を分離し、Presenter/UseCase経由へ再配線。
+3. C/C++ コンパイルを伴うDockerfile（OpenCV等）は例外なくmulti-stageテンプレートへ統一。  
+4. 監査証跡マニフェストに `input_hash`, `output_hash`, `param_hash`, `log_hash`, `image_digest`, `git_commit` を必須出力。  
+5. UIから業務処理を分離し、Presenter/UseCase経由へ再配線。  
+6. シグナル/スロット命名規約（signal: 過去分詞、slot: 動詞開始）の静的チェックを導入。
 
 ## 5. 検証計画
 
-1. 自動検証: `pytest tests/`、Phase 4 回帰テスト、Dockerfile生成テスト、監査証跡生成テスト。  
-2. 手動検証: GUI上のリアルタイムログ、即時反映、キャンセル時安定性の確認。  
-3. 監査判定: 規約違反ゼロ、再検証シナリオ全合格、再現性証跡の欠落なし。
+1. 自動検証: `pytest tests/`、Phase 4 回帰テスト、Dockerfile生成テスト、監査証跡生成テスト、複雑度計測（しきい値 > 10 をFail）。  
+2. 静的検証: レイヤ依存チェック（`UI -> Domain` 逆流検出）、UI層業務ロジック検出、シグナル/スロット命名規約検証。  
+3. 手動検証: GUI上のリアルタイムログ、即時反映、キャンセル時安定性の確認。  
+4. 監査運用: Validatorは `requirement + diff + test evidence` のみを入力として判定し、Builderの思考ログは参照しない。  
+5. 監査判定: 重大/中違反が0件、再検証シナリオ全合格、再現性証跡の欠落なし。違反1件以上はREJECT。
 
 ## 6. 主要成果物
 
