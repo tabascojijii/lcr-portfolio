@@ -1,67 +1,46 @@
 # 監査レポート
 
-- 監査日時: 2026-05-03 (Asia/Tokyo)
-- 実行コマンド: `pytest tests/`
-- 対象基準: `docs/reference_standards.md`
-- 判定: **REJECT**
+## 1) pytest 実行結果
+実行コマンド: `pytest tests/`
 
-## 1. pytest実行結果
+結果サマリ:
+- `29 passed in 1.55s`
+- 失敗テスト: なし
 
-```text
-============================= test session starts =============================
-platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0
-rootdir: C:\dev\lcr
-configfile: pyproject.toml
-plugins: anyio-4.12.1
-collected 27 items
+## 2) reference_standards 準拠監査結果（src/・tests/）
 
-...（中略）...
+結論:
+- **REJECT**（テストはPassだが、規約違反あり）
 
-============================= 27 passed in 1.62s ==============================
-```
+### 指摘1: ベースイメージのダイジェスト固定が実質的に無効
+- 違反基準: `docs/reference_standards.md` セクション2「ダイジェストによる完全固定」
+- 根拠:
+  - [src/lcr/core/container/images/Dockerfile.py27_cv](/C:/dev/lcr/src/lcr/core/container/images/Dockerfile.py27_cv:1)
+  - [src/lcr/core/container/images/Dockerfile.py36_ds](/C:/dev/lcr/src/lcr/core/container/images/Dockerfile.py36_ds:1)
+  - [src/lcr/core/container/definitions/py36_ml.json](/C:/dev/lcr/src/lcr/core/container/definitions/py36_ml.json:3)
+- 事象:
+  - `@sha256:000000...0000`（全ゼロ）のプレースホルダが多数使用されている。
+  - 形式上は `sha256` だが、実在イメージの不変参照になっておらず、再現性保証を満たさない。
+- 修正指示:
+  - 実在する `RepoDigest` を `docker image inspect` 等で取得し、全定義を実ダイジェストへ置換すること。
+  - 生成時バリデーションを「`@sha256:` を含む」だけでなく、全ゼロ値禁止・64hex妥当性・存在確認へ強化すること。
 
-- テスト結果: 27件すべてPass
+### 指摘2: UI層にビジネスロジックが混在（Humble Object違反）
+- 違反基準: `docs/reference_standards.md` セクション4
+  - 「Humble Object パターンの適用」
+  - 「クリーンアーキテクチャと依存の方向」
+- 根拠:
+  - [src/lcr/ui/create_env_dialog.py](/C:/dev/lcr/src/lcr/ui/create_env_dialog.py:374)
+  - [src/lcr/ui/create_env_dialog.py](/C:/dev/lcr/src/lcr/ui/create_env_dialog.py:392)
+  - [src/lcr/ui/create_env_dialog.py](/C:/dev/lcr/src/lcr/ui/create_env_dialog.py:461)
+  - [src/lcr/ui/main_window.py](/C:/dev/lcr/src/lcr/ui/main_window.py:368)
+  - [src/lcr/ui/main_window.py](/C:/dev/lcr/src/lcr/ui/main_window.py:812)
+- 事象:
+  - UIクラス内で依存解決・レガシーピン適用・APT補正・定義保存・Dockerfile生成・ビルド起動まで実施しており、表示層が業務ロジックを保持している。
+- 修正指示:
+  - `Presenter`/`UseCase` 層へロジックを分離し、Dialog/MainWindow は入出力とイベント転送のみに限定すること。
+  - UIからは抽象インターフェース経由で実行し、テスト可能な形で依存注入すること。
 
-## 2. 基準照合による違反事項
-
-### 違反1: Docker `FROM` のダイジェスト完全固定違反（Reference Standards 2項）
-
-基準では `FROM` 句で可変タグではなく SHA256 ダイジェスト固定が必須。
-以下はタグ指定のみ、またはダイジェスト不在の `FROM` を確認。
-
-- `src/lcr/core/container/images/Dockerfile.3.10test3:1` -> `FROM python:3.10-slim`
-- `src/lcr/core/container/images/Dockerfile.3.10test4:1` -> `FROM python:3.10-slim`
-- `src/lcr/core/container/images/Dockerfile.3.10test5:1` -> `FROM python:3.10-slim`
-- `src/lcr/core/container/images/Dockerfile.3.10test6:1` -> `FROM python:3.10-slim`
-- `src/lcr/core/container/images/Dockerfile.3.10test7:1` -> `FROM python:3.10-slim`
-- `src/lcr/core/container/images/Dockerfile.3.10fot_test:1` -> `FROM python:3.10-slim`
-- `src/lcr/core/container/images/Dockerfile.py36_ds:1` -> `FROM python:3.6-slim-buster`
-- `src/lcr/core/container/images/Dockerfile.lcr_py27_cv_apt:1` -> `FROM debian:stretch-slim`
-- `src/lcr/core/container/images/Dockerfile.py27_cv:1` -> `FROM python:2.7-slim-stretch`
-- `src/core/container/images/Dockerfile.py27_cv2:1` -> `FROM python:2.7-slim-stretch`
-
-#### 修正指示
-
-- すべての `FROM` を `image:tag@sha256:<実在digest>` 形式へ置換すること。
-- テンプレート生成系（`src/lcr/core/container/templates/base.Dockerfile.j2`）から出力される成果物も同一規約で自動検証すること。
-
-### 違反2: UI層へのビジネスロジック集中（Reference Standards 4項: Humble Object / 依存方向）
-
-基準ではViewはロジック最小化が必要だが、`MainWindow` に監査メタデータ計算やGit/Docker情報取得などの非UI責務が実装されている。
-
-- `src/lcr/ui/main_window.py:1003` `_append_audit_metadata`
-- `src/lcr/ui/main_window.py:1019` `_resolve_image_digest`
-- `src/lcr/ui/main_window.py:1031` `_resolve_git_commit_hash`
-- `src/lcr/ui/main_window.py:1042` `_sha256_file`
-
-#### 修正指示
-
-- 上記処理を `core` 層のサービス（例: `AuditMetadataService`）へ移譲し、UIは結果表示のみ行う構造へ分離すること。
-- UI層が `subprocess` やファイルハッシュ計算の詳細を持たないようにすること。
-
-## 3. 総合判定
-
-- pytest: Pass
-- 規約適合: **不適合（上記違反あり）**
-
-したがって監査判定は **REJECT_TO_IMPLEMENT**。
+## 3) 監査判定
+- 判定: **REJECT_TO_IMPLEMENT**
+- 理由: テストは全件Passだが、参照規約（特にコンテナ再現性・UIアーキテクチャ）に対する重大違反を確認。
