@@ -1,32 +1,31 @@
-# 監査レポート（Roadmap 検証）
+# 監査報告書（Auditor）
 
 - 監査日: 2026-05-03
-- 監査対象: `docs/roadmap.md`
-- 基準文書: `docs/plan.md`, `docs/reference_standards.md`
+- 対象: `docs/roadmap.md`
+- 監査基準: `docs/plan.md`, `docs/reference_standards.md`
 - 総合判定: **REJECT**
 
-## 指摘事項（重要度順）
+## 指摘事項
 
-1. **Builder/Validator 分離の運用定義が `plan.md` と不整合**
-- 該当箇所: `docs/roadmap.md` 「M5: 最終統合監査 > 実施内容 > 4. Validator入力を requirement + diff のみに限定し監査判定。」
-- 根拠:
-  - `docs/plan.md` 3.2 および 5.4 では、Validator入力は **`requirement + diff + test evidence`** に限定すると定義されている。
-  - `docs/reference_standards.md` は Builder/Validator 分離を要求し、要件と差分ベースでの監査を強制している。
-- 問題点:
-  - `roadmap.md` の定義は `test evidence` を入力条件から外しており、`plan.md` の監査運用定義と矛盾する。
-  - プロジェクトの正式計画（`plan.md`）を基準にした監査手順の一貫性が崩れる。
+1. `docs/plan.md` の DoD およびREJECTトリガーとの不整合（責務違反の判定軸が欠落）
+- 根拠（基準）:
+  - `docs/plan.md` では完了条件に「**1クラス1責務逸脱を0件**」を明記。
+  - 同文書で「監査REJECTトリガー: 上記4-6の違反が1件でもFail」と定義しており、責務違反は必須の監査判定項目。
+- 現状（被監査文書）:
+  - `docs/roadmap.md` の「4. 監査判定基準（REJECT条件）」には、`pytest`失敗、再検証シナリオ未合格、証跡欠落、`UI -> Domain`逆流、UIロジック混入、複雑度超過はあるが、**1クラス1責務逸脱**に対するREJECT条件がない。
+- 影響:
+  - `plan.md` で必須化された品質ゲートを `roadmap.md` が完全に継承できておらず、監査判定の厳格性が不足する。
 - 修正指示:
-  - `docs/roadmap.md` の当該記述を **`requirement + diff + test evidence`** に修正すること。
-  - 併せて、完了条件または監査判定基準に「test evidence を監査入力として保持・提示する」旨を明記し、運用ブレを防止すること。
+  - `docs/roadmap.md` の「4. 監査判定基準（REJECT条件）」に、以下を追加すること。
+    - 例: 「1クラス1責務逸脱が1件でも存在する場合はREJECT」
+  - 併せて「2. マイルストーン > M5 完了条件」にも同指標（責務違反0件）を明記し、DoDとの整合を取ること。
 
-## 参考確認（問題なし）
+## 参考確認（適合している点）
 
-- クリティカルパス（全テストPass回復 → Phase 4再検証 → 規約準拠強化 → 最終監査）は `plan.md` と整合。
-- Phase 4 の3シナリオ（ID維持、即時反映、失敗/キャンセル安全性）を回帰試験化する方針は `plan.md` と整合。
-- Docker再現性（digest固定、archive repo、constraints、multi-stage）・監査証跡6項目・UI規律（Humble Object/Presenter-UseCase分離/ABC・Protocol）・命名規約は `reference_standards.md` と整合。
-- REJECT条件（テスト失敗、シナリオ未達、証跡欠落、依存逆流、UIロジック混入、複雑度超過）は `plan.md` の DoD/監査条件と整合。
+- クリティカルパス（全テストPass回復→Phase 4再検証→規約準拠強化→最終監査）は `plan.md` と整合。
+- Phase 4再検証3シナリオ、Docker再現性4要件、監査証跡6項目、UI規律（Humble Object/Presenter-UseCase分離/ABC・Protocol）、命名規約（signal/slot）は `plan.md` および `reference_standards.md` と整合。
+- 監査時の客観メトリクス運用、ゲート運用、差し戻し方針は基準と整合。
 
 ## 結論
 
-- 指摘事項 1 件の修正が完了するまで、`docs/roadmap.md` は監査基準を満たさない。
-- 判定: **REJECT_TO_PM**
+`docs/roadmap.md` は多くの必須事項を満たしているが、`docs/plan.md` で必須の「1クラス1責務逸脱」判定軸がREJECT条件から欠落しているため、現時点では承認不可（REJECT）。
