@@ -69,15 +69,15 @@
 1. 自動検証: `pytest tests/`、Phase 4 回帰、Dockerfile生成、監査証跡生成、複雑度チェック（>10 を Fail）。  
 2. 静的検証: レイヤ依存（`UI -> Domain` 逆流）、UI層業務ロジック混入、命名規約。  
 3. 手動検証: GUIリアルタイムログ、即時反映、キャンセル時安定性。  
-4. Validator入力を `requirement + diff + test evidence` のみに限定し監査判定。
+4. Validator入力を `requirement + diff` のみに限定し監査判定。
 - 完了条件:
 1. `pytest tests/` 全件Pass。  
 2. 再検証シナリオ3件合格。  
 3. 監査証跡必須6項目の欠落0件。  
 4. 依存違反0件、UIロジック違反0件、複雑度違反0件。  
 5. 1クラス1責務逸脱0件。  
-6. REJECTトリガー該当0件。
-7. 監査入力として `test evidence` を保持し、判定時に提示できる状態である。
+6. REJECTトリガー該当0件。  
+7. 監査入力が `requirement + diff` に限定され、基準文書と整合している。
 
 ## 3. 依存関係とゲート
 
