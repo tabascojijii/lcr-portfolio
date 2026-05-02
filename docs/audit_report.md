@@ -1,33 +1,54 @@
-# 監査報告書（Auditor）
+# Audit Report
 
-## 監査対象
-- 対象: `docs/roadmap.md`
-- 絶対基準: `docs/plan.md`, `docs/reference_standards.md`
+## 1) Pytest 実行結果
+実行コマンド: `pytest tests/`
 
-## 判定
-- 総合判定: **PASS（問題なし）**
-- ステータス: `AUDIT_PASS_ROADMAP`
+結果:
+- `25 passed in 1.47s`
+- Fail/ERROR は検出されず
 
-## 検証結果
-1. 基準文書の優先順位と適合方針
-- `roadmap.md` は `reference_standards.md` を絶対基準として明示し、基準違反状態で次フェーズへ進まない方針を定義している。
-- `plan.md` の「逸脱ゼロ」「pytest全件Pass」「S1-S3合格」という完了ゲートと整合している。
+## 2) docs/reference_standards.md 準拠監査（src/・tests/）
 
-2. 要件・シナリオ整合性（R1-R3 / S1-S3）
-- `plan.md` のR1-R3（Knowledge Update / Real-time Feedback / Dynamic Refresh）を、`roadmap.md` のM2-M4で個別マイルストーン化。
-- `plan.md` のS1-S3再検証シナリオを、`roadmap.md` のM6にて監査ゲートとして明確に要求。
+### 重大違反（REJECT根拠）
+1. **[標準2] Docker `FROM` のダイジェスト固定違反**
+- 規約: `FROM` は可変タグではなく `@sha256:` を必須化
+- 実装:
+  - `src/lcr/core/container/templates/base.Dockerfile.j2:1` → `FROM {{ base_image }}`（ダイジェスト制約なし）
+  - `src/lcr/core/container/manager.py:54` → `python:2.7-slim`
+  - `src/lcr/core/container/manager.py:74` → `python:3.10-slim`
+  - `src/lcr/core/container/definitions/py27_cv_apt.json:3` → `debian:stretch-slim`
+  - `src/lcr/core/container/definitions/3.10test6.json:3` ほか多数 → `python:3.10-slim`
+- 判定: **違反**
 
-3. 参照標準（第1-4章）との整合
-- 第1章（監査ガバナンス）: Builder/Validator分離、REJECT時の処方的テンプレート要件を明記。
-- 第2章（Docker再現性）: digest固定、EOL repo、constraints、マルチステージをM5で要求。
-- 第3章（データ完全性）: image digest/git hash/SHA-256/相対パスを成功条件およびM5で要求。
-- 第4章（UIアーキテクチャ）: Humble Object、Qt非依存、Signal/Slot命名規約をM3/M4/M5で要求。
+2. **[標準2] pip 依存解決の `constraints.txt` 未適用**
+- 規約: 旧パッケージのバックトラッキング回避のため `constraints.txt` による制約必須
+- 実装:
+  - `src/lcr/core/container/templates/base.Dockerfile.j2` の `pip install` に `-c constraints.txt` 相当なし
+  - リポジトリ内に `constraints*.txt` が存在しない（`rg --files -g "*constraints*.txt"` 結果なし）
+- 判定: **違反**
 
-4. EMCS/監査メトリクス整合
-- `plan.md` のM1-M5観点（SRP, 依存方向, 複雑度, テスト網羅, 監査証跡）に対し、`roadmap.md` はM1およびM6で判定運用を要求し、監査導線が維持されている。
+3. **[標準2] マルチステージビルド未実装**
+- 規約: C/C++系（OpenCV等）を含む場合、ビルド環境と実行環境の分離を強制
+- 実装:
+  - `src/lcr/core/container/templates/base.Dockerfile.j2` は単一 `FROM` のみ（builder/runtime 分離なし）
+- 判定: **違反**
 
-## 指摘事項
-- なし。
+4. **[標準3] 監査証跡（環境/コードハッシュ）未記録**
+- 規約: 実行ログにコンテナイメージダイジェストと Git コミットハッシュ記録必須
+- 実装:
+  - `src/lcr/ui/main_window.py` の実行ログ出力（例: `:843`）に digest/hash 記録なし
+  - `git rev-parse HEAD` 実行や保存処理が `src/` 内に存在しない（検索結果なし）
+- 判定: **違反**
 
-## 結論
-- `docs/roadmap.md` は `docs/plan.md` および `docs/reference_standards.md` と実質整合しており、監査上の基準逸脱は確認されない。
+### 品質上の追加懸念（規約1の客観評価観点）
+- `src/lcr/ui/main_window.py` に重複実装が存在し、保守性・誤動作リスクが高い
+  - import重複: `Path` (13,17), `CodeAnalyzer` (28,30), `ContainerManager` (29,31)
+  - 代入重複: `self.worker = None` (54,55)
+  - UI追加重複: `env_layout.addWidget(self.version_label)` (143,146), `self.results_layout.addWidget(self.res_scroll)` (223,226)
+  - メソッド二重定義: `_refresh_env_list` (277,290), `_show_create_env_dialog` (470,1124)
+- 判定: テストは通るが、品質規約の厳格運用上は是正対象
+
+## 3) 総合判定
+- pytest: PASS
+- 規約準拠: **FAIL（重大違反あり）**
+- 最終判定: **REJECT_TO_IMPLEMENT**
