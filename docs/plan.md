@@ -279,11 +279,18 @@ manifest = {
     "source_hash": hashlib.sha256(script_content.encode()).hexdigest(),
     "image": config["image"],
     "image_digest": _get_image_digest(config["image"]),  # docker image inspect
-    "script_path": str(script_path_obj),           # プロジェクトルートからの相対パス
+    "script_path": str(Path(script_path_obj).relative_to(PROJECT_ROOT)),  # プロジェクトルートからの相対パス
     "input_file_hashes": _hash_input_files(input_files),  # 入力データファイルの SHA-256
 }
-with open(host_output_dir / "execution_manifest.json", "w") as f:
-    json.dump(manifest, f, indent=2, ensure_ascii=False)
+manifest_bytes = json.dumps(manifest, indent=2, ensure_ascii=False).encode()
+with open(host_output_dir / "execution_manifest.json", "wb") as f:
+    f.write(manifest_bytes)
+
+# manifest 自体の SHA-256 をサイドカーファイルとして保存（ALCOA++ §3 改ざん検知要件）
+manifest_hash = hashlib.sha256(manifest_bytes).hexdigest()
+(host_output_dir / "execution_manifest.sha256").write_text(
+    f"{manifest_hash}  execution_manifest.json\n"
+)
 ```
 
 ヘルパー関数:
@@ -300,23 +307,27 @@ def _get_git_commit_hash() -> str:
 
 def _get_image_digest(image: str) -> str:
     """実行時のコンテナイメージダイジェストを取得する（ALCOA++ §3 準拠）"""
-    try:
-        result = subprocess.run(
-            ["docker", "image", "inspect", "--format={{index .RepoDigests 0}}", image],
-            capture_output=True, text=True, check=True
+    result = subprocess.run(
+        ["docker", "image", "inspect", "--format={{index .RepoDigests 0}}", image],
+        capture_output=True, text=True, check=True
+    )
+    digest = result.stdout.strip()
+    if not digest.startswith("sha256:"):
+        raise RuntimeError(
+            f"image_digest for '{image}' is not a valid sha256 digest: '{digest}'. "
+            "Ensure the image has been pushed to a registry and has a RepoDigest."
         )
-        return result.stdout.strip()
-    except Exception:
-        return "unknown"
+    return digest
 
 def _hash_input_files(input_files: list) -> dict:
-    """入力ファイルの SHA-256 ハッシュを計算する"""
+    """入力ファイルの SHA-256 ハッシュを計算する（キーはプロジェクトルートからの相対パス）"""
     hashes = {}
     for f in input_files or []:
+        rel_key = str(Path(f).relative_to(PROJECT_ROOT))
         try:
-            hashes[str(f)] = hashlib.sha256(Path(f).read_bytes()).hexdigest()
+            hashes[rel_key] = hashlib.sha256(Path(f).read_bytes()).hexdigest()
         except Exception:
-            hashes[str(f)] = "error"
+            hashes[rel_key] = "error"
     return hashes
 ```
 
@@ -324,6 +335,8 @@ def _hash_input_files(input_files: list) -> dict:
 - 実行後、`data/results/<timestamp>/execution_manifest.json` に `git_commit`, `source_hash`, `image_digest` が存在すること
 - `image_digest` が `sha256:` で始まるダイジェスト値であること（`unknown` は REJECT）
 - 入力ファイルが存在する場合、`input_file_hashes` に各ファイルの SHA-256 が含まれること
+- 実行後、`execution_manifest.sha256` が同ディレクトリに存在し、その内容が manifest ファイルの SHA-256 と一致すること（違反1対応）
+- `execution_manifest.json` 内のすべてのパス値（`script_path`、`input_file_hashes` のキー）がプロジェクトルートからの相対パスであること（違反3対応）
 
 ---
 
@@ -473,6 +486,8 @@ class IContainerWorker(abc.ABC):
 - [ ] 実行後に `execution_manifest.json` が `git_commit`, `source_hash`, `image_digest` を含む（P1-2）
 - [ ] `image_digest` フィールドが `sha256:` で始まるダイジェスト値である（P1-2）
 - [ ] 入力ファイルが存在する場合、`input_file_hashes` が manifest に含まれる（P1-2）
+- [ ] `execution_manifest.sha256` が manifest と同ディレクトリに存在し、SHA-256 が一致する（P1-2 違反1対応）
+- [ ] `execution_manifest.json` 内の全パス値（`script_path`・`input_file_hashes` キー）が相対パスである（P1-2 違反3対応）
 - [ ] 生成された Dockerfile の `pip install` に `--constraint` オプションが含まれる（P1-3）
 - [ ] Python 2.7 ベースイメージのビルドで `archive.debian.org` ソース設定が生成される（P1-4）
 - [ ] OpenCV 含む定義のビルドで生成 Dockerfile に `AS builder` / `COPY --from=builder` が含まれる（P1-5）
@@ -489,7 +504,7 @@ Auditor は主観的判断を排し、以下の客観的メトリクスで PASS 
 | 違反カテゴリ | REJECT 判定基準 | ヒント（修正指示） |
 |---|---|---|
 | テスト合格 | `pytest tests/` に FAILED または ERROR が 1 件でも存在する | 上記 P0-1〜P0-5 の修正を適用せよ |
-| データ完全性 | 実行後に `execution_manifest.json` が存在しない、または `git_commit` / `source_hash` / `image_digest` フィールドのいずれかが欠落 | `ContainerManager.prepare_run_config()` に manifest 書き出しと `_get_image_digest()` を追加せよ |
+| データ完全性 | 実行後に `execution_manifest.json` が存在しない、または `git_commit` / `source_hash` / `image_digest` フィールドのいずれかが欠落、または `execution_manifest.sha256` が存在しない、または manifest 内パスが絶対パスである | `ContainerManager.prepare_run_config()` に manifest 書き出し・sha256 サイドカー生成・相対パス変換を追加せよ（P1-2）|
 | インターフェース規律 | `ContainerWorker` が `abc.ABC` または `Protocol` を継承していない | `src/lcr/core/interface.py` に `IContainerWorker` を定義し継承させよ |
 | 単一責任の原則 | `MainWindow` が `subprocess.run` / Docker コマンド構築を直接実行している | `MainWindowPresenter` へのロジック移譲が未完了 |
 | ビルド再現性 | 生成 Dockerfile の `FROM` 行にダイジェストがなく可変タグのみ、または `else` フォールバックが存在する | `base.Dockerfile.j2` の `{% else %}` を削除し、`generator.py` に `ValueError` バリデーションを追加せよ |
