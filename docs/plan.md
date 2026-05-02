@@ -1,96 +1,125 @@
 # LCR 実装計画（Architect）
 
-- 作成日: 2026-05-03
-- 作成者: Architect
-- 対象: Phase 4 再検証および規約準拠実装
-- 参照: `docs/requirement.md`, `docs/reference_standards.md`
-- 注記: 指示にある `docs/core_philosophy.md` と `docs/requirements.md` はリポジトリ内に存在しないため、実在する要件文書 `docs/requirement.md` を正式参照として計画化する。
+## 0. 前提・適用優先順位
+- 絶対基準: `docs/reference_standards.md`。
+- 要求仕様: `docs/requirement.md` を満たす。
+- 注意: 指定された `docs/core_philosophy.md` はリポジトリ内に存在しないため、本計画は上記2文書を根拠として策定する。
+- 合否判定の最終ゲートは以下2軸。
+  - `pytest tests/` 全件Pass
+  - `docs/reference_standards.md` 逸脱ゼロ
 
 ## 1. 目標
+- Phase 4（Self-Learning Loop）の再検証を最優先で完遂する。
+- 未達があれば、原因を規約ベースで切り分け、最小変更で修正する。
+- 監査可能な証跡（ログ、ハッシュ、再現条件）を残す。
 
-1. Phase 4（Self-Learning Loop）の再検証を最優先で実施し、合格基準を根拠付きで満たす。  
-2. `docs/reference_standards.md` の必須規約（Docker再現性、監査証跡、Humble Object、インターフェース規律）に準拠した実装に収束させる。  
-3. 最終判定条件として `pytest tests/` 全件 Pass を達成する。
+## 2. 要件トレーサビリティ（Requirement → Test/Implementation）
 
-## 2. 完了条件（Definition of Done）
+### R1: Knowledge Update
+- 要件: ビルド成功時、ユーザー承認済みの「インポート名 ↔ パッケージ名」を `library.json` / `user_knowledge.json` へ自動追記。
+- 実装方針:
+  - 知識更新ユースケースを独立化（UIから分離）。
+  - 追記前後でJSON整合性検証、重複排除、原子的書き込み。
+- テスト:
+  - 正常: 承認済みペアのみ追記される。
+  - 異常: 書き込み失敗時にロールバックし、既存データ不変。
+  - 回帰: 同一入力の再実行で重複生成しない。
 
-1. `pytest tests/` が `FAILED=0 / ERROR=0`。  
-2. 再検証シナリオ3件がすべて合格。  
-3. 監査証跡（実行ログ、ハッシュ、検証記録）が相対パス運用で再現可能。  
-4. レイヤ依存違反（`UI -> Domain` 逆流）が0件。  
-5. UI層ロジック違反（Presenter/UseCase以外で業務処理）が0件。  
-6. 複雑度/責務違反が閾値以内（関数循環的複雑度 > 10 を0件、1クラス1責務逸脱を0件）。  
-7. 監査REJECTトリガー: 上記 4-6 の違反が1件でもあればFail。
+### R2: Real-time Feedback
+- 要件: Dockerビルド進捗ログをGUIコンソールへリアルタイム表示。
+- 実装方針:
+  - ビルド実行とログ配信を非同期ストリーム化。
+  - Viewは表示専任（Humble Object）、整形はPresenter/ViewModel。
+- テスト:
+  - 正常: 長時間ビルドでUIがフリーズしない。
+  - 完走: 開始から終了まで欠落なく表示。
+  - 異常: ビルド失敗時もクラッシュせず終了状態を通知。
 
-## 3. 要件トレーサビリティ
+### R3: Dynamic Refresh
+- 要件: 新規環境作成後、再起動なしでUIリストへ即時反映、実行可能。
+- 実装方針:
+  - 作成完了イベントを発火し、一覧データソースを再読込。
+  - UI更新はスロット経由で一貫処理。
+- テスト:
+  - 正常: 新規環境が即時表示され、そのまま実行成功。
+  - 回帰: 既存環境IDが保持され、`custom-env` へ化けない。
 
-### 3.1 requirement.md 由来
+## 3. 再検証シナリオ実行計画（最優先）
 
-1. テスト成果物を `tests/` に実装し、再検証シナリオを自動化可能な粒度へ分解する。  
-2. Phase 4 の3機能を検証する。
-- Knowledge Update: 承認済み import/package 対応が `library.json` / `user_knowledge.json` へ追記される。  
-- Real-time Feedback: Dockerビルド進捗がGUIコンソールに継続表示される。  
-- Dynamic Refresh: 新規環境作成後に再起動なしでUI反映・実行可能。  
-3. 合格基準（ID保持、ログ完走、知識発動、即時実行、クラッシュなし）を監査チェック項目へ直結させる。
+### S1: 「過去の遺産」救済テスト
+- 入力: 既存環境（例: `3.10test5`）を再構築。
+- 検証:
+  - ID保持（不変）
+  - 知識適用によりビルド成功
+  - 監査ログに結果記録
 
-### 3.2 reference_standards.md 由来
+### S2: 「新規作成」即時反映テスト
+- 入力: 新規環境を作成し直後に一覧確認。
+- 検証:
+  - 再起動不要で表示
+  - 直後に実行できる
 
-1. Docker再現性: `FROM` digest固定、EOLリポジトリ切替、constraints強制、かつ C/C++ コンパイルを伴う全Dockerfileでmulti-stage必須。  
-2. データ完全性: 監査証跡スキーマに `input_hash`, `output_hash`, `param_hash`, `log_hash`, `image_digest`, `git_commit` を必須記録。  
-3. GUI設計: Humble Object 徹底、Presenter/UseCase分離、`abc.ABC`/`Protocol` で境界定義。  
-4. 監査運用: Builder/Validator分離を強制し、Validator入力は `requirement + diff + test evidence` のみに限定（実装思考ログは非参照）。  
-5. 監査判定: 客観メトリクスで判定し、REJECT時は違反箇所・根拠・修正指示を必須化。
+### S3: 「失敗とキャンセル」安全性テスト
+- 入力: 意図的失敗条件およびキャンセル操作。
+- 検証:
+  - クラッシュなし
+  - 停止・ロールバック成立
+  - 中断時のデータ整合性維持
 
-## 4. 実装フェーズ
+## 4. 参照標準に基づく実装制約
 
-### Phase A: ベースライン評価
+### 4.1 Docker再現性
+- `FROM` はタグ禁止、digest固定必須。
+- EOL OSはアーカイブリポジトリへリダイレクト。
+- 依存解決は `constraints.txt` で探索範囲固定。
+- C++ライブラリ（例: OpenCV）はマルチステージビルド。
 
-1. 現行 `pytest tests/` を実行し、失敗を分類（テスト不備、実装不備、設計不備）。  
-2. Phase 4 関連コード（知識更新、ビルドログ連携、UI更新）の実装位置と依存関係を棚卸し。  
-3. 監査証跡用にベースライン結果を保存。
+### 4.2 データ完全性（ALCOA++）
+- 実行ログに以下を必須記録:
+  - コンテナイメージdigest
+  - 実行時Gitコミットハッシュ
+- 入出力・パラメータ・ログにSHA-256を付与。
+- パスはプロジェクトルート相対で統一。
 
-### Phase B: P0 是正（全テストPass回復）
+### 4.3 GUI/アーキテクチャ
+- Humble Objectを強制（Viewはロジック最小化）。
+- UseCase/EntityはQt非依存。
+- 主要連携は `abc.ABC` または `typing.Protocol` 経由。
+- 命名規約:
+  - Signal: 過去分詞形（例: `buildFinished`）
+  - Slot: 動詞（例: `update_console`）
 
-1. 既存失敗テストを修正し、期待値と実装仕様を一致させる。  
-2. テスト不能箇所は依存分離（モック可能化、I/F導入）で単体検証可能にする。  
-3. `pytest tests/` 緑化を最短で達成し、Phase 4 再検証の前提を確立する。
+## 5. 実装ステップ
+1. 現状棚卸し
+- Phase 4関連モジュール、Dockerfile、知識DB更新経路、GUI更新経路、テスト資産を特定。
 
-### Phase C: Phase 4 再検証実装・検証
+2. テスト先行で再検証を固定
+- 要件シナリオS1-S3を `tests/` に明文化（E2E + ユニット/統合）。
+- 期待結果を合格基準に直接マッピング。
 
-1. 遺産救済テスト: 既存環境（例: `3.10test5`）再構築時にIDが維持されることを確認。  
-2. 新規作成即時反映: 作成直後にUI一覧へ反映し、そのまま実行できることを確認。  
-3. 失敗/キャンセル安全性: 異常系でクラッシュしないこと、停止・ロールバック動作を確認。  
-4. 上記を `tests/` へ反映し、回帰試験化する。
+3. 不足機能の実装/修正
+- Knowledge Update、ログストリーミング、Dynamic Refresh、失敗/キャンセル時の安全処理を最小差分で補完。
 
-### Phase D: 規約準拠強化
+4. 標準準拠化
+- Docker再現性、データ完全性、GUI分離規約への逸脱を是正。
 
-1. Docker生成系に digest 必須バリデーションを導入（タグのみ指定を禁止）。  
-2. EOL定義に archive repo / constraints 適用を強制。  
-3. C/C++ コンパイルを伴うDockerfile（OpenCV等）は例外なくmulti-stageテンプレートへ統一。  
-4. 監査証跡マニフェストに `input_hash`, `output_hash`, `param_hash`, `log_hash`, `image_digest`, `git_commit` を必須出力。  
-5. UIから業務処理を分離し、Presenter/UseCase経由へ再配線。  
-6. シグナル/スロット命名規約（signal: 過去分詞、slot: 動詞開始）の静的チェックを導入。
+5. 検証・監査証跡作成
+- `pytest tests/` 実行。
+- 再検証結果、ハッシュ、ログ、未達有無を監査可能形式で記録。
 
-## 5. 検証計画
+## 6. 成果物
+- 実装コード（`src/`）
+- テストコード（`tests/`）
+- 監査証跡（再検証ログ、ハッシュ、実行条件）
+- 逸脱があった場合の修正履歴と根拠
 
-1. 自動検証: `pytest tests/`、Phase 4 回帰テスト、Dockerfile生成テスト、監査証跡生成テスト、複雑度計測（しきい値 > 10 をFail）。  
-2. 静的検証: レイヤ依存チェック（`UI -> Domain` 逆流検出）、UI層業務ロジック検出、シグナル/スロット命名規約検証。  
-3. 手動検証: GUI上のリアルタイムログ、即時反映、キャンセル時安定性の確認。  
-4. 監査運用: Validatorは `requirement + diff + test evidence` のみを入力として判定し、Builderの思考ログは参照しない。  
-5. 監査判定: 重大/中違反が0件、再検証シナリオ全合格、再現性証跡の欠落なし。違反1件以上はREJECT。
-
-## 6. 主要成果物
-
-1. `docs/plan.md`（本書）  
-2. `src/` 修正差分（Phase 4 と規約準拠）  
-3. `tests/` 追加・修正（再検証シナリオを含む）  
-4. 監査エビデンス（pytest結果、再検証結果、ハッシュ付き実行記録）
-
-## 7. リスクと先行対策
-
-1. 旧環境データ形式差異でID保持が崩れるリスク。  
-対策: 既存定義ファイル読み込み時の互換レイヤーと回帰テストを追加する。  
-2. GUIテストの環境依存リスク。  
-対策: Presenter中心の単体試験へ寄せ、GUI層は最小の統合試験に限定する。  
-3. EOL依存の取得失敗リスク。  
-対策: archive repo と constraints を定義テンプレートに組み込み、未設定時は明示エラーにする。
+## 7. 完了判定（Definition of Done）
+- S1-S3すべて合格。
+- 合格基準5項目を全充足:
+  - ID消失なし
+  - ログ完走（UIフリーズなし）
+  - 知識発動
+  - 即時実行（再起動不要）
+  - クラッシュなし
+- `pytest tests/` 全件Pass。
+- `docs/reference_standards.md` 逸脱ゼロ。
