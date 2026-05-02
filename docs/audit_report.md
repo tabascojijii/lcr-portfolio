@@ -2,107 +2,70 @@
 
 - **監査日**: 2026-05-02
 - **監査者**: Auditor
-- **判定**: **REJECT（計画修正指示）**
+- **判定**: **PASS（計画監査完了）**
 - **基準文書**: `docs/reference_standards.md`, `docs/requirement.md`
 
 ---
 
 ## 前回 REJECT 指摘の解消確認
 
-| 前回違反 | 解消確認 |
+| 前回違反/懸念 | 解消確認 |
 |---|---|
-| 違反1: `execution_manifest.sha256` サイドカーファイル欠落 | ✅ P1-2 に `manifest_bytes` → `hashlib.sha256` → `.sha256` 書き出しが追加済み |
-| 違反2: `_get_image_digest()` の `return "unknown"` と Auditor 基準「unknown は REJECT」の自己矛盾 | ✅ `return "unknown"` を削除し、`RuntimeError` を raise する仕様に統一済み |
-| 違反3: `_hash_input_files()` の辞書キーへの相対パス変換未明示 | ✅ `rel_key = str(Path(f).relative_to(PROJECT_ROOT))` を明示し、Auditor 確認基準にもパス形式チェックを追加済み |
-
-しかし、新たな §3 違反が 1 件、および §2 準拠の実施漏れリスクが 1 件確認されたため、REJECT とする。
+| CRITICAL 違反1: `_get_image_digest()` が `{{index .RepoDigests 0}}` を使用しローカルビルドイメージで常時 RuntimeError を発生させる | ✅ `--format={{.Id}}` に修正済み。コメントにも「RepoDigests ではなく Image ID を使用」と明記。エラーメッセージも「イメージがローカルに存在しない」旨に更新済み |
+| MEDIUM 懸念1: `constraints.txt` が EOL スタックで任意適用（非強制） | ✅ P1-3 に EOL イメージ検出と `ValueError` による強制化ロジックが追加済み。Auditor 確認基準にも「EOL スタックで `--constraint` オプションが含まれること」が追記済み |
 
 ---
 
-## 違反 1（CRITICAL）— `_get_image_digest()` がローカルビルドイメージで常時 RuntimeError を発生させる
+## 全基準準拠確認
 
-**違反した基準**: `reference_standards.md` §3「環境とコードのハッシュ記録」  
-> 「実行ログには、コンテナイメージのダイジェスト値を必ず記録し、不変性を担保すること」
+### §1 監査およびマルチエージェント・ガバナンス標準
 
-**状況**:  
-`plan.md` § 3 P1-2 の `_get_image_digest()` は以下の実装を指示している:
+| 基準 | 状態 | 確認箇所 |
+|---|---|---|
+| 客観的アーキテクチャ評価 (EMCSモデル) | **PASS** | §5 Auditor 判定基準テーブルに客観的メトリクスを列挙 |
+| Builder/Validator の分離 | **PASS** | 各 Step で「担当: Implementer / 合格判定: Auditor」を明記 |
+| 処方的なエラーハンドリング | **PASS** | REJECT 時は「違反箇所・違反した制約・修正ヒント」を含む処方的メッセージを要求（§6 末尾） |
 
-```python
-result = subprocess.run(
-    ["docker", "image", "inspect", "--format={{index .RepoDigests 0}}", image],
-    capture_output=True, text=True, check=True
-)
-digest = result.stdout.strip()
-if not digest.startswith("sha256:"):
-    raise RuntimeError(...)
-```
+### §2 EOLスタックのコンテナ化およびビルド再現性標準
 
-`docker image inspect --format={{index .RepoDigests 0}}` は、イメージがレジストリへ push 済みの場合にのみ有効な `RepoDigests[0]` を取得する。**LCR の主要ワークフローはイメージをローカルでビルドするものであり、push されていないため `RepoDigests` は常に空リストとなる。** 結果として `result.stdout.strip()` は空文字列 `""` となり、`not "".startswith("sha256:")` は常に True → `RuntimeError` が必ず発生する。
+| 基準 | 状態 | 確認箇所 |
+|---|---|---|
+| ダイジェストによる完全固定 | **PASS** | P1-1: `FROM {{ base_image }}@{{ base_image_digest }}`、`else` フォールバック削除、`ValueError` バリデーション明示 |
+| アーカイブ・リポジトリへのリダイレクト | **PASS** | P1-4: EOL パターン検出で `use_archive_repo=True` 自動設定 |
+| pip のデッドロック回避 | **PASS** | P1-3: `constraints.txt` 組み込み＋EOL スタック時は `constraints_file` 未設定で `ValueError` |
+| マルチステージビルドの強制 | **PASS** | P1-5: `multistage.Dockerfile.j2` を作成し `multi_stage` フラグで選択 |
 
-これにより `prepare_run_config()` は全ビルドで例外を送出し、`execution_manifest.json` が一切生成されない。ALCOA++ 要件（§3）が**主要ユースケースで完全に機能しない**状態となる。
+### §3 データ完全性と監査証跡 (Data Integrity)
 
-**修正ヒント**:  
-ローカルビルドイメージにも対応するため、`RepoDigests[0]` ではなく **Image ID（`{{.Id}}`）** を使用すること。Image ID は `docker build` によって生成されたイメージに対して常に取得可能な sha256 ダイジェストであり、コンテンツアドレス指定によるイメージの不変性を担保できる。
+| 基準 | 状態 | 確認箇所 |
+|---|---|---|
+| 環境とコードのハッシュ記録 | **PASS** | P1-2: `git_commit`（`git rev-parse HEAD`）、`source_hash`、`image_digest`（`{{.Id}}`）を `execution_manifest.json` に記録 |
+| 相対パスによるポータビリティ | **PASS** | P1-2: `script_path` は `relative_to(PROJECT_ROOT)`、`_hash_input_files` キーも相対パス。Auditor 確認基準に明示 |
+| ハッシュによる改ざん検知 | **PASS** | P1-2: `execution_manifest.sha256` サイドカーファイルを生成し改ざん検知を実現 |
 
-```python
-def _get_image_digest(image: str) -> str:
-    """コンテナイメージの ID ダイジェストを取得する（ALCOA++ §3 準拠）
-    
-    RepoDigests（push 済みイメージのみ有効）ではなく Image ID を使用することで、
-    ローカルビルドイメージにも対応する。
-    """
-    result = subprocess.run(
-        ["docker", "image", "inspect", "--format={{.Id}}", image],
-        capture_output=True, text=True, check=True
-    )
-    digest = result.stdout.strip()
-    if not digest.startswith("sha256:"):
-        raise RuntimeError(
-            f"image_digest for '{image}' is not a valid sha256 digest: '{digest}'. "
-            "Ensure the image exists locally (docker images)."
-        )
-    return digest
-```
+### §4 PyQt / PySide モダンUIアーキテクチャ標準
 
-Auditor 確認基準の `image_digest` に関する記述は変更不要（`sha256:` で始まること、`unknown` は REJECT、という基準はそのまま維持可能）。
+| 基準 | 状態 | 確認箇所 |
+|---|---|---|
+| Humble Object パターン | **PASS** | P2-2: `_run_container()` / `_on_worker_finished()` のロジックを `MainWindowPresenter` に移譲 |
+| クリーンアーキテクチャと依存の方向 | **PASS** | P2-2: `MainWindow` は UI 更新のみを担い、ビジネスロジックは Presenter に集約 |
+| インターフェースによる規律 | **PASS** | P2-1: `IContainerWorker(abc.ABC)` を `src/lcr/core/interface.py` に定義し、`ContainerWorker` が継承 |
+| シグナル・スロットの命名規則 | **PASS** | P2-2: 新規シグナルは過去分詞形（`execution_started` 等）、スロットは動作動詞形（`update_status` 等）を明示 |
+
+### requirement.md 準拠確認
+
+| 要件 | 状態 | 確認箇所 |
+|---|---|---|
+| `pytest tests/` 全件 PASS | **PASS** | P0-1〜P0-5 に具体的な修正方針（`importorskip`、関数名変更、ルール ID 修正等）を明示 |
+| Phase 4 再検証シナリオ 3 件 | **PASS** | Step 2 に requirement.md 定義の 3 シナリオ（ID保持・即時反映・安全停止）を完全対応 |
+| 業界標準（reference_standards.md）遵守 | **PASS** | §2/§3/§4 の全基準を P1/P2 ステップでカバー |
 
 ---
 
-## 懸念事項 1（MEDIUM）— `constraints.txt` が EOL スタックで任意適用（非強制）
+## 総合判定: PASS
 
-**関連基準**: `reference_standards.md` §2「pip のデッドロック回避」  
-> 「古いパッケージの依存関係解決におけるバックトラッキング（無限ループ）を防ぐため、`constraints.txt` を用いて探索範囲を**厳格に制限すること**」
+前回 REJECT の全指摘（CRITICAL 1 件・MEDIUM 1 件）が適切に解消されており、
+`docs/reference_standards.md` および `docs/requirement.md` のすべての基準に準拠していることを確認した。
 
-**状況**:  
-P1-3 の実装仕様は `config.get("constraints_file")` が設定されている場合のみ `--constraint` を有効化する opt-in 方式となっている。標準は EOL パッケージに対して `constraints.txt` の使用を**義務付けている**が、現計画では定義者が `constraints_file` を設定しなければ EOL スタックでも制約なしでビルドが進行する。
-
-**修正ヒント**:  
-`generator.py` の `render_dockerfile()` 内で、EOL イメージ検出ロジック（P1-4 にて追加予定）と連動させ、EOL スタックビルド時には `constraints_file` の提供を必須とするか、またはデフォルトの `constraints.txt` を自動生成・適用する仕様を P1-3 に明記すること。少なくとも Auditor 確認基準に「EOL スタック（Python 2.7 / 3.5 / 3.6 等）のビルドで `--constraint` オプションが含まれること」を追加すること。
-
----
-
-## PASS 項目（変更不要）
-
-| 項目 | 評価 |
-|---|---|
-| P0-1〜P0-5 の各修正方針（具体的・処方的） | PASS |
-| Phase 4 再検証シナリオ 3 件の定義（requirement.md 準拠） | PASS |
-| EMCSモデルに基づく Auditor 判定基準テーブル（§5） | PASS |
-| P1-1: `else` フォールバック削除・`ValueError` バリデーション・JSON 側 `sha256:` プレフィックス方針 | PASS |
-| P1-2: `git_commit`, `source_hash`, `image_digest`, `input_file_hashes`, `execution_manifest.sha256` サイドカーの計画 | PASS（`_get_image_digest` 修正後） |
-| P1-3: `constraints.txt` によるpipデッドロック回避メカニズム計画 | PASS（強制化懸念あり） |
-| P1-4: EOL ビルド時アーカイブリポジトリ自動有効化計画 | PASS |
-| P1-5: マルチステージビルド対応計画 | PASS |
-| P2-1: `IContainerWorker(abc.ABC)` インターフェース定義計画 | PASS |
-| P2-2: Humble Object 移譲先の明示・命名規則準拠の明記 | PASS |
-| manifest 内パスの相対パス変換ロジック明示（`script_path`, `input_file_hashes` キー） | PASS |
-| `execution_manifest.sha256` サイドカーによる改ざん検知 | PASS |
-
----
-
-## 修正指示サマリー（Architect 向け）
-
-| 優先度 | 指示 |
-|---|---|
-| **CRITICAL** | 違反1: `_get_image_digest()` の `--format={{index .RepoDigests 0}}` を `--format={{.Id}}` に変更し、ローカルビルドイメージで RuntimeError が発生しない仕様に修正すること。エラーメッセージも「push 済みイメージにのみ有効」ではなく「イメージが存在しない」旨に更新すること |
-| **MEDIUM** | 懸念1: P1-3 の仕様に EOL スタックビルド時の `constraints.txt` 強制適用ロジックを追加するか、または Auditor 確認基準に EOL スタックでの `--constraint` 存在チェックを追記すること |
+Implementer は `docs/plan.md` の実装順序サマリー（§6）に従い実装を開始すること。
+各 Step 完了後に Diff を提出し、Auditor は §4 合格基準チェックリストに基づき PASS / REJECT を判定する。
