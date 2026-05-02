@@ -8,6 +8,20 @@ def test_render_dockerfile_requires_digest_pinned_base_image():
         render_dockerfile({"base_image": "python:3.10-slim"})
 
 
+def test_render_dockerfile_rejects_zero_digest_placeholder():
+    with pytest.raises(ValueError):
+        render_dockerfile(
+            {
+                "base_image": "python:3.10-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+        )
+
+
+def test_render_dockerfile_rejects_invalid_digest_format():
+    with pytest.raises(ValueError):
+        render_dockerfile({"base_image": "python:3.10-slim@sha256:not-a-digest"})
+
+
 def test_render_dockerfile_uses_multistage_and_constraints():
     dockerfile = render_dockerfile(
         {

@@ -1,4 +1,4 @@
-FROM debian:stretch-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000
+FROM debian:stretch-slim@sha256:c5cd3ffceeb25b683bf5111ea89bf8049a177e00fb237235d48076a19cc80097
 
 # 1. Archive Repository Settings (if legacy)
 
@@ -37,3 +37,4 @@ RUN mkdir -p /root/.pip && \
 
 WORKDIR /app
 ENTRYPOINT ["python"]
+

@@ -1,6 +1,6 @@
 {
     "tag": "lcr-py27-cv-apt",
-    "base_image": "debian:stretch-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "base_image": "debian:stretch-slim@sha256:c5cd3ffceeb25b683bf5111ea89bf8049a177e00fb237235d48076a19cc80097",
     "use_archive_repo": true,
     "system_packages": [
         "python",
@@ -18,3 +18,4 @@
         "numpy"
     ]
 }
+

@@ -1,4 +1,4 @@
-FROM python:3.6-slim-stretch@sha256:0000000000000000000000000000000000000000000000000000000000000000
+FROM python:3.6-slim-stretch@sha256:15c2b35ce4a026d8d52bd4b8ff13904030c2f4c2809b4368f180390b1a18c284
 
 # 1. Archive Repository Settings (if legacy)
 
@@ -40,3 +40,4 @@ RUN pip install --no-cache-dir \
 
 WORKDIR /app
 ENTRYPOINT ["python"]
+

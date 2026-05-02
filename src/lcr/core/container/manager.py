@@ -51,7 +51,7 @@ class ContainerManager:
             "name": "Python 2.7 (Slim)",
             "version": "2.7", 
             "libs": [], 
-            "image": "python:2.7-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "image": "python:2.7-slim@sha256:b68d40df862ac07e8955ea0fc0c5454cb4245b6165e79bc8ea2cc69170d9ba62",
             "prepend_python": True,
             "triggers": []
         },
@@ -71,7 +71,7 @@ class ContainerManager:
             "name": "Python 3.10 (Latest)",
             "version": "3.x", 
             "libs": [], 
-            "image": "python:3.10-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "image": "python:3.10-slim@sha256:99c98652c1bc252d9d57337045bba0032c2f2e48c0ccff4ae69c74268fc5f04b",
             "prepend_python": True,
             "triggers": []
         }
@@ -1245,7 +1245,7 @@ class ContainerManager:
             "tag": "custom-auto-gen", # Placeholder, user should override
             "base_image": base_rule.get(
                 'image',
-                'python:3.10-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+                'python:3.10-slim@sha256:99c98652c1bc252d9d57337045bba0032c2f2e48c0ccff4ae69c74268fc5f04b'
             ),
             "apt_packages": list(detected_apt),
             "pip_packages": needed_pip,
@@ -1273,3 +1273,4 @@ class ContainerManager:
             "-f", str(path_obj),
             str(context_dir)
         ]
+

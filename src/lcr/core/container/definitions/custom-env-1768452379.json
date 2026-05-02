@@ -1,6 +1,6 @@
 {
     "tag": "custom-env-1768452379",
-    "base_image": "python:3.10-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "base_image": "python:3.10-slim@sha256:99c98652c1bc252d9d57337045bba0032c2f2e48c0ccff4ae69c74268fc5f04b",
     "pip_packages": [
         "pandas",
         "numpy",
@@ -20,3 +20,4 @@
     },
     "run_commands": []
 }
+

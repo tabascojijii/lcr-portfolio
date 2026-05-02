@@ -1,4 +1,4 @@
-FROM python:2.7-slim-stretch@sha256:0000000000000000000000000000000000000000000000000000000000000000
+FROM python:2.7-slim-stretch@sha256:c596db11740843f7a523b98bef441491d6818f5eb6222dcc0373d302662d1b99
 
 # 1. アーカイブリポジトリの設定 (成功済み)
 RUN echo "deb http://archive.debian.org/debian/ stretch main" > /etc/apt/sources.list && \
@@ -23,3 +23,4 @@ WORKDIR /app
 
 # 実行時もOS標準のPythonを使用
 ENTRYPOINT ["/usr/bin/python2.7"]
+

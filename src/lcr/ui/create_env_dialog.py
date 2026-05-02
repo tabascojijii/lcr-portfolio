@@ -14,7 +14,7 @@ from PySide6.QtGui import QTextCursor, QColor
 
 from lcr.core.container.types import ImageRule
 from lcr.core.container.manager import ContainerManager
-from lcr.core.container.generator import save_definition, generate_dockerfile
+from lcr.core.container.use_cases import EnvironmentBuildPreparationUseCase
 from lcr.ui.workers import BuildWorker
 
 class EnvironmentCreationDialog(QDialog):
@@ -58,6 +58,7 @@ class EnvironmentCreationDialog(QDialog):
         self.worker: Optional[BuildWorker] = None
         self.is_building = False
         self.current_def_id = None  # Track ID for rollback
+        self.build_use_case = EnvironmentBuildPreparationUseCase(self.container_manager) if self.container_manager else None
         
         self._load_apt_warnings()
         self._setup_ui()
@@ -384,43 +385,18 @@ class EnvironmentCreationDialog(QDialog):
         if not result:
             return
 
-        # --- Validation & Pre-processing (Copy of original logic) ---
-        pip_pkgs = result.get('pip_packages', [])
-        apt_pkgs = result.get('apt_packages', [])
-        base_image = result.get('base_image', '')
+        try:
+            prepared = self.build_use_case.prepare(result) if self.build_use_case else None
+        except Exception as e:
+            QMessageBox.critical(self, "Start Error", str(e))
+            self._reset_ui_state()
+            return
 
-        # Legacy Pins (3.6)
-        if "3.6" in base_image:
-            try:
-                import json
-                from pathlib import Path
-                mapping_path = Path(__file__).parent.parent / "core" / "detector" / "mappings" / "library.json"
-                if mapping_path.exists():
-                    with open(mapping_path, 'r', encoding='utf-8') as f:
-                        lib_data = json.load(f)
-                        legacy_pins = lib_data.get("_meta", {}).get("legacy_versions", {}).get("3.6", {})
-                        new_pip = []
-                        for pkg in pip_pkgs:
-                            pkg_name = pkg.split('==')[0].split('>=')[0].split('<=')[0]
-                            if pkg_name in legacy_pins:
-                                pin = legacy_pins[pkg_name]
-                                new_pip.append(f"{pkg_name}{pin}")
-                            else:
-                                new_pip.append(pkg)
-                        result['pip_packages'] = new_pip
-                        pip_pkgs = new_pip
-            except Exception as e:
-                print(f"Warning: Failed to apply legacy pins: {e}")
+        if prepared is None:
+            QMessageBox.critical(self, "Error", "Container Manager not initialized.")
+            return
 
-        # Opt Dependency Cleanup
-        if "python3-opencv" in apt_pkgs:
-            unnecessary = {'build-essential', 'cmake'}
-            result['apt_packages'] = [p for p in apt_pkgs if p not in unnecessary]
-            apt_pkgs = result['apt_packages']
-
-        # Warnings
-        opencv_pip = [p for p in pip_pkgs if "opencv" in p and "python" in p]
-        if opencv_pip:
+        if prepared.has_opencv_pip_warning:
             msg = ("<b>Run-Time Warning: Source Build Likely</b><br><br>"
                    "You have selected <code>opencv-python</code> via pip.<br>"
                    "On legacy environments (e.g. Python 3.6), this often triggers a source build "
@@ -431,59 +407,29 @@ class EnvironmentCreationDialog(QDialog):
             if reply == QMessageBox.Cancel:
                 return
 
-        # Auto-Add Tools
-        if pip_pkgs and "python3-opencv" not in apt_pkgs:
-            needed_tools = {'build-essential', 'cmake', 'python3-dev'}
-            current_apt = set(apt_pkgs)
-            missing = needed_tools - current_apt
-            if missing:
-                msg = (f"Detected pip packages ({len(pip_pkgs)} items). \n"
+        if prepared.apt_added_tools:
+            msg = (f"Detected pip packages ({len(prepared.config.get('pip_packages', []))} items). \n"
                        f"To ensure successful build, I am adding the following build tools to Apt packages:\n"
-                       f"{', '.join(missing)}")
-                QMessageBox.information(self, "Apt-First Assist", msg)
-                result['apt_packages'].extend(list(missing))
+                       f"{', '.join(prepared.apt_added_tools)}")
+            QMessageBox.information(self, "Apt-First Assist", msg)
         
-        self.result_config = result
+        self.result_config = prepared.config
         
         # --- Start Build Sequence ---
-        self._start_build(result)
+        self._start_build(prepared)
 
-    def _start_build(self, config):
+    def _start_build(self, prepared):
         """Initialize build process with Worker."""
         if not self.container_manager:
              QMessageBox.critical(self, "Error", "Container Manager not initialized.")
              return
 
-        tag = config['tag']
+        tag = prepared.tag
         self.current_def_id = tag # Assuming tag is ID for now
         
         try:
-            # 1. Provisional Save (Transaction Start)
-            # Use provisional save if manager supports it, or standard save with manual rollback
-            if self.container_manager:
-                 # Note: manager.save_definition_provisional not fully implemented in previous context
-                 # user said "Create newly generated image tag" etc. 
-                 # We will use save_definition from generator but track it manually for rollback
-                 json_path = save_definition(config, tag)
-                 
-                 # Register transaction start in manager if needed, or just track locally
-                 # manager.save_definition_provisional(config) # If this existed
-                 pass
-            else:
-                 json_path = save_definition(config, tag)
-            
             self.log_console.clear()
-            self.log_console.append(f"[Generator] Definition saved to {json_path.name}")
-            
-            # 2. Generate Dockerfile
-            tag, dockerfile_path = generate_dockerfile(str(json_path))
-            
-            # 3. Get Build Command
-            if self.container_manager:
-                build_args = self.container_manager.get_build_command(dockerfile_path, tag)
-            else:
-                # Fallback if manager missing (unlikely)
-                raise ValueError("ContainerManager not initialized")
+            self.log_console.append(f"[Generator] Definition prepared for {tag}")
 
             # 4. Prepare UI
             self.is_building = True
@@ -503,7 +449,7 @@ class EnvironmentCreationDialog(QDialog):
             self.log_console.append(f"\n[Builder] Starting build for '{tag}'...")
             
             # 5. Start Worker
-            self.worker = BuildWorker(build_args, tag)
+            self.worker = BuildWorker(prepared.build_args, tag)
             self.worker.log_received.connect(self._append_log)
             self.worker.build_finished.connect(self._on_build_finished)
             self.worker.start()

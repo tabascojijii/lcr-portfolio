@@ -1,4 +1,4 @@
-FROM python:2.7-slim-stretch@sha256:0000000000000000000000000000000000000000000000000000000000000000
+FROM python:2.7-slim-stretch@sha256:c596db11740843f7a523b98bef441491d6818f5eb6222dcc0373d302662d1b99
 
 # 1. APTの設定: 署名の有効期限チェックを無効化し、アーカイブURLに固定
 RUN echo "deb http://archive.debian.org/debian/ stretch main" > /etc/apt/sources.list && \
@@ -26,3 +26,4 @@ RUN pip install --no-cache-dir \
 
 WORKDIR /app
 ENTRYPOINT ["python"]
+

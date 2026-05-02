@@ -1,4 +1,4 @@
-FROM python:3.6-slim-buster@sha256:0000000000000000000000000000000000000000000000000000000000000000
+FROM python:3.6-slim-buster@sha256:d59ee182c4629dd33b240b9bac1a6ff44276e79e66117eba17aed4016845d3b2
 
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
@@ -14,3 +14,4 @@ RUN pip install --upgrade pip
 RUN pip install "numpy<1.20" "pandas<1.2" "scikit-learn<0.25"
 
 WORKDIR /app
+

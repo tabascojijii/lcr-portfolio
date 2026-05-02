@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from typing import Dict, Union, Optional
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
@@ -13,6 +14,11 @@ def _validate_digest_pinned_image(image: str) -> None:
     """Require digest-pinned base images to keep builds reproducible."""
     if "@sha256:" not in image:
         raise ValueError(f"base_image must be digest-pinned: {image}")
+    digest = image.split("@sha256:", 1)[1].strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError(f"base_image digest must be 64 hex chars: {image}")
+    if digest == ("0" * 64):
+        raise ValueError(f"base_image digest must not be zero placeholder: {image}")
 
 def render_dockerfile(config: Dict) -> str:
     """Render Dockerfile content from configuration dictionary."""
