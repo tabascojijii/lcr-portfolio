@@ -40,6 +40,9 @@
 | Humble Object パターン（§4） | **違反** | `main_window.py` 1252行・UI クラスが Docker コマンド構築・`subprocess.run` を直接実行 |
 | インターフェース規律（§4） | **未実装** | `abc.ABC` / `typing.Protocol` 未使用 |
 | `constraints.txt` による pip デッドロック回避（§2） | **未実装** | Dockerfile テンプレートに `constraints.txt` の仕組みがない |
+| アーカイブ・リポジトリへのリダイレクト（§2） | **条件付き実装済** | `base.Dockerfile.j2` に `{% if use_archive_repo %}` 分岐あり（`archive.debian.org` 対応）。EOL スタックビルド時に `use_archive_repo=True` が正しく渡されることの検証が必要 |
+| マルチステージビルド（§2） | **未実装** | `base.Dockerfile.j2` にマルチステージ構成（`FROM ... AS builder` / `COPY --from`）が存在しない |
+| シグナル・スロット命名規則（§4） | **調査済・概ね準拠** | `ContainerWorker`: `log_updated`, `error_occurred`, `finished_with_code`（過去分詞）、スロット `_on_worker_output`, `_on_worker_finished`（動詞形）— §4 準拠。P2-2 で新規追加するシグナル・スロットにも同規則を適用すること |
 
 ---
 
@@ -60,7 +63,10 @@
 | No. | 問題 |
 |---|---|
 | P1-1 | Dockerfile `FROM` 句への SHA256 ダイジェスト固定 |
-| P1-2 | ALCOA++ 監査証跡（`execution_manifest.json` への `git_commit` + `source_hash` 記録） |
+| P1-2 | ALCOA++ 監査証跡（`execution_manifest.json` への `git_commit` + `source_hash` + `image_digest` + 入力ファイルハッシュ記録） |
+| P1-3 | `constraints.txt` による pip デッドロック回避 |
+| P1-4 | アーカイブ・リポジトリの EOL ビルド時デフォルト有効化検証 |
+| P1-5 | マルチステージビルド対応（OpenCV 等 C++ ライブラリ） |
 
 ### P2 — 品質（`reference_standards.md` §4）
 
@@ -238,18 +244,25 @@ def test_rollback_definition(tmp_path):
    }
    ```
 
-2. `base.Dockerfile.j2` テンプレートを修正:
+2. `base.Dockerfile.j2` テンプレートを修正（`else` フォールバックを**削除**し、ダイジェストなしビルドを禁止）:
    ```dockerfile
-   {% if base_image_digest %}
-   FROM {{ base_image }}@sha256:{{ base_image_digest }}
-   {% else %}
-   FROM {{ base_image }}
-   {% endif %}
+   FROM {{ base_image }}@{{ base_image_digest }}
+   ```
+   ※ JSON 側に `sha256:` プレフィックスを含めることで二重プレフィックス問題を回避する。
+
+3. `render_dockerfile(config)` が `base_image_digest` を `library.json` から自動解決するよう `generator.py` を修正。`base_image_digest` が空または未定義の場合は **ビルド前に `ValueError` を raise** し、可変タグでのビルドを防止する:
+   ```python
+   if not config.get("base_image_digest"):
+       raise ValueError(
+           f"base_image_digest is required for image '{config['base_image']}'. "
+           "Add SHA256 digest to library.json golden_images."
+       )
    ```
 
-3. `render_dockerfile(config)` が `base_image_digest` を `library.json` から自動解決するよう `generator.py` を修正
-
-**Auditor 確認基準**: 生成された Dockerfile の `FROM` 行に `@sha256:` が含まれること
+**Auditor 確認基準**: 
+- 生成された Dockerfile の `FROM` 行に `@sha256:` が含まれること
+- `base_image_digest` 未設定時にジェネレータが `ValueError` を送出すること
+- `{% else %}` フォールバック分岐が存在しないこと
 
 ---
 
@@ -262,10 +275,12 @@ def test_rollback_definition(tmp_path):
 ```python
 manifest = {
     "timestamp": datetime.datetime.now().isoformat(),
-    "git_commit": _get_git_commit_hash(),   # git rev-parse HEAD
+    "git_commit": _get_git_commit_hash(),         # git rev-parse HEAD
     "source_hash": hashlib.sha256(script_content.encode()).hexdigest(),
     "image": config["image"],
-    "script_path": str(script_path_obj),    # プロジェクトルートからの相対パス
+    "image_digest": _get_image_digest(config["image"]),  # docker image inspect
+    "script_path": str(script_path_obj),           # プロジェクトルートからの相対パス
+    "input_file_hashes": _hash_input_files(input_files),  # 入力データファイルの SHA-256
 }
 with open(host_output_dir / "execution_manifest.json", "w") as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
@@ -282,9 +297,106 @@ def _get_git_commit_hash() -> str:
         return result.stdout.strip()
     except Exception:
         return "unknown"
+
+def _get_image_digest(image: str) -> str:
+    """実行時のコンテナイメージダイジェストを取得する（ALCOA++ §3 準拠）"""
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", "--format={{index .RepoDigests 0}}", image],
+            capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
+def _hash_input_files(input_files: list) -> dict:
+    """入力ファイルの SHA-256 ハッシュを計算する"""
+    hashes = {}
+    for f in input_files or []:
+        try:
+            hashes[str(f)] = hashlib.sha256(Path(f).read_bytes()).hexdigest()
+        except Exception:
+            hashes[str(f)] = "error"
+    return hashes
 ```
 
-**Auditor 確認基準**: 実行後、`data/results/<timestamp>/execution_manifest.json` に `git_commit` と `source_hash` が存在すること
+**Auditor 確認基準**: 
+- 実行後、`data/results/<timestamp>/execution_manifest.json` に `git_commit`, `source_hash`, `image_digest` が存在すること
+- `image_digest` が `sha256:` で始まるダイジェスト値であること（`unknown` は REJECT）
+- 入力ファイルが存在する場合、`input_file_hashes` に各ファイルの SHA-256 が含まれること
+
+---
+
+---
+
+#### P1-3: `constraints.txt` による pip デッドロック回避（`reference_standards.md` §2）
+
+**現状**: `base.Dockerfile.j2` の `pip install` に `--constraint` オプションが存在しない
+
+**修正方針**:
+
+1. `generator.py` で `constraints.txt` をビルドコンテキストにコピーし、`pip install` コマンドに `--constraint /app/constraints.txt` を追加する:
+   ```python
+   # generator.py の render_dockerfile() 内
+   if config.get("constraints_file"):
+       shutil.copy(config["constraints_file"], build_context_dir / "constraints.txt")
+       config["use_constraints"] = True
+   ```
+
+2. `base.Dockerfile.j2` テンプレートに制約ファイルのコピーと適用を追加:
+   ```dockerfile
+   # constraints.txt によるデッドロック回避
+   {% if use_constraints %}
+   COPY constraints.txt /app/constraints.txt
+   {% endif %}
+
+   # 4. Python Libraries
+   {% if pip_packages %}
+   RUN pip install --no-cache-dir \
+   {% if use_constraints %}    --constraint /app/constraints.txt \
+   {% endif -%}
+   ...
+   ```
+
+**Auditor 確認基準**: 生成済み Dockerfile の `pip install` コマンドに `--constraint` オプションが含まれること
+
+---
+
+#### P1-4: アーカイブ・リポジトリの EOL ビルド時デフォルト有効化検証（`reference_standards.md` §2）
+
+**現状**: `base.Dockerfile.j2` に `{% if use_archive_repo %}` 分岐あり（`archive.debian.org` 対応済み）。ただし EOL スタック（Python 2.7、Python 3.6 等）のビルド時に `use_archive_repo=True` が確実に渡されることが検証されていない。
+
+**修正方針**: `generator.py` の `render_dockerfile()` で、ベースイメージが EOL スタックと判定される場合（`library.json` の `golden_images` に `eol: true` フラグがある、またはイメージ名が `python:2.7` / `python:3.6` 等のパターン）に `use_archive_repo` を自動的に `True` にセットする:
+```python
+EOL_IMAGE_PATTERNS = ["python:2.", "python:3.5", "python:3.6"]
+if any(config["base_image"].startswith(p) for p in EOL_IMAGE_PATTERNS):
+    config.setdefault("use_archive_repo", True)
+```
+
+**Auditor 確認基準**: Python 2.7 ベースイメージを使用するビルドで生成された Dockerfile に `archive.debian.org` のソース設定が含まれること
+
+---
+
+#### P1-5: マルチステージビルド対応（`reference_standards.md` §2）
+
+**現状**: `base.Dockerfile.j2` はシングルステージのみ。OpenCV 等 C++ ライブラリのビルドツールチェーンが実行イメージに残存するリスクがある。
+
+**修正方針**: `library.json` の `golden_images` に `multi_stage: true` フラグが設定されたイメージに対し、マルチステージ構成を持つ専用テンプレート `multistage.Dockerfile.j2` を生成で選択する:
+
+```dockerfile
+# multistage.Dockerfile.j2 の構造（例: OpenCV ビルド）
+FROM {{ base_image }}@{{ base_image_digest }} AS builder
+RUN apt-get update && apt-get install -y cmake g++ libopencv-dev ...
+RUN <ビルドコマンド>
+
+FROM {{ base_image }}@{{ base_image_digest }} AS runtime
+COPY --from=builder /usr/local/lib/python*/dist-packages/cv2* /usr/local/lib/...
+...
+```
+
+`generator.py` で `config.get("multi_stage")` が真の場合に `multistage.Dockerfile.j2` を選択するよう分岐を追加する。
+
+**Auditor 確認基準**: OpenCV を含む定義のビルドで生成された Dockerfile に `AS builder` と `COPY --from=builder` が含まれること
 
 ---
 
@@ -327,6 +439,15 @@ class IContainerWorker(abc.ABC):
 
 `MainWindow` は `Presenter` のコールバックを受けて UI 更新のみを行う。
 
+**シグナル・スロット命名規則（`reference_standards.md` §4）**: `Presenter` や `MainWindowPresenter` で新規追加するシグナル・スロットは §4 命名規則に必ず準拠すること:
+- シグナル: 過去分詞形（例: `execution_started`, `execution_finished`, `status_changed`）
+- スロット: 動作を示す動詞形（例: `update_status`, `show_result`, `reset_ui`）
+
+**Auditor 確認基準**: 
+- P2-2 で追加したシグナル名がすべて過去分詞形であること
+- P2-2 で追加したスロット名がすべて動作動詞形であること
+- `MainWindow` が `subprocess.run` を直接呼び出していないこと
+
 ---
 
 ## 4. 合格基準チェックリスト（Auditor 用）
@@ -348,9 +469,16 @@ class IContainerWorker(abc.ABC):
 ### 4.3 業界標準準拠
 
 - [ ] 生成された Dockerfile の `FROM` 行に `@sha256:` ダイジェストが含まれる（P1-1）
-- [ ] 実行後に `execution_manifest.json` が `git_commit` と `source_hash` を含む（P1-2）
+- [ ] `base_image_digest` 未設定時に `generator.py` が `ValueError` を raise する（P1-1）
+- [ ] 実行後に `execution_manifest.json` が `git_commit`, `source_hash`, `image_digest` を含む（P1-2）
+- [ ] `image_digest` フィールドが `sha256:` で始まるダイジェスト値である（P1-2）
+- [ ] 入力ファイルが存在する場合、`input_file_hashes` が manifest に含まれる（P1-2）
+- [ ] 生成された Dockerfile の `pip install` に `--constraint` オプションが含まれる（P1-3）
+- [ ] Python 2.7 ベースイメージのビルドで `archive.debian.org` ソース設定が生成される（P1-4）
+- [ ] OpenCV 含む定義のビルドで生成 Dockerfile に `AS builder` / `COPY --from=builder` が含まれる（P1-5）
 - [ ] `ContainerWorker` が `IContainerWorker(abc.ABC)` を実装している（P2-1）
 - [ ] `MainWindow` が `subprocess.run` を直接呼び出していない（P2-2）
+- [ ] P2-2 追加シグナルが過去分詞形、追加スロットが動作動詞形の命名規則に準拠している（P2-2）
 
 ---
 
@@ -361,10 +489,14 @@ Auditor は主観的判断を排し、以下の客観的メトリクスで PASS 
 | 違反カテゴリ | REJECT 判定基準 | ヒント（修正指示） |
 |---|---|---|
 | テスト合格 | `pytest tests/` に FAILED または ERROR が 1 件でも存在する | 上記 P0-1〜P0-5 の修正を適用せよ |
-| データ完全性 | 実行後に `execution_manifest.json` が存在しない、または `git_commit` / `source_hash` フィールドが欠落 | `ContainerManager.prepare_run_config()` に manifest 書き出しを追加せよ |
+| データ完全性 | 実行後に `execution_manifest.json` が存在しない、または `git_commit` / `source_hash` / `image_digest` フィールドのいずれかが欠落 | `ContainerManager.prepare_run_config()` に manifest 書き出しと `_get_image_digest()` を追加せよ |
 | インターフェース規律 | `ContainerWorker` が `abc.ABC` または `Protocol` を継承していない | `src/lcr/core/interface.py` に `IContainerWorker` を定義し継承させよ |
 | 単一責任の原則 | `MainWindow` が `subprocess.run` / Docker コマンド構築を直接実行している | `MainWindowPresenter` へのロジック移譲が未完了 |
-| ビルド再現性 | 生成 Dockerfile の `FROM` 行にダイジェストがなく可変タグのみ | `base.Dockerfile.j2` と `generator.py` を修正せよ |
+| ビルド再現性 | 生成 Dockerfile の `FROM` 行にダイジェストがなく可変タグのみ、または `else` フォールバックが存在する | `base.Dockerfile.j2` の `{% else %}` を削除し、`generator.py` に `ValueError` バリデーションを追加せよ |
+| pip デッドロック回避 | 生成 Dockerfile の `pip install` に `--constraint` オプションが存在しない | `generator.py` と `base.Dockerfile.j2` に `constraints.txt` 組み込みを追加せよ（P1-3） |
+| アーカイブリポジトリ | EOL スタック（Python 2.7 等）のビルドで `archive.debian.org` ソース設定が存在しない | `generator.py` に EOL イメージ自動検出と `use_archive_repo=True` デフォルト設定を追加せよ（P1-4） |
+| マルチステージビルド | OpenCV 等 C++ ライブラリを含むビルドで `COPY --from=builder` が使用されていない | `multistage.Dockerfile.j2` を作成し、`generator.py` で `multi_stage` フラグによるテンプレート選択を追加せよ（P1-5） |
+| 命名規則 | P2-2 追加シグナルが過去分詞形でない、またはスロットが動作動詞形でない | `reference_standards.md` §4 の命名規則に従いリネームせよ |
 
 ---
 
@@ -378,9 +510,15 @@ Auditor は主観的判断を排し、以下の客観的メトリクスで PASS 
     → Auditor: manual シナリオ 3件 + 自動テストで合格確認
          ↓
 [Step 3-a] P1-2 ALCOA++ manifest 記録 (最小変更・高価値)
+           ※ image_digest + input_file_hashes を含む
 [Step 3-b] P1-1 Dockerfile ダイジェスト固定
-[Step 3-c] P2-1 IContainerWorker インターフェース
-[Step 3-d] P2-2 Humble Object（規模大・慎重に実施）
+           ※ else フォールバック削除 + ValueError バリデーション
+[Step 3-c] P1-3 constraints.txt によるpipデッドロック回避
+[Step 3-d] P1-4 アーカイブリポジトリの EOL ビルド時自動有効化
+[Step 3-e] P1-5 マルチステージビルド対応（OpenCV 等）
+[Step 3-f] P2-1 IContainerWorker インターフェース
+[Step 3-g] P2-2 Humble Object（規模大・慎重に実施）
+           ※ 新規シグナル・スロットは §4 命名規則に準拠
     → Auditor: 各チェックリスト項目を検証
 ```
 
