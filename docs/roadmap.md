@@ -93,6 +93,7 @@ ID消失・フリーズ・ロールバックの各障害シナリオを自動テ
 | 3a-2 | 同上 | `execution_manifest.sha256` サイドカーファイルを生成（改ざん検知要件） |
 | 3a-3 | パス正規化 | `script_path` および `input_file_hashes` のキーをプロジェクトルートからの**相対パス**で記録 |
 | 3a-4 | ヘルパー実装 | `_get_git_commit_hash()`, `_get_image_digest()`, `_hash_input_files()` を実装 |
+| 3a-5 | `_get_git_commit_hash()` | 例外発生時に `"unknown"` を返すフォールバックを削除し、`RuntimeError` を raise するよう修正する。git が利用不可な環境ではビルド前に明示的にエラーで停止させる。`docs/plan.md` の P1-2 実装コードも同様に修正すること（`except Exception: return "unknown"` を `except Exception as e: raise RuntimeError(...) from e` に変更）。|
 
 ### データ完全性ルール（逸脱は REJECT）
 
@@ -197,7 +198,7 @@ P1-1（ダイジェスト固定）→ P1-3（constraints.txt）→ P1-4（アー
 ## Milestone 3d: アーキテクチャ品質（P2-1 → P2-2）
 
 **担当**: Implementer  
-**前提**: Milestone 3a 完了（P2-1 のインターフェース定義が先行することで P2-2 の Humble Object リファクタが型安全に行える）  
+**前提**: Milestone 3c 完了（根拠: P1-1 のダイジェスト固定・P1-3 の constraints.txt が `generator.py` に組み込まれた状態で P2-2 の Presenter を実装することで、コンテナビルドパス全体に `reference_standards.md` §2 基準が適用される）  
 **合格判定**: Auditor — コードレビュー + 命名規則チェック
 
 ### P2-1: `IContainerWorker` インターフェース定義
