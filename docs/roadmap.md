@@ -69,7 +69,7 @@
 1. 自動検証: `pytest tests/`、Phase 4 回帰、Dockerfile生成、監査証跡生成、複雑度チェック（>10 を Fail）。  
 2. 静的検証: レイヤ依存（`UI -> Domain` 逆流）、UI層業務ロジック混入、命名規約。  
 3. 手動検証: GUIリアルタイムログ、即時反映、キャンセル時安定性。  
-4. Validator入力を `requirement + diff + test evidence` に限定し監査判定。
+4. Validator入力を `requirement + diff` のみに限定し監査判定。
 - 完了条件:
 1. `pytest tests/` 全件Pass。  
 2. 再検証シナリオ3件合格。  
