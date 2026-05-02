@@ -306,16 +306,20 @@ def _get_git_commit_hash() -> str:
         return "unknown"
 
 def _get_image_digest(image: str) -> str:
-    """実行時のコンテナイメージダイジェストを取得する（ALCOA++ §3 準拠）"""
+    """コンテナイメージの ID ダイジェストを取得する（ALCOA++ §3 準拠）
+
+    RepoDigests（push 済みイメージのみ有効）ではなく Image ID を使用することで、
+    ローカルビルドイメージにも対応する。
+    """
     result = subprocess.run(
-        ["docker", "image", "inspect", "--format={{index .RepoDigests 0}}", image],
+        ["docker", "image", "inspect", "--format={{.Id}}", image],
         capture_output=True, text=True, check=True
     )
     digest = result.stdout.strip()
     if not digest.startswith("sha256:"):
         raise RuntimeError(
             f"image_digest for '{image}' is not a valid sha256 digest: '{digest}'. "
-            "Ensure the image has been pushed to a registry and has a RepoDigest."
+            "Ensure the image exists locally (docker images)."
         )
     return digest
 
@@ -371,7 +375,20 @@ def _hash_input_files(input_files: list) -> dict:
    ...
    ```
 
-**Auditor 確認基準**: 生成済み Dockerfile の `pip install` コマンドに `--constraint` オプションが含まれること
+3. EOL スタック（Python 2.7 / 3.5 / 3.6 等）のビルド時は `constraints.txt` の提供を強制する。`generator.py` の `render_dockerfile()` 内で P1-4 の EOL 検出ロジックと連動させ、EOL イメージかつ `constraints_file` が未設定の場合は `ValueError` を raise する:
+   ```python
+   if any(config["base_image"].startswith(p) for p in EOL_IMAGE_PATTERNS):
+       if not config.get("constraints_file"):
+           raise ValueError(
+               f"constraints_file is required for EOL base image '{config['base_image']}'. "
+               "Provide a constraints.txt to prevent pip backtracking deadlock."
+           )
+   ```
+
+**Auditor 確認基準**:
+- 生成済み Dockerfile の `pip install` コマンドに `--constraint` オプションが含まれること
+- EOL スタック（Python 2.7 / 3.5 / 3.6 等）のビルドで `constraints_file` 未設定時に `ValueError` が送出されること
+- EOL スタックのビルドで `--constraint` オプションが Dockerfile に含まれること
 
 ---
 
@@ -508,7 +525,7 @@ Auditor は主観的判断を排し、以下の客観的メトリクスで PASS 
 | インターフェース規律 | `ContainerWorker` が `abc.ABC` または `Protocol` を継承していない | `src/lcr/core/interface.py` に `IContainerWorker` を定義し継承させよ |
 | 単一責任の原則 | `MainWindow` が `subprocess.run` / Docker コマンド構築を直接実行している | `MainWindowPresenter` へのロジック移譲が未完了 |
 | ビルド再現性 | 生成 Dockerfile の `FROM` 行にダイジェストがなく可変タグのみ、または `else` フォールバックが存在する | `base.Dockerfile.j2` の `{% else %}` を削除し、`generator.py` に `ValueError` バリデーションを追加せよ |
-| pip デッドロック回避 | 生成 Dockerfile の `pip install` に `--constraint` オプションが存在しない | `generator.py` と `base.Dockerfile.j2` に `constraints.txt` 組み込みを追加せよ（P1-3） |
+| pip デッドロック回避 | 生成 Dockerfile の `pip install` に `--constraint` オプションが存在しない、または EOL スタックビルドで `--constraint` オプションが存在しない | `generator.py` と `base.Dockerfile.j2` に `constraints.txt` 組み込みを追加し、EOL スタック時は `constraints_file` を必須化せよ（P1-3） |
 | アーカイブリポジトリ | EOL スタック（Python 2.7 等）のビルドで `archive.debian.org` ソース設定が存在しない | `generator.py` に EOL イメージ自動検出と `use_archive_repo=True` デフォルト設定を追加せよ（P1-4） |
 | マルチステージビルド | OpenCV 等 C++ ライブラリを含むビルドで `COPY --from=builder` が使用されていない | `multistage.Dockerfile.j2` を作成し、`generator.py` で `multi_stage` フラグによるテンプレート選択を追加せよ（P1-5） |
 | 命名規則 | P2-2 追加シグナルが過去分詞形でない、またはスロットが動作動詞形でない | `reference_standards.md` §4 の命名規則に従いリネームせよ |
