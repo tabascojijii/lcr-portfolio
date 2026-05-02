@@ -51,7 +51,7 @@ class ContainerManager:
             "name": "Python 2.7 (Slim)",
             "version": "2.7", 
             "libs": [], 
-            "image": "python:2.7-slim", 
+            "image": "python:2.7-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000",
             "prepend_python": True,
             "triggers": []
         },
@@ -71,7 +71,7 @@ class ContainerManager:
             "name": "Python 3.10 (Latest)",
             "version": "3.x", 
             "libs": [], 
-            "image": "python:3.10-slim", 
+            "image": "python:3.10-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000",
             "prepend_python": True,
             "triggers": []
         }
@@ -1243,7 +1243,10 @@ class ContainerManager:
 
         config = {
             "tag": "custom-auto-gen", # Placeholder, user should override
-            "base_image": base_rule.get('image', 'python:3.10-slim'),
+            "base_image": base_rule.get(
+                'image',
+                'python:3.10-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+            ),
             "apt_packages": list(detected_apt),
             "pip_packages": needed_pip,
             "installed_packages": new_installed_packages,  # Full inventory: Layer 2 + Layer 3 additions

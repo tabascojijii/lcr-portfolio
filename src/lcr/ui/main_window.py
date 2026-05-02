@@ -14,7 +14,7 @@ from pathlib import Path
 import io
 import subprocess
 import datetime
-from pathlib import Path
+import hashlib
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
@@ -25,8 +25,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtCore import Qt, Slot, QUrl
 
-from lcr.core.detector.analyzer import CodeAnalyzer
-from lcr.core.container.manager import ContainerManager
 from lcr.core.detector.analyzer import CodeAnalyzer
 from lcr.core.container.manager import ContainerManager
 from lcr.core.container.worker import ContainerWorker
@@ -51,7 +49,6 @@ class MainWindow(QMainWindow):
         if not self.container_manager:
             raise RuntimeError("Failed to initialize ContainerManager")
         self.history_manager = HistoryManager()
-        self.worker = None
         self.worker = None
         self.current_output_dir = None
         self.selection_mode = 'Auto'
@@ -143,9 +140,6 @@ class MainWindow(QMainWindow):
         env_layout.addWidget(self.version_label)
         env_layout.addWidget(self.libraries_label)
         env_layout.addWidget(self.sloc_label)
-        env_layout.addWidget(self.version_label)
-        env_layout.addWidget(self.libraries_label)
-        env_layout.addWidget(self.sloc_label)
         env_layout.addWidget(self.ratio_label)
         
         # Runtime Selection Combo
@@ -223,9 +217,6 @@ class MainWindow(QMainWindow):
         self.results_layout.addWidget(self.res_scroll)
         self.tabs.addTab(self.results_tab, "Results Preview")
         
-        self.results_layout.addWidget(self.res_scroll)
-        self.tabs.addTab(self.results_tab, "Results Preview")
-        
         # Tab 3: History
         self.history_tab = QWidget()
         history_layout = QVBoxLayout(self.history_tab)
@@ -273,19 +264,6 @@ class MainWindow(QMainWindow):
         # Add right pane to splitter
         splitter.addWidget(right_widget)
         splitter.setSizes([600, 400])
-
-    def _refresh_env_list(self):
-        """ContainerManager から最新の定義を読み込み、コンボボックスを更新する"""
-        self.runtime_combo.clear()
-        rules = self.container_manager.get_available_runtimes()
-        for i, rule in enumerate(rules):
-            self.runtime_combo.addItem(rule['name'])
-            # Store full rule in UserRole
-            self.runtime_combo.setItemData(i, rule, Qt.UserRole)
-            # Tooltip: Base Image
-            desc = rule.get('description', f"Image: {rule['image']}")
-            self.runtime_combo.setItemData(i, desc, Qt.ToolTipRole)
-        print(f"[UI] Environment list refreshed. {len(rules)} items found.")
 
     def _refresh_env_list(self):
         """Reload definitions and update runtime combo dropdown."""
@@ -845,6 +823,7 @@ class MainWindow(QMainWindow):
             self.console_log.append(f"Selected Runtime: {selected_rule.get('name', config['image'])}")
             self.console_log.append(f"Reason: {reason_text}")
             self.console_log.append(f"Image Tag: {config['image']}")
+            self._append_audit_metadata(config['image'], script_path)
             
             self.worker = ContainerWorker(
                 docker_args=docker_args,
@@ -1021,6 +1000,52 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.console_log.append(f"[Error] Failed to open folder: {e}")
 
+    def _append_audit_metadata(self, image_name, script_path):
+        """Append minimal audit metadata required by reference standards."""
+        try:
+            image_digest = self._resolve_image_digest(image_name)
+            self.console_log.append(f"[Audit] image_digest: {image_digest}")
+        except Exception as e:
+            self.console_log.append(f"[Audit] image_digest: unavailable ({e})")
+
+        git_hash = self._resolve_git_commit_hash()
+        self.console_log.append(f"[Audit] git_commit_hash: {git_hash}")
+
+        script_rel = self.history_manager._to_relative(script_path)
+        script_sha = self._sha256_file(script_path)
+        self.console_log.append(f"[Audit] script_path_rel: {script_rel}")
+        self.console_log.append(f"[Audit] script_sha256: {script_sha}")
+
+    def _resolve_image_digest(self, image_name):
+        inspect = subprocess.run(
+            ["docker", "image", "inspect", image_name, "--format", "{{index .RepoDigests 0}}"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if inspect.returncode != 0:
+            return f"unavailable:{image_name}"
+        value = inspect.stdout.strip()
+        return value or f"unavailable:{image_name}"
+
+    def _resolve_git_commit_hash(self):
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if out.returncode != 0:
+            return "unavailable"
+        return out.stdout.strip()
+
+    def _sha256_file(self, path_str):
+        h = hashlib.sha256()
+        with open(path_str, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
     def update_ui_state(self, state="idle"):
         """Centralized UI state management.
         
@@ -1119,54 +1144,6 @@ class MainWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(abs_path))
         else:
             QMessageBox.warning(self, "Missing Path", f"Directory not found:\n{abs_path}")
-
-    @Slot()
-    def _show_create_env_dialog(self):
-        """Open dialog to create new environment based on current code."""
-        code_text = self.code_editor.toPlainText()
-        if not code_text:
-            QMessageBox.warning(self, "Info", "Please load a script first to detect dependencies.")
-            return
-
-        # 1. Analyze
-        # Reuse logic?
-        feature = self.analyzer.analyze(code_text)
-        summary = self.analyzer.summary(code_text)
-        
-        # 2. Get available bases
-        all_rules = self.container_manager.get_available_runtimes()
-        
-        # 3. Smart Base Recommendation
-        # Use existing logical resolution to pick the best base
-        version_hint = feature.version_hint
-        search_terms = feature.imports + feature.keywords
-        if feature.validation_year:
-             search_terms.append(f"year:{feature.validation_year}")
-             
-        recommended_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
-        recommended_id = recommended_rule.get('id')
-        
-        # Formulate reason
-        ver_reason = f"Version {version_hint}"
-        term_reason = f"Matches: {', '.join(search_terms[:3])}..." if search_terms else "Generic"
-        rec_reason = f"Recommended based on: {ver_reason}. {term_reason}"
-
-        # 4. Synthesize Config
-        config_suggestion = self.container_manager.synthesize_definition_config(summary, recommended_id)
-        
-        dialog = EnvironmentCreationDialog(
-            parent=self,
-            manager=self.container_manager,
-            base_images=all_rules, 
-            initial_config=config_suggestion,
-            recommended_base_id=recommended_id,
-            recommendation_reason=rec_reason
-        )
-        
-        if dialog.exec():
-            final_config = dialog.result_config
-            if final_config:
-                self._execute_save_and_build(final_config)
 
     def _execute_save_and_build(self, config):
         """Save config and trigger build."""

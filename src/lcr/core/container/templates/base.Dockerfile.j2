@@ -1,4 +1,23 @@
-FROM {{ base_image }}
+FROM {{ base_image }} AS builder
+
+WORKDIR /tmp/build
+
+{% if pip_packages %}
+COPY constraints.txt /tmp/build/constraints.txt
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    mkdir -p /opt/python-deps && \
+    pip install --no-cache-dir -c /tmp/build/constraints.txt \
+{% if pip_config.index_url %}    --index-url {{ pip_config.index_url }} \
+{% endif -%}
+{% if pip_config.trusted_host %}    --trusted-host {{ pip_config.trusted_host }} \
+{% endif -%}
+    --target /opt/python-deps \
+    {% for pkg in pip_packages -%}
+    "{{ pkg }}"{{ " \\" if not loop.last else "" }}
+    {% endfor %}
+{% endif %}
+
+FROM {{ base_image }} AS runtime
 
 # 1. Archive Repository Settings (if legacy)
 {% if use_archive_repo %}
@@ -25,14 +44,8 @@ RUN mkdir -p /root/.pip && \
 
 # 4. Python Libraries
 {% if pip_packages %}
-RUN pip install --no-cache-dir \
-{% if pip_config.index_url %}    --index-url {{ pip_config.index_url }} \
-{% endif -%}
-{% if pip_config.trusted_host %}    --trusted-host {{ pip_config.trusted_host }} \
-{% endif -%}
-    {% for pkg in pip_packages -%}
-    "{{ pkg }}"{{ " \\" if not loop.last else "" }}
-    {% endfor %}
+COPY --from=builder /opt/python-deps /opt/python-deps
+ENV PYTHONPATH="/opt/python-deps:${PYTHONPATH}"
 {% endif %}
 
 {% if run_commands %}

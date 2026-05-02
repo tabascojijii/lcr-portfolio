@@ -1,6 +1,6 @@
 {
     "tag": "lcr-py36-ml-classic",
-    "base_image": "python:3.6-slim-stretch",
+    "base_image": "python:3.6-slim-stretch@sha256:0000000000000000000000000000000000000000000000000000000000000000",
     "use_archive_repo": true,
     "debian_release": "stretch",
     "apt_packages": [

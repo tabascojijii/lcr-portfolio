@@ -1,6 +1,6 @@
 {
     "tag": "lcr-py27-cv-apt",
-    "base_image": "debian:stretch-slim",
+    "base_image": "debian:stretch-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000",
     "use_archive_repo": true,
     "system_packages": [
         "python",
