@@ -1,4 +1,4 @@
-FROM debian:stretch-slim
+FROM debian:stretch-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000
 
 # 1. Archive Repository Settings (if legacy)
 

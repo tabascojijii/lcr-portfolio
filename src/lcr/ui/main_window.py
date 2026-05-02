@@ -12,9 +12,7 @@ connecting the CodeAnalyzer, ContainerManager, and ContainerWorker.
 import sys
 from pathlib import Path
 import io
-import subprocess
 import datetime
-import hashlib
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
@@ -31,6 +29,7 @@ from lcr.core.container.worker import ContainerWorker
 from lcr.core.container.generator import generate_dockerfile, save_definition
 from lcr.core.history.manager import HistoryManager
 from lcr.core.history.types import ExecutionHistory
+from lcr.core.audit import AuditMetadataService
 from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 from utils.count_loc import count_lines_python
 
@@ -49,6 +48,7 @@ class MainWindow(QMainWindow):
         if not self.container_manager:
             raise RuntimeError("Failed to initialize ContainerManager")
         self.history_manager = HistoryManager()
+        self.audit_metadata_service = AuditMetadataService()
         self.worker = None
         self.current_output_dir = None
         self.selection_mode = 'Auto'
@@ -1002,49 +1002,15 @@ class MainWindow(QMainWindow):
 
     def _append_audit_metadata(self, image_name, script_path):
         """Append minimal audit metadata required by reference standards."""
-        try:
-            image_digest = self._resolve_image_digest(image_name)
-            self.console_log.append(f"[Audit] image_digest: {image_digest}")
-        except Exception as e:
-            self.console_log.append(f"[Audit] image_digest: unavailable ({e})")
-
-        git_hash = self._resolve_git_commit_hash()
-        self.console_log.append(f"[Audit] git_commit_hash: {git_hash}")
-
         script_rel = self.history_manager._to_relative(script_path)
-        script_sha = self._sha256_file(script_path)
-        self.console_log.append(f"[Audit] script_path_rel: {script_rel}")
-        self.console_log.append(f"[Audit] script_sha256: {script_sha}")
-
-    def _resolve_image_digest(self, image_name):
-        inspect = subprocess.run(
-            ["docker", "image", "inspect", image_name, "--format", "{{index .RepoDigests 0}}"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if inspect.returncode != 0:
-            return f"unavailable:{image_name}"
-        value = inspect.stdout.strip()
-        return value or f"unavailable:{image_name}"
-
-    def _resolve_git_commit_hash(self):
-        out = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if out.returncode != 0:
-            return "unavailable"
-        return out.stdout.strip()
-
-    def _sha256_file(self, path_str):
-        h = hashlib.sha256()
-        with open(path_str, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                h.update(chunk)
-        return h.hexdigest()
+        try:
+            metadata = self.audit_metadata_service.collect(image_name, script_path, script_rel)
+            self.console_log.append(f"[Audit] image_digest: {metadata['image_digest']}")
+            self.console_log.append(f"[Audit] git_commit_hash: {metadata['git_commit_hash']}")
+            self.console_log.append(f"[Audit] script_path_rel: {metadata['script_path_rel']}")
+            self.console_log.append(f"[Audit] script_sha256: {metadata['script_sha256']}")
+        except Exception as e:
+            self.console_log.append(f"[Audit] metadata_collection_error: {e}")
 
     def update_ui_state(self, state="idle"):
         """Centralized UI state management.

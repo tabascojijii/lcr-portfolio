@@ -1,4 +1,4 @@
-FROM python:2.7-slim-stretch
+FROM python:2.7-slim-stretch@sha256:0000000000000000000000000000000000000000000000000000000000000000
 
 # 1. アーカイブリポジトリの設定 (成功済み)
 RUN echo "deb http://archive.debian.org/debian/ stretch main" > /etc/apt/sources.list && \

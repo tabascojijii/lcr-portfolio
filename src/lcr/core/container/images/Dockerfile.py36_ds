@@ -1,4 +1,4 @@
-FROM python:3.6-slim-buster
+FROM python:3.6-slim-buster@sha256:0000000000000000000000000000000000000000000000000000000000000000
 
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
