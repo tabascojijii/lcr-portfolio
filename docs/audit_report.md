@@ -1,39 +1,54 @@
-# 監査報告書 (Auditor)
+# Audit Report (Plan Validation)
 
 ## 判定
-- **総合判定**: REJECT
-- **ルーティング**: REJECT_TO_ARCHITECT
-
-## 監査対象
-- 基準: `docs/reference_standards.md`（絶対基準）
-- 計画: `docs/plan.md`
+- 結果: **REJECT_TO_ARCHITECT**
+- 対象: `docs/plan.md`
+- 絶対基準: `docs/reference_standards.md`
 
 ## 指摘事項（重大度順）
 
-### 1) 依存・呼び出し規則の自己矛盾（重大度: High）
-- 失敗箇所: `docs/plan.md` セクション「1. 最上位方針（非交渉）」
+1. **Data Integrity要件のハッシュ完全性が未充足（High）**
+- 失敗箇所: `docs/plan.md` 2.1節「必須フィールド」「ハッシュ採取タイミング」
+- 違反制約: `reference_standards.md` 3節「ハッシュによる改ざん検知」
 - 観測証拠:
-  - 記述A: 「呼び出しフロー（実行時）: `UI -> UseCase -> Domain -> Infrastructure`」
-  - 記述B: 「非許可依存: `Domain -> UseCase/UI/Infrastructure`」
-- 違反制約ID: RS-4-DEP-DIR（`docs/reference_standards.md` 4章: クリーンアーキテクチャと依存方向）
-- 判定理由:
-  - 計画内で `Domain -> Infrastructure` を実行時フローとして明示しつつ、同時に `Domain -> Infrastructure` を非許可依存として禁止しており、設計解釈が衝突している。
-  - この状態では実装者が「Domain から Infrastructure を直接呼ぶ」解釈に流れる余地があり、基準の「UI外側/Domain内側の依存規律」を監査可能な形で担保できない。
-- 修正ヒント（処方）:
-  - 呼び出しフローを以下のいずれかに明確化し、`Domain -> Infrastructure` の直接呼び出しを否定する文言を追加すること。
-    - 例1: `UI -> UseCase -> (Port) -> Infrastructure`、Domainは純粋ロジックのみ。
-    - 例2: `UI -> UseCase -> Domain` とし、外部I/OはUseCase経由でPortに委譲。
-  - 「実行時フロー」と「コンパイル時依存」の対応関係を1つの図/表で固定し、矛盾を再発させないこと。
+  - 基準は「**すべての**入出力データ、パラメータファイル、および実行ログ自体」にSHA-256適用を要求。
+  - 計画は「入力・出力・**主要**パラメータ・実行ログ本体」と記述し、適用対象が限定語（主要）付きで網羅性が保証されていない。
+- 修正ヒント:
+  - 「主要」を削除し、`all_input_files / all_output_files / all_parameter_files / audit_log_record` を必須ハッシュ対象として明文化する。
+  - 欠落検知テストを「対象件数一致（列挙件数とハッシュ件数の一致）」で仕様化する。
 - 再検証条件:
-  - `docs/plan.md` 上で `Domain -> Infrastructure` を直接想起させる記述が消去/明確否定され、Port経由の責務分離が一意に読めること。
-  - 同節における依存禁止規則と呼び出しフローが論理的に一致すること。
+  - 計画文面上でハッシュ対象が全件必須であること。
+  - 監査ゲートに全件一致検証が追加されていること。
+- ルーティング先: `REJECT_TO_ARCHITECT`
 
-## 基準適合の確認（指摘以外）
-- Docker再現性4要件（digest固定 / EOL archive APT / constraints / マルチステージ）: 記載あり。
-- ALCOA++ 監査証跡（`git_commit_hash`、image digest、ハッシュ完全化、相対パス強制）: 記載あり。
-- Humble Object / インターフェース（`abc.ABC` or `typing.Protocol`）/ signal-slot命名規約: 記載あり。
-- Builder/Validator分離および処方的REJECTテンプレート: 記載あり。
+2. **UseCase層のQt依存禁止が明文化不足（High）**
+- 失敗箇所: `docs/plan.md` 1節「非許可依存」
+- 違反制約: `reference_standards.md` 4節「クリーンアーキテクチャと依存の方向」
+- 観測証拠:
+  - 基準は内側ビジネスルール（Entities/Use Cases）がQtに依存しないことを要求。
+  - 計画の非許可依存には `Domain -> Qt` はあるが、`UseCase -> Qt` の禁止が明示されていない。
+- 修正ヒント:
+  - 非許可依存へ `UseCase -> Qt` を明示追加。
+  - ゲートに「UseCase層のQt import検出 fail」を追加。
+- 再検証条件:
+  - 文書内で `UseCase -> Qt` 禁止が明記されること。
+  - CI静的検査ルールに同制約が追加されること。
+- ルーティング先: `REJECT_TO_ARCHITECT`
 
-## 結論
-- 上記 High 指摘により、現行 `docs/plan.md` は絶対基準に対して**無矛盾性を満たしていない**。
-- Architect に差し戻し、依存・呼び出し定義の整合修正後に再監査が必要。
+3. **Humble Object要件の「複雑計算/フォーマット処理移譲」が不足（Medium）**
+- 失敗箇所: `docs/plan.md` 1節および2.2節のUI責務定義
+- 違反制約: `reference_standards.md` 4節「Humble Object パターンの適用」
+- 観測証拠:
+  - 基準はViewから「複雑な計算やフォーマット処理」をPresenter/ViewModelへ移譲することを要求。
+  - 計画では「判断・分岐・永続化・外部I/O禁止」はあるが、計算/フォーマット責務の禁止が明文化されていない。
+- 修正ヒント:
+  - `docs/allowed_ui_operations.md` に「UIでの計算・整形ロジック禁止」を明記。
+  - 併せて検査観点（例: UIクラス内の変換/集計/整形関数を検出）を監査ゲート化する。
+- 再検証条件:
+  - UI責務制限に計算・整形の禁止が明文化されること。
+  - 監査ゲートに当該検査が追加されること。
+- ルーティング先: `REJECT_TO_ARCHITECT`
+
+## 総括
+- `docs/plan.md` は多くの基準を取り込んでいるが、上記3点は「絶対基準を満たすと断定できない」欠落であり、現時点では合格不可。
+- 処方的修正を反映後、再監査を実施すること。
