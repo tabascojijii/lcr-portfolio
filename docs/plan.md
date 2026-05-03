@@ -1,139 +1,191 @@
-# LCR 実装計画（Architect / Structural Recovery Plan）
+# LCR 実装計画（Architect / Structural Recovery Plan v2）
 
 ## 0. 読み込み結果と前提
 - 読み込み完了:
   - `docs/requirements.md`
   - `docs/reference_standards.md`
-  - `docs/post_mortem.md`（存在確認済み）
-- 指定ファイル `docs/core_philosophy.md` は現時点で存在しない。
-- したがって本計画は、`requirements.md` と `reference_standards.md` を上位拘束条件として策定する。
-- 本計画の最優先目的は、`post_mortem.md` で特定された構造欠陥（RC-1〜RC-3）を先に閉じ、実装ループ再発を防止すること。
+  - `docs/post_mortem.md`
+  - `docs/audit_report.md`
+- 指定された `docs/core_philosophy.md` は現時点で存在しないため、`requirements.md` / `reference_standards.md` / `post_mortem.md` / `audit_report.md` を拘束条件として計画を再構成する。
+- 本計画の主目的は、`post_mortem.md` の RC-1〜RC-3 を起点に、`audit_report.md` の REJECT_TO_ARCHITECT 指摘5件を設計段階で全閉塞すること。
 
-## 1. 設計原則（最上位拘束）
-1. 要件拘束: Phase 5 Validation Guardrails（R5-1〜R5-3, AC-1〜AC-5）を完全充足する。
-2. 規約拘束: `reference_standards.md` の以下を必須適用。
-   - Humble Object + Clean Architecture（UIとUseCase分離）
-   - Data Integrity（ハッシュ証跡・相対パス・不変参照）
-   - 処方的エラーハンドリング（監査可能な失敗理由）
-3. 再発防止拘束: 実装着手前に「監査スキーマ」「責務境界」「許可API」を固定し、未固定なら実装禁止。
+## 1. 最上位拘束
+1. 要件拘束:
+   - Phase 5 Validation Guardrails（R5-1〜R5-3, AC-1〜AC-5）を充足する。
+   - `requirements.md` 記載の共通必須条件（`pytest tests/` 全件Pass、規約準拠）を充足する。
+2. 規約拘束:
+   - `reference_standards.md` 1章〜4章を「推奨」ではなく「Fail条件付き必須」として扱う。
+3. 再発防止拘束:
+   - 監査スキーマ、責務境界、監査メトリクス、監査入力境界、Interface契約を設計成果物として固定するまで実装着手禁止。
 
-## 2. Post Mortem 起点の是正方針
+## 2. Post Mortem 対応（RC-1〜RC-3）
 
-### RC-1 対策: 監査ログ最小スキーマ未固定
-- 実装前に以下の必須スキーマを確定し、ADRとして保存する。
-  - `required_imports`（抽出結果）
-  - `environment_capability`（推定/実証の区別付き）
-  - `mismatch_result`（不足 import, 理由, 推奨環境）
-  - `guard_state`（Run無効化発火状態）
-  - `image_digest`（使用コンテナ）
-  - `git_commit_hash`（`git rev-parse HEAD`）
-  - `input/output/parameter/log_sha256`
-  - `relative_paths`（全参照をプロジェクト相対で記録）
-- 未記録項目が1つでもある実行は「監査不成立」として失敗扱いにする。
+### 2.1 RC-1: 監査ログ最小スキーマ未固定
+- 監査ログ必須スキーマを ADR で固定する。
+  - `required_imports`
+  - `environment_capability`（推定/実証ラベル付き）
+  - `mismatch_result`（不足 import、理由、推奨環境）
+  - `guard_state`
+  - `image_digest`
+  - `git_commit_hash`
+  - `input_sha256` / `output_sha256` / `parameter_sha256` / `log_sha256`
+  - `relative_paths`
+- 欠落項目が1つでもある実行は「監査不成立」として失敗扱いにする。
 
-### RC-2 対策: UI / UseCase 境界不備
-- `MainWindow` から判定ロジックを排除し、UseCaseへ移管する。
-- 境界を次の3層で固定する。
-  - View: 表示・イベント受理・状態反映のみ（Humble Object）
-  - UseCase: required imports抽出、capability照合、guard判定、推奨環境選定
-  - Infra: knowledge読込、実績読込、監査ログ永続化
-- UIから直接呼べる操作を許可リスト化し、禁止API（例: UIから直接JSON更新/監査書込）を明記する。
+### 2.2 RC-2: UI/UseCase 境界未固定
+- 層責務を固定する。
+  - View: 入力受付、表示更新、シグナル中継のみ
+  - UseCase: import抽出、差分判定、ガード判定、推奨環境決定
+  - Infra: knowledge/実績永続化、監査ログ保存、コンテナ実行連携
+- `MainWindow` からドメイン判定ロジックと永続化処理を排除する。
+- UI許可API/禁止API一覧を作成し、UIからの直接JSON操作・監査ログ書込・Docker呼出を禁止する。
 
-### RC-3 対策: 差し戻し経路不整合
-- 監査観点に「違反レイヤー」フィールドを導入。
-  - Requirement / Architecture / Implementation
-- 失敗分類を2系統化。
-  - `REJECT_TO_ARCHITECT`: 境界・契約・スキーマ不備
-  - `REJECT_TO_IMPLEMENT`: 実装欠陥・テスト欠陥
-- 監査テンプレートに「処方的修正指示（違反箇所・制約根拠・修正条件）」を必須化する。
+### 2.3 RC-3: 差し戻し経路不整合
+- 監査票に「違反原因レイヤー」を必須化（Requirement/Architecture/Implementation）。
+- 判定を2系統化する。
+  - `REJECT_TO_ARCHITECT`: 契約、境界、スキーマ、規約違反
+  - `REJECT_TO_IMPLEMENT`: 実装欠陥、テスト欠陥
+- REJECT時は処方的指示（違反箇所、根拠規約、修正条件、再検証手順）を必須化する。
 
-## 3. 実装スコープ（Phase 5）
+## 3. audit_report 指摘対応（設計追加）
 
-### 3.1 R5-1 Environment Capability Mapping
-- import名単位で capability を生成。
-- データ源を統合:
+### 3.1 EMCS定量メトリクス（指摘1対応）
+- M1 層間依存違反件数:
+  - 定義: UI層からDomain/Infra具象への直接参照件数
+  - 測定: 静的解析（importルール）+ レビュー
+  - Fail条件: 1件以上
+  - エビデンス: `docs/audit/evidence/dependency_report.md`
+- M2 SRP逸脱:
+  - 定義: 単一クラスに「表示 + 判定 + 永続化 + 実行制御」が同居
+  - 測定: 責務マトリクス表
+  - Fail条件: 1クラスでも4責務同居
+  - エビデンス: `docs/audit/evidence/srp_matrix.md`
+- M3 複雑度:
+  - 定義: UI層メソッドの分岐複雑度
+  - 測定: lizard/radon等
+  - Fail条件: UI層メソッドで CC > 10
+  - エビデンス: `docs/audit/evidence/complexity.txt`
+- M4 監査スキーマ充足率:
+  - 定義: 必須キー充足率
+  - 測定: 実行後バリデータ
+  - Fail条件: 100%未満
+  - エビデンス: `docs/audit/evidence/audit_schema_check.json`
+
+### 3.2 Builder/Validator 分離（指摘2対応）
+- Auditor入力境界を固定:
+  - 許可入力: requirements、reference standards、対象Diff、テスト証跡
+  - 禁止入力: Builderの思考ログ、未承認メモ、口頭補足
+- 監査テンプレートに「参照入力一覧」欄を必須化する。
+
+### 3.3 Docker再現性標準（指摘3対応）
+- EOLスタック用コンテナ規約を実装計画へ編入する。
+  - `FROM <image>@sha256:<digest>` を必須化
+  - APTソースを archive/old-releases に固定
+  - `constraints.txt` による依存解決範囲固定
+  - マルチステージで build/runtime を分離
+- 監査項目として「コンテナ再現性チェック」を追加する。
+
+### 3.4 Interface規律（指摘4対応）
+- View-UseCase 間、UseCase-Infra 間は `abc.ABC` または `typing.Protocol` 経由に限定する。
+- 具象クラスの直接newを禁止し、Composition Root で注入する。
+- テストに「具象依存禁止」チェックを追加する。
+
+### 3.5 Signal/Slot命名規約（指摘5対応）
+- Signal: 過去分詞（例: `capabilityUpdated`）
+- Slot: 動詞開始（例: `update_capability_display`）
+- レビュー観点とLint観点に命名検査を追加する。
+
+## 4. 実装スコープ（Phase 5）
+
+### 4.1 R5-1 Environment Capability Mapping
+- import名単位で capability を構築する。
+- データ源:
   - `user_knowledge.json`（推定）
-  - 実行実績（実証）
-- UI表示は「推定/実証」を視覚的に区別。
+  - 実行実績ストア（実証）
+- UIで推定/実証を明示区分する。
 
-### 3.2 R5-2 ミスマッチ検知とHard Guard
-- スクリプト解析で `required_imports` を抽出。
-- 選択環境 capability と差分計算。
-- 差分1件以上で `Run` を強制無効化。
-- 警告UIに必須表示:
-  - 不足 import 一覧
-  - 不足理由（未対応/未検証）
-  - 推奨環境
-  - 新規環境作成導線
-- ガード無視実行は未実装（禁止）を維持。
+### 4.2 R5-2 ミスマッチ検知とHard Guard
+- `required_imports` と選択環境 capability の差分を計算する。
+- 差分1件以上なら `Run` を無効化する（Hard Guard）。
+- 警告UIに不足import、理由、推奨環境、作成導線を表示する。
+- ガード回避実行は許可しない。
 
-### 3.3 R5-3 強制作成フロー
-- 適合環境なし時は新規作成ダイアログへ遷移。
-- 不足 import から package候補を自動補完。
+### 4.3 R5-3 強制作成フロー
+- 適合環境がない場合は作成ダイアログへ強制誘導する。
+- 不足importからpackage候補を自動投入する。
   - 第一候補: `user_knowledge.json`
-  - 補完候補: 既定ルール
-- 作成後は再起動なしで即時選択・実行可能化（Dynamic Refresh）。
+  - 補完: 既定マッピングルール
+- 作成完了後はDynamic Refreshで即時実行可能化する。
 
-## 4. 実装順序（ゲート付き）
-1. Gate A: 設計確定
-   - 監査スキーマ定義
-   - 責務境界図
-   - 許可/禁止APIリスト
-2. Gate B: ドメイン実装
+## 5. 実装順序（Gate方式）
+1. Gate A（設計固定）:
+   - 監査スキーマ、責務境界、許可/禁止API、EMCSメトリクス、監査入力境界を文書化
+2. Gate B（Domain/UseCase）:
    - capability統合、差分判定、推奨環境ロジック
-3. Gate C: UI接続
-   - Viewは表示更新のみ
-   - Hard Guard と警告表示の反映
-4. Gate D: 作成フロー接続
-   - 不足importの候補投入
-   - 作成完了後の即時反映
-5. Gate E: 監査証跡実装
-   - 必須スキーマ項目の全記録
-6. Gate F: テストと監査
-   - 自動テスト + トレーサビリティ検証
+3. Gate C（Interface導入）:
+   - Protocol/ABC 境界契約導入、DI配線
+4. Gate D（UI接続）:
+   - Humble Object維持で表示反映のみ実装
+5. Gate E（強制作成フロー）:
+   - 候補投入と即時反映
+6. Gate F（監査証跡 + Docker再現性）:
+   - スキーマ記録、コンテナ再現性要件反映
+7. Gate G（テスト/監査）:
+   - pytest、アーキテクチャ監査、証跡出力
 
-## 5. テスト計画（必須）
-- `pytest tests/` 全件Passをリリース前提条件とする。
-- 追加必須テスト:
-  - T5-1: ミスマッチ時にRun無効化
-  - T5-2: 適合時にRun有効化
-  - T5-3: 適合環境なしで作成導線遷移
-  - T5-4: 作成後の即時実行可能化
-- 追加アーキテクチャテスト:
-  - UI層がUseCaseを介さず判定ロジックへ直接アクセスしないこと
-  - 監査ログ必須項目欠落時に実行失敗すること
-- 監査性テスト:
-  - `required_imports` / `environment_capability` / `mismatch_result` / `guard_state` 記録確認
-  - ハッシュ整合性（log自体のsha256含む）
+## 6. テスト計画
+- 機能テスト（必須）:
+  - T5-1 ミスマッチ時Run無効化
+  - T5-2 適合時Run有効化
+  - T5-3 適合環境なし時の作成導線遷移
+  - T5-4 作成後即時実行可能化
+- アーキテクチャテスト（必須）:
+  - UIからUseCase/Infra具象への直接依存が0件
+  - Interface経由以外の層間呼出が0件
+  - Signal/Slot命名規約違反が0件
+- 監査証跡テスト（必須）:
+  - 必須スキーマキー充足率100%
+  - `log_sha256` を含むハッシュ整合性
+- 再現性テスト（必須）:
+  - Docker digest固定
+  - archive repo設定
+  - constraints適用
+  - multi-stage分離
 
-## 6. 成果物定義
+## 7. 成果物
 - `docs/architecture/`:
-  - 監査ログスキーマ定義
+  - 監査ログスキーマADR
   - 責務境界図
   - UI許可/禁止API表
+  - Interface契約一覧（Protocol/ABC）
+- `docs/audit/`:
+  - 監査テンプレート（参照入力一覧付き）
+  - EMCSメトリクス定義と証跡出力先定義
 - `src/`:
-  - UseCase層の判定・ガード実装
-  - UI接続（表示専念）
-  - 作成フロー即時反映
+  - UseCase判定/ガード
+  - Interface境界
+  - UI接続
+  - 作成フロー
 - `tests/`:
-  - R5 系4本 + 境界/監査性テスト
-- `docs/`:
-  - 要件-実装-テスト トレーサビリティ表
+  - 機能、境界、命名、証跡、再現性テスト
 
-## 7. 完了条件（Definition of Done）
-1. AC-1〜AC-5 をすべて満たす。
+## 8. 完了条件（Definition of Done）
+1. AC-1〜AC-5 を満たす。
 2. `pytest tests/` 全件Pass。
-3. `reference_standards.md` 重大違反 0 件。
-4. `post_mortem.md` のRC-1〜RC-3に対応する再発防止エビデンスを提出できる。
-5. 監査で `REJECT_TO_ARCHITECT`/`REJECT_TO_IMPLEMENT` の判定根拠を追跡可能。
+3. EMCSメトリクス Fail条件が全て0件。
+4. `reference_standards.md` 1章〜4章に対する重大違反0件。
+5. `post_mortem.md` RC-1〜RC-3 の再発防止証跡を提示可能。
+6. 監査票で `REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` の判定根拠を追跡可能。
 
-## 8. リスク管理
-- リスク: capability推定誤りで誤ガード。
-  - 対策: 推定/実証ラベルを分離し、実証データ優先で判定。
-- リスク: UIへのロジック逆流。
-  - 対策: PRレビューで「UIロジック混入チェックリスト」を必須化。
-- リスク: 監査ログ欠損。
-  - 対策: 書込前バリデータで必須項目を強制検証。
+## 9. リスクと制御
+- リスク: 推定capabilityの誤判定
+  - 制御: 実証データ優先、推定/実証ラベル分離
+- リスク: UIへのロジック逆流
+  - 制御: importルール監視 + SRPマトリクスレビュー
+- リスク: 監査項目欠落
+  - 制御: 実行前後バリデータで必須項目強制
+- リスク: EOLコンテナの再現不能化
+  - 制御: digest固定 + archive repo + constraints + multi-stage
 
-## 9. 注記
-- 本タスクでは `git commit` は実施しない（禁止要件遵守）。
+## 10. 注記
+- 本タスクでは `git commit` を実施しない（禁止要件遵守）。
