@@ -1,50 +1,54 @@
-# 監査報告書（Auditor）
+# 監査レポート（Auditor）
 
 ## 判定
 REJECT_TO_ARCHITECT
 
-## 総評
-`docs/plan.md` は UI責務分離・監査ログ・ゲート設計の方向性は妥当だが、絶対基準 `docs/reference_standards.md` に定義された**必須技術要件の一部が計画に明示されていない**。本監査は「計画の完全準拠性」を判定対象とするため、設計不備として差し戻す。
+## 監査対象
+- 基準: `docs/reference_standards.md`（絶対基準）
+- 計画: `docs/plan.md`
 
-## 指摘事項（重大度順）
+## 主要指摘（重大度順）
 
-### 1) EOLコンテナ再現性標準の必須項目が計画に未固定（Critical）
-- 失敗箇所: `docs/plan.md` 全体（Docker/EOL再現性の実装規約が不在）
-- 違反した制約: `docs/reference_standards.md` セクション2
-  - `FROM` のSHA256ダイジェスト固定
-  - EOL向けAPTアーカイブリポジトリへのリダイレクト
-  - `constraints.txt` によるpip依存解決範囲固定
-  - OpenCV等を想定したマルチステージビルド強制
-- 根拠: planには image digest の「ログ記録」はあるが、**ビルド手順そのものの固定要件**（上記4点）が実装計画/ゲートとして定義されていない。
-- 修正指示:
-  1. Phase A成果物に `docs/container_reproducibility_policy.md` を追加し、4要件を非交渉ルールとして明記する。
-  2. Phase B/C/D とは独立に、CIゲートへ以下を追加する。
-     - Dockerfile `FROM` がタグのみの場合 fail
-     - APTソースがEOL標準ミラーのままなら fail
-     - `constraints.txt` 未使用のpip installを fail
-     - 単一ステージでビルドツール同梱実行イメージを fail
+### 1) Clean Architecture の依存方向に関する重大不整合（Critical）
+- 該当箇所: `docs/plan.md` 1章「依存方向は UI -> UseCase -> Domain -> Infrastructure を厳守する。」
+- 違反基準: `docs/reference_standards.md` 4章「UI層は最外層であり、内側のビジネスルール（Entities, Use Cases）がUIフレームワーク（Qt）に依存してはならない。」
+- 監査根拠:
+  - 計画文面の「依存方向」がそのまま依存関係の向きを示すなら、`Domain -> Infrastructure` となり、内側が外側へ依存する解釈となる。
+  - これはクリーンアーキテクチャの依存規則（依存は外側から内側へ）と矛盾しうるため、監査上は不合格。
+- 是正指示:
+  - 依存規則を明示的に再定義すること（例: 「依存は外側→内側のみ。Domain/UseCase は Infrastructure/UI に依存しない」）。
+  - 呼び出しフローとコンパイル時依存を文書上で分離して記述すること。
 
-### 2) インターフェース規律（abc/Protocol）の強制が不足（High）
-- 失敗箇所: `docs/plan.md` 2.2, 3, 5
-- 違反した制約: `docs/reference_standards.md` セクション4「インターフェースによる規律」
-- 根拠: planでは Port名は列挙されるが、`abc.ABC` / `typing.Protocol` による**形式的な実装規約と検証方法**が定義されていない。
-- 修正指示:
-  1. Phase Aの境界ドキュメントに「PortはABCまたはProtocolで定義する」ことを明文化。
-  2. アーキテクチャゲートに「具象依存の直接参照検出（Port未経由）」を追加。
+### 2) 監査ガバナンス要件（Builder/Validator分離）の明文化不足（Major）
+- 該当箇所: `docs/plan.md` 全体
+- 違反基準: `docs/reference_standards.md` 1章「Builder/Validatorの分離: 実装役と思考プロセスを共有せず、要件と差分のみから敵対的かつ厳格にレビュー」
+- 監査根拠:
+  - 計画内に「Builder/Validator 分離運用」の具体規則（入力物、禁止共有情報、レビュー観点固定）が定義されていない。
+- 是正指示:
+  - 監査プロセスとして、Validator(Auditor)の入力を「要件+差分+成果物」に限定する規約を追加。
+  - 実装時の思考過程共有禁止、レビュー証跡のテンプレート化を追加。
 
-### 3) シグナル/スロット命名規約の監査項目欠落（Medium）
-- 失敗箇所: `docs/plan.md` 5（テスト・監査ゲート）
-- 違反した制約: `docs/reference_standards.md` セクション4「シグナル・スロット命名規則」
-- 根拠: planのUI関連ゲートは責務/依存のみで、命名規約（signal: 過去分詞、slot: 動詞）を検証対象に含めていない。
-- 修正指示:
-  1. UI静的検査ルールを追加し、命名逸脱を fail 対象化。
-  2. `docs/allowed_ui_operations.md` に命名規約節を追加。
+### 3) 監査ガバナンス要件（EMCS等の客観メトリクス）の明文化不足（Major）
+- 該当箇所: `docs/plan.md` 5章（テスト・監査ゲート）
+- 違反基準: `docs/reference_standards.md` 1章「客観的アーキテクチャ評価 (EMCSモデル)」
+- 監査根拠:
+  - ゲートは列挙されているが、NG判定を下すための定量メトリクス（閾値、違反度、影響度）が未定義。
+- 是正指示:
+  - 少なくとも以下を定量化して閾値を記載: 依存違反件数、UI層ロジック混入件数、禁止API呼び出し件数、循環依存件数。
+  - 各メトリクスに「Fail条件」「証拠取得方法」を明示すること。
 
-## 適合確認（参考）
-- `git_commit_hash` / image digest のログ記録方針: あり（plan 2.1, 5）
-- ALCOA++志向の監査ログ完全性テスト: あり（plan 2.1, 5）
-- UI Humble Object /依存方向の方針: あり（plan 1, 2.2, 5）
-- REJECTルーティング定義: あり（plan 2.3, 7）
+### 4) REJECT時の処方的メッセージ要件の不足（Major）
+- 該当箇所: `docs/plan.md` 2.3節（REJECTルーティング）
+- 違反基準: `docs/reference_standards.md` 1章「処方的なエラーハンドリング（失敗箇所、違反制約、具体修正指示を含む）」
+- 監査根拠:
+  - ルーティング先は定義されているが、差し戻しメッセージの必須構成が仕様化されていない。
+- 是正指示:
+  - `REJECT` テンプレートを定義し、必須項目（失敗箇所/違反制約/修正ヒント/再検証条件）をCI出力要件に追加すること。
 
-## 最終要求
-上記 1)〜3) を `docs/plan.md` に反映し、特に 1) の4必須要件を**実装計画とCIゲートの両方**に落とし込んだ改訂版を再提出すること。
+## 適合している点（参考）
+- Docker再現性4要件（digest固定、EOLアーカイブ、constraints、マルチステージ）は計画に明記されている。
+- 監査証跡として `git_commit_hash`・image digest・相対パス強制・SHA-256対象は概ね網羅されている。
+- Humble Object、Port抽象（`abc.ABC`/`typing.Protocol`）、signal/slot命名規約は計画に反映されている。
+
+## 結論
+`docs/plan.md` は絶対基準に対して、依存規則の解釈不整合（Critical）および監査ガバナンス要件の明文化不足（Major）が残存しているため、現時点では承認不可。`REJECT_TO_ARCHITECT` と判定する。
