@@ -1,33 +1,51 @@
-# Audit Report
+# Audit Report: docs/plan.md vs docs/reference_standards.md
 
-## 1. pytest 実行結果
-- 実行コマンド: `pytest tests/`
-- 結果: **43 passed / 0 failed**
-- 所要時間: 1.45s
+## 判定
+- 結果: **REJECT_TO_ARCHITECT**
+- 理由: `docs/plan.md` は多くの要件を満たすが、絶対基準 `docs/reference_standards.md` の必須項目に対して未充足が残存しているため。
 
-## 2. 基準照合 (docs/reference_standards.md)
+## 指摘事項（重大度順）
 
-### 2.1 監査・ガバナンス標準
-- テスト失敗なし。主要な品質ゲート（Docker digest policy、UI/usecase separation、audit metadata整合性）を `tests/` で確認。
+1. **[重大] Docker再現性標準の必須項目が計画に不在**
+- 基準根拠: 2章「EOLスタックのコンテナ化およびビルド再現性標準」
+  - `FROM` のSHA256ダイジェスト固定
+  - EOL向けAPTのアーカイブリダイレクト
+  - `constraints.txt` によるpipバックトラッキング抑止
+  - OpenCV等ビルド時のマルチステージビルド
+- 観測事実: `docs/plan.md` に上記4点を実装計画・検証計画として明文化した記述がない。
+- 影響: 「100%確実な再現性」の中核要件が監査可能な形で担保されない。
+- 修正指示:
+  - Work BreakdownにDocker基準専用タスクを追加。
+  - Verification Planに各項目の静的/実行検証（例: Dockerfile lint + 実ビルド検証）を追加。
 
-### 2.2 Docker 再現性標準
-- `tests/test_dockerfile_digest_policy.py` により `src/lcr/core/container/images/Dockerfile.*` の `FROM ...@sha256:<64hex>` を検証。
-- `src/lcr/core/container/templates/base.Dockerfile.j2` で `constraints.txt` を `pip install -c` に適用。
-- EOL向けAPTリダイレクト（`archive.debian.org`）をテンプレート/生成Dockerfileで確認。
+2. **[重大] 監査ガバナンスのBuilder/Validator分離要件が未規定**
+- 基準根拠: 1章「Builder/Validatorの分離」
+- 観測事実: `docs/plan.md` は依存規約やCIゲートを規定しているが、「要件とDiffのみを入力に敵対的レビューする運用境界」を明示していない。
+- 影響: 監査の独立性が曖昧となり、サイレント逸脱検知能力が低下する。
+- 修正指示:
+  - 監査プロセス章を追加し、Auditor入力制約（requirements + diffのみ）を明文化。
+  - CI/運用で分離担保する手順を追記。
 
-### 2.3 データ完全性・監査証跡
-- `src/lcr/core/audit/metadata_service.py` で以下を確認:
-  - `git rev-parse HEAD` によるコミットハッシュ採取
-  - `image_digest` 採取
-  - script/parameter/input/output/log の SHA-256 記録
-  - `script_path_rel` 等の相対パス正規化（絶対パス・`..` を拒否）
+3. **[中] 客観評価（EMCSモデル相当）の判定メトリクス定義不足**
+- 基準根拠: 1章「客観的アーキテクチャ評価 (EMCSモデル)」
+- 観測事実: `docs/plan.md` には違反0件等のゲートはあるが、重大度判定の客観メトリクス（例: SRP違反閾値、複雑度閾値、違反分類規則）が不足。
+- 影響: 判定再現性が監査者依存となるリスク。
+- 修正指示:
+  - 監査判定表（違反タイプ、測定方法、閾値、判定）を追加。
 
-### 2.4 PyQt/PySide アーキテクチャ標準
-- `src/lcr/ui/ports.py` で `typing.Protocol` によるインターフェース分離を確認。
-- `tests/test_ui_usecase_separation.py` で UI が build preparation use case を経由することを検証。
+4. **[中] PyQt/PySideシグナル・スロット命名規約の担保計画が欠落**
+- 基準根拠: 4章「シグナル・スロットの命名規則」
+- 観測事実: `docs/plan.md` にはHumble Objectや依存方向はあるが、命名規約（シグナル=過去分詞、スロット=動詞）に対する実装/検査タスクがない。
+- 影響: UI層規律の一貫性要件が未達となる。
+- 修正指示:
+  - 命名規約チェック（静的検査またはレビューゲート）をP0/Structural Testsへ追加。
 
-## 3. 指摘事項
-- **なし**（pytest失敗なし、参照基準に対する重大違反は確認されず）
+## 参考（適合している主項目）
+- UseCase->Qt禁止、UI->Domain禁止、Port経由強制の方向性は基準に整合。
+- Humble Object趣旨（UIの責務制限）は概ね整合。
+- Data Integrity 4区分ハッシュ、digest/git hash、相対パス強制は整合。
+- REJECT時のルーティング方針は明示されている。
 
-## 4. 監査判定
-- **AUDIT_PASS_IMPLEMENT**
+## 最終結論
+- 絶対基準に対し未充足項目が残るため、本計画は現時点で承認不可。
+- 判定: **REJECT_TO_ARCHITECT**
