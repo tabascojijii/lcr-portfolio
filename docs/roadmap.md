@@ -4,6 +4,7 @@
 - 本ロードマップは `docs/reference_standards.md` を絶対基準として、`docs/plan.md` の実装計画を実行順序・検証ゲート・完了条件へ展開する。
 - 対象フェーズは Phase 5、Phase 6、Phase 6.1。
 - 成功条件は、機能提供完了ではなく「再現性・監査可能性・アーキテクチャ整合性」の同時達成とする。
+- 2026-05-04 監査（`docs/audit_report.md`）の判定は PASS であり、REJECT_TO_PM 指摘は 0 件である。本書は当該監査結果を反映し、既存制約を縮退させずに運用固定する。
 
 ## 1. Absolute Standards (Non-Negotiable)
 - Builder と Validator の入力境界を分離し、Validator 入力は `requirements` と `diff` のみに限定する。
@@ -108,6 +109,7 @@
 - EMCSメトリクス（依存方向、UI責務、複雑度、監査証跡、Docker再現性）が全て閾値内である。
 - テスト、構造、監査、ガバナンス、同期の全ゲートが連続Passである。
 - 最新 `docs/audit_report.md` と本ロードマップ運用前提が整合している。
+- `docs/audit_report.md` の Audit Date（2026-05-04）以降に本書を更新した場合、実装着手前に監査を再実行し、再度 PASS を確認している。
 
 ## 7. Explicit Prohibitions
 - 曖昧語（例: 主要、可能なら、必要に応じて）による基準緩和を禁止する。
