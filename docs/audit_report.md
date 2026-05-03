@@ -1,39 +1,24 @@
-# Audit Report
+# Roadmap Audit Report
 
 ## 監査対象
-- 基準: `docs/reference_standards.md`
-- 計画: `docs/plan.md`
+- 対象: `docs/roadmap.md`
+- 絶対基準: `docs/plan.md`, `docs/reference_standards.md`
 
-## 監査判定
-- 判定: **PASS（問題なし）**
-- ステータスコード: `AUDIT_PASS_PLAN`
+## 判定
+- 結果: **PASS**
+- 監査ステータス: `AUDIT_PASS_ROADMAP`
 
-## 検証結果（客観基準）
-1. 監査・ガバナンス標準
-- EMCS的な客観評価運用: `docs/plan.md` に構造ゲート（依存違反0件、UI禁止行為0件等）の定量条件が明示されており適合。
-- Builder/Validator分離: 監査入力を `requirements + diff` に限定する規定が明示されており適合。
-- REJECT時の処方性: Process Gateで「失敗箇所、違反制約、観測証拠、修正ヒント、再検証条件、ルーティング先」を必須化しており適合。
-
-2. Docker/EOL再現性標準
-- `FROM` digest固定: 3.3.1でタグ禁止・SHA256固定・CIゲート化を明示しており適合。
-- EOLリポジトリ切替: 3.3.2で `old-releases.ubuntu.com` / `archive.debian.org` への切替を明示しており適合。
-- pip constraints: 3.3.3で `-c constraints.txt` を必須化しており適合。
-- マルチステージ: 3.3.4でbuilder/runtime分離を必須化しており適合。
-
-3. データ完全性・監査証跡標準
-- 環境/コードハッシュ記録: image digest と git hash 記録を必須化しており適合。
-- 相対パス強制: 絶対パスfail-fastと相対パス強制を明示しており適合。
-- 全件ハッシュ: `all_input_files`/`all_output_files`/`all_parameter_files`/`audit_log_record` の4区分全件必須を明示しており適合。
-
-4. PyQt/PySideアーキテクチャ標準
-- Humble Object: UI責務を入力受理・表示更新・UseCase呼び出しに限定しており適合。
-- 依存方向: `UseCase -> Qt` 禁止、`Domain -> Infrastructure` 禁止等を明示しており適合。
-- インターフェース規律: `abc.ABC` / `typing.Protocol` 経由を明示しており適合。
-- シグナル/スロット命名: 過去分詞形シグナル・動詞スロットをゲート化しており適合。
+## 検証結果（要点）
+- スコープ整合: Phase 5 / Phase 6 / Phase 6.1 を対象としており、`docs/plan.md` と一致。
+- 依存方向・Humble Object・Port経由原則: `docs/reference_standards.md` および `docs/plan.md` の必須制約を充足。
+- Data Integrity: ハッシュ4区分（全入力・全出力・全パラメータ・監査ログ本体）、image digest、git hash、相対パス強制を明示し、基準と一致。
+- Docker/EOL再現性: digest固定、EOLリポジトリ切替、constraints強制、マルチステージ強制を明示し、基準と一致。
+- ガバナンス: Builder/Validator分離、監査入力制約（requirements+diff）、処方的REJECT要件を明示し、基準と一致。
+- 検証ゲート: Functional / Structural / Audit / Governance を定義し、要求される監査観点を網羅。
+- 曖昧語排除・禁止事項: `docs/plan.md` の禁止方針と矛盾なし。
 
 ## 指摘事項
-- なし（`docs/reference_standards.md` からの逸脱は検出されず）
+- なし。
 
 ## 結論
-- `docs/plan.md` は、監査基準に照らして受理可能。
-- 最終判定は `AUDIT_PASS_PLAN`。
+`docs/roadmap.md` は、`docs/plan.md` および `docs/reference_standards.md` に照らして、監査上の重大な欠落・矛盾・逸脱を確認しなかったため、**受け入れ可能（PASS）**と判定する。
