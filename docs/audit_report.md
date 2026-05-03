@@ -1,31 +1,25 @@
-# Roadmap Audit Report
+# Audit Report (Roadmap Validation)
 
-## Verdict
-- 判定: REJECT
-- ステータス: REJECT_TO_PM
+- Audit Date: 2026-05-04
+- Auditor Target: `docs/roadmap.md`
+- Absolute Criteria: `docs/plan.md`, `docs/reference_standards.md`
+- Verdict: PASS
+- Final Decision: 問題なし
 
-## Findings
-1. Audit Synchronization Rule の一部要件が `docs/roadmap.md` に未固定。
-- 失敗箇所: `docs/roadmap.md` Section 5 Risk Controls / Section 3 Cross-Phase Gates
-- 違反制約: `docs/plan.md` 1.6「PASS判定時もRC-1〜RC-3を削除しない」「監査が重大指摘なしでもRC-1〜RC-3検査を縮退しない」の明示固定
-- 観測証拠:
-  - `docs/plan.md:62` PASS時もRC-1〜RC-3維持必須
-  - `docs/plan.md:64` 重大指摘なしでもRC-1〜RC-3検査縮退禁止
-  - `docs/roadmap.md:96-100` はRC-1〜RC-3の記載はあるが、PASS時維持/縮退禁止の運用条件が未明記
-- 修正ヒント: `docs/roadmap.md` に「PASS判定時でもRC-1〜RC-3を削除しない」「重大指摘なしでもRC-1〜RC-3対応検査を縮退しない」を明文化する。
-- 再検証条件: 追加後、`plan.md` 1.6との文言差分が0件であることを確認する。
-- ルーティング先: REJECT_TO_PM
+## 1. 判定サマリ
+`docs/roadmap.md` は、`docs/plan.md` および `docs/reference_standards.md` の必須制約・ゲート・完了条件を実行計画へ展開しており、REJECT相当の違反は確認されなかった。
 
-2. REJECTルーティング固定要件の不足。
-- 失敗箇所: `docs/roadmap.md` 全体（REJECTの宛先定義）
-- 違反制約: `docs/plan.md` 3「設計不備はREJECT_TO_ARCHITECT、実装不備はREJECT_TO_IMPLEMENT」の固定
-- 観測証拠:
-  - `docs/plan.md:96-98` REJECTルーティング固定を明示
-  - `docs/roadmap.md` には「REJECT必須要素（ルーティング先を含む）」はあるが、固定宛先規約自体の定義がない（`docs/roadmap.md:10`, `:86`）
-- 修正ヒント: `docs/roadmap.md` に REJECT routing policy を追加し、設計不備/実装不備の宛先を固定定義する。
-- 再検証条件: `plan.md` のルーティング規約と `roadmap.md` の規約が一致していること。
-- ルーティング先: REJECT_TO_PM
+## 2. 検証結果（主要観点）
+- ガバナンス分離: Builder/Validator分離、Validator入力境界（`requirements` と `diff` のみ）、REJECT時の処方的出力要件を明示しており、基準適合。
+- Docker再現性: `FROM` digest固定、EOL向けAPTアーカイブ、`constraints.txt`、マルチステージビルドを全て明示しており、基準適合。
+- データ完全性: ハッシュ4区分（`all_input_files` / `all_output_files` / `all_parameter_files` / `audit_log_record`）、`container_image_digest`、`git_commit_hash`、相対パス強制を明示しており、基準適合。
+- アーキテクチャ規律: 許可/禁止依存（`UseCase -> Qt` 禁止、`UI -> Domain` 禁止等）と Port/Interface 経由原則を明示しており、基準適合。
+- UI規約: Humble Object（業務判断・複雑計算・業務フォーマット・I/O等のUI実装禁止）と signal/slot 命名規約を明示しており、基準適合。
+- 監査同期: `docs/audit_report.md` と `docs/plan.md` の差分0件要件、および「計画更新日 > 監査更新日」の再監査必須条件を明示しており、基準適合。
+- RC-1〜RC-3維持: PASS時でも縮退・削除しない運用を明示しており、基準適合。
 
-## Conclusion
-- `docs/reference_standards.md` との主要技術基準（依存方向、Humble Object、Docker再現性、監査証跡）は概ね整合している。
-- ただし、`docs/plan.md` を絶対基準とした場合に上記2点の統制要件が未固定のため、現時点では承認不可。
+## 3. REJECT判定の有無
+- REJECT_TO_PM 該当事項: なし
+
+## 4. 結論
+`docs/roadmap.md` は絶対基準への整合性を満たしているため、監査判定は **PASS** とする。
