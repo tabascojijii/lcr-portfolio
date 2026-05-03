@@ -6,9 +6,13 @@
 
 ## 1. 最上位方針（非交渉）
 - 呼び出しフローと依存規則を分離して定義する。
-  - 呼び出しフロー（実行時）: `UI -> UseCase -> Domain -> Infrastructure`
-  - コンパイル時依存（参照可能方向）: **外側 -> 内側のみ**
-  - 非許可依存: `Domain -> UseCase/UI/Infrastructure`、`UseCase -> UI`、`Domain -> Qt`
+  - 呼び出しフロー（実行時）: `UI -> UseCase -> Domain` および `UI -> UseCase -> Port -> Infrastructure`
+  - コンパイル時依存（参照可能方向）: **外側 -> 内側のみ**（Infrastructure は UseCase/Domain の Port を実装するのみ）
+  - 非許可依存: `Domain -> Infrastructure`、`Domain -> UseCase/UI`、`UseCase -> UI`、`Domain -> Qt`
+  - 対応表（固定）:
+    - Domain: 純粋ロジックのみ。外部I/O呼び出し禁止。
+    - UseCase: Domain をオーケストレーションし、外部I/Oは Port 経由で委譲。
+    - Infrastructure: Port 実装を提供。UseCase/Domain の具象実装へ逆参照しない。
 - UI（`MainWindow`/Dialog）は Humble Object とし、判断・分岐・永続化・外部I/Oを保持しない。
 - 監査証跡は ALCOA++ 準拠で、相対パス強制・ハッシュ対象完全化・再現性を満たす。
 - 危険操作（削除/強制削除）はデフォルト禁止、明示解除時のみ許可。
