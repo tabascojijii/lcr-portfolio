@@ -1,8 +1,8 @@
 # LCR ロードマップ（Reference Standards 絶対準拠）
 
 ## 0. 位置づけ
-本ロードマップは `docs/reference_standards.md` を絶対基準として策定する。  
-`docs/plan.md` は実行順序・実装粒度の参照とし、基準との不一致がある場合は常に `reference_standards` を優先する。
+本ロードマップは `docs/plan.md` と `docs/reference_standards.md` を同等の絶対基準として策定する。  
+いずれか一方のみを優先して他方の拘束を弱める運用は禁止し、不足や不一致がある場合は双方を同時に満たすようにロードマップを拡張して裁定する。
 
 ## 1. 目標と完了条件
 - 目標: Phase 5（Validation Guardrails）実装と、監査・再現性・UI境界・証跡要件の同時達成。
@@ -26,6 +26,7 @@
 2. 責務境界図（UI/UseCase/Domain/Infra）確定。
 3. Validator入力境界（許可/禁止）定義。
 4. EMCS監査票の客観指標・閾値定義。
+5. 差し戻し分類（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT`）と、違反原因レイヤー（Requirement / Architecture / Implementation）記録要件の固定。
 - 成果物:
 1. ADR（監査スキーマ）
 2. 境界仕様書
@@ -33,6 +34,7 @@
 - REJECT条件:
 1. スキーマ必須項目の未定義。
 2. Builder/Validator分離不備。
+3. REJECT分類または違反原因レイヤー記録要件の未定義。
 
 ### Phase 2: 再現性基盤実装（Gate B）
 - スコープ:
@@ -77,14 +79,14 @@
 
 ### Phase 5: 監査証跡と命名規約ゲート（Gate G, H）
 - スコープ:
-1. `image_digest`、`git_commit_hash`、SHA256群、相対パスを監査ログに記録。
+1. 監査ログ最小スキーマ必須キーを固定し記録する（`required_imports`, `environment_capability`, `mismatch_result`, `guard_state`, `image_digest`, `git_commit_hash`, `input_sha256`, `output_sha256`, `parameter_sha256`, `log_sha256`, `relative_paths`）。
 2. シグナル過去分詞・スロット動詞開始を静的検査で強制。
 - 成果物:
 1. 監査ログ実装
 2. 命名規約チェッカー
 3. CIゲート
 - REJECT条件:
-1. 監査必須キー欠落。
+1. 監査必須キー欠落（1件でも監査不成立 / Fail）。
 2. 命名規約違反1件以上。
 
 ### Phase 6: 統合検証・最終監査（Gate I）
@@ -110,6 +112,10 @@
 ## 5. ガバナンス運用ルール
 - Auditorは主観評価を禁止し、EMCS客観指標のみで判定する。
 - REJECT時は「違反箇所 / 違反基準 / 修正条件 / 再検証手順」を必須記載する。
+- REJECTは以下に分類して記録する:
+1. `REJECT_TO_ARCHITECT`（境界・契約・スキーマ・標準拘束違反）
+2. `REJECT_TO_IMPLEMENT`（実装欠陥・テスト欠陥）
+- 監査票には違反原因レイヤー（Requirement / Architecture / Implementation）を必須記録する。
 - Validator入力は `requirements`・`reference_standards`・Diff・テスト証跡に限定し、実装者意図説明を遮断する。
 
 ## 6. 主要リスクと制御
