@@ -1,100 +1,127 @@
-# LCR ロードマップ（PM版 / Reference Standards完全準拠）
+# LCR ロードマップ（Reference Standards 絶対準拠）
 
-## 0. 目的と適用範囲
-本ロードマップは、`docs/reference_standards.md` を絶対基準として、`docs/plan.md` を実行可能な工程に再編したものである。  
-すべてのフェーズは、基準逸脱時に即時停止し、`REJECT_TO_ARCHITECT` または `REJECT_TO_IMPLEMENT` の処方的差し戻しを行う。
+## 0. 位置づけ
+本ロードマップは `docs/reference_standards.md` を絶対基準として策定する。  
+`docs/plan.md` は実行順序・実装粒度の参照とし、基準との不一致がある場合は常に `reference_standards` を優先する。
 
-## 1. 最上位原則（非交渉）
-1. `reference_standards.md` 第1章〜第4章の違反は1件でも不合格。
-2. Builder/Validator分離を維持し、監査入力は「要件・差分・証跡」のみ。
-3. 監査ログは必須スキーマ100%充足を達成するまで実装完了と見なさない。
-4. UIはHumble Objectを維持し、判定ロジック/永続化/実行制御を保持しない。
-5. EOLスタックの再現性はDocker digest固定・archive repo・constraints・multi-stageを必須とする。
+## 1. 目標と完了条件
+- 目標: Phase 5（Validation Guardrails）実装と、監査・再現性・UI境界・証跡要件の同時達成。
+- 完了条件:
+1. `reference_standards` の4章（監査ガバナンス / Docker再現性 / データ完全性 / UIアーキテクチャ）に違反0件。
+2. `plan.md` の Gate A〜I 完了。
+3. 監査必須キー欠落0件、層逆流0件、循環依存0件、SRP違反0件。
+4. `pytest tests/` 全件Pass。
 
-## 2. マイルストーン
+## 2. 絶対基準トレーサビリティ
+- 監査ガバナンス（EMCS / Builder-Validator分離 / 処方的REJECT）を全Gateで必須適用。
+- Docker再現性（digest固定 / APT archive / constraints / マルチステージ）をGate Bで実装し、以後の前提条件化。
+- データ完全性（`image_digest`・`git_commit_hash`・相対パス・SHA256）をGate Gで実装し、監査成立条件に固定。
+- UI標準（Humble Object / 依存方向 / Protocol/ABC / シグナル・スロット命名規約）をGate D,E,Hで拘束。
 
-### M0: ガバナンス固定（Week 1）
-- 目的: 監査と設計の失敗条件を先に固定し、手戻りを防止。
-- 成果物:
-  - 監査ログ最小スキーマADR（required_imports, environment_capability, mismatch_result, guard_state, image_digest, git_commit_hash, input/output/parameter/log sha256, relative_paths）
-  - 監査テンプレート（参照入力一覧、違反レイヤー分類、処方的REJECT文面）
-  - EMCS評価表（M1〜M4の測定方法とFail条件）
-- ゲート:
-  - 監査票で `REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` 判定ルールが追跡可能
-  - 必須スキーマ欠落時に「監査不成立」を返せる
+## 3. フェーズ別ロードマップ
 
-### M1: 境界契約と責務分離（Week 1-2）
-- 目的: RC-2再発防止（UI/UseCase/Infra責務混在の排除）。
-- 成果物:
-  - 責務境界図（View / UseCase / Infra）
-  - UI許可API・禁止API一覧（直接JSON操作、監査ログ書込、Docker呼出を禁止）
-  - `abc.ABC` / `typing.Protocol` 契約一覧
-  - Composition Rootでの依存注入設計
-- ゲート:
-  - UI→UseCase/Infra具象の直接依存0件
-  - Interface経由以外の層間呼出0件
-
-### M2: Phase 5コア実装（Week 2-3）
-- 目的: R5-1〜R5-3を規約準拠で実装。
+### Phase 1: 監査設計固定（Gate A）
 - スコープ:
-  - R5-1: import単位 capability 構築（推定/実証を明示）
-  - R5-2: required_imports差分検知、Hard GuardでRun無効化
-  - R5-3: 適合環境なし時の強制作成フロー、候補自動投入、作成後Dynamic Refresh
-- ゲート:
-  - ミスマッチ時にガード回避実行不可
-  - 警告UIに不足import・理由・推奨環境・作成導線を表示
-
-### M3: 監査証跡と再現性実装（Week 3）
-- 目的: 第2章・第3章の完全実装。
+1. 監査ログ最小スキーマADR確定。
+2. 責務境界図（UI/UseCase/Domain/Infra）確定。
+3. Validator入力境界（許可/禁止）定義。
+4. EMCS監査票の客観指標・閾値定義。
 - 成果物:
-  - Docker再現性設定（digest固定、archive sources、constraints、multi-stage）
-  - ALCOA++準拠ログ（image digest, git hash, 相対パス, SHA-256群）
-  - 監査スキーマバリデータ
-- ゲート:
-  - スキーマ充足率100%
-  - 改ざん検知ハッシュ全項目が検証可能
+1. ADR（監査スキーマ）
+2. 境界仕様書
+3. 監査チェックリスト
+- REJECT条件:
+1. スキーマ必須項目の未定義。
+2. Builder/Validator分離不備。
 
-### M4: テスト・監査・受け入れ（Week 4）
-- 目的: 要件と規約の合格証跡を確定。
-- 必須テスト:
-  - 機能: T5-1〜T5-4
-  - アーキテクチャ: 依存違反0、具象依存禁止、Signal/Slot命名違反0
-  - 監査証跡: 必須キー100%、`log_sha256` 整合性
-  - 再現性: Docker4要件の検証
-- 完了ゲート:
-  - `pytest tests/` 全件Pass
-  - EMCS Fail条件 0件
-  - `reference_standards.md` 重大違反 0件
+### Phase 2: 再現性基盤実装（Gate B）
+- スコープ:
+1. `Dockerfile` の `FROM` digest固定。
+2. EOL向けAPT archive切替。
+3. `constraints.txt` 強制。
+4. マルチステージビルド化。
+- 成果物:
+1. Docker構成一式
+2. 静的検査ルール
+3. ビルド検証証跡
+- REJECT条件:
+1. タグベースFROM。
+2. constraints未適用。
+3. 単一ステージでC/C++ビルド同居。
 
-## 3. 実行順序（Gate Sequence）
-1. Gate A: 監査スキーマ・EMCS・監査入力境界の文書固定
-2. Gate B: UseCase判定（capability統合・差分検知・推奨環境決定）
-3. Gate C: Interface導入（Protocol/ABC + DI配線）
-4. Gate D: UI接続（Humble Object維持、表示反映のみ）
-5. Gate E: 強制作成フロー（候補投入 + Dynamic Refresh）
-6. Gate F: 監査証跡 + Docker再現性要件反映
-7. Gate G: テスト・監査・証跡出力
+### Phase 3: 判定ロジック実装（Gate C, D）
+- スコープ:
+1. capability統合（推定/実証分離）。
+2. required_imports差分判定。
+3. Hard Guard（不足時Run無効）。
+4. Protocol/ABC による層間契約固定。
+- 成果物:
+1. UseCase実装
+2. Interface定義
+3. DI配線
+- REJECT条件:
+1. UIで判定ロジックを実行。
+2. 具象依存の直接参照。
 
-## 4. KPI / 監査メトリクス
-- M1 層間依存違反件数: 0件（Fail: 1件以上）
-- M2 SRP逸脱クラス数: 0件（Fail: 1件以上）
-- M3 UI層CC超過: 0件（Fail: CC > 10）
-- M4 監査スキーマ充足率: 100%（Fail: 100%未満）
+### Phase 4: UI統合と強制作成フロー（Gate E, F）
+- スコープ:
+1. UIは入力受理・表示更新・イベント中継のみ。
+2. 不足時の推奨環境提示。
+3. 新規環境作成導線とDynamic Refresh。
+- 成果物:
+1. 画面遷移/表示更新実装
+2. 新規環境作成フロー
+- REJECT条件:
+1. UIによるJSON直接編集。
+2. ガード無視実行経路の存在。
 
-## 5. リスク管理
-- 推定capability誤判定
-  - 制御: 実証データ優先、推定/実証ラベル分離
-- UIへのロジック逆流
-  - 制御: importルール監視、責務マトリクスレビュー
-- 監査項目欠落
-  - 制御: 実行前後バリデータで必須項目を強制
-- EOL依存解決不安定化
-  - 制御: constraints固定、archive repo固定、digest固定
+### Phase 5: 監査証跡と命名規約ゲート（Gate G, H）
+- スコープ:
+1. `image_digest`、`git_commit_hash`、SHA256群、相対パスを監査ログに記録。
+2. シグナル過去分詞・スロット動詞開始を静的検査で強制。
+- 成果物:
+1. 監査ログ実装
+2. 命名規約チェッカー
+3. CIゲート
+- REJECT条件:
+1. 監査必須キー欠落。
+2. 命名規約違反1件以上。
 
-## 6. Definition of Done
-1. AC-1〜AC-5充足。
-2. `pytest tests/` 全件Pass。
-3. EMCS（M1〜M4）Fail条件0件。
-4. `reference_standards.md` 第1章〜第4章の重大違反0件。
-5. RC-1〜RC-3の再発防止証跡を提示可能。
-6. 監査票で差し戻し根拠（Requirement/Architecture/Implementation）が追跡可能。
+### Phase 6: 統合検証・最終監査（Gate I）
+- スコープ:
+1. 機能テスト（T5-1〜T5-4）。
+2. Docker準拠テスト（T5-D1〜D4）。
+3. アーキテクチャ/監査/ガバナンステスト。
+- 成果物:
+1. テスト結果一式
+2. EMCS評価結果
+3. 最終監査票
+- REJECT条件:
+1. 閾値違反1件以上。
+2. 監査者間判定差分あり。
+
+## 4. マイルストーン
+1. M1: Gate A完了（監査基準固定）
+2. M2: Gate B完了（再現性基盤確立）
+3. M3: Gate C〜F完了（機能成立）
+4. M4: Gate G〜H完了（監査成立）
+5. M5: Gate I完了（リリース判定可能）
+
+## 5. ガバナンス運用ルール
+- Auditorは主観評価を禁止し、EMCS客観指標のみで判定する。
+- REJECT時は「違反箇所 / 違反基準 / 修正条件 / 再検証手順」を必須記載する。
+- Validator入力は `requirements`・`reference_standards`・Diff・テスト証跡に限定し、実装者意図説明を遮断する。
+
+## 6. 主要リスクと制御
+- 推定capability誤判定:
+  - 制御: 実証データ優先、推定/実証の明示分離。
+- 層境界崩壊:
+  - 制御: Protocol/ABC強制、依存方向テストをCIゲート化。
+- 再現性逸脱:
+  - 制御: Docker静的検査Fail-Fast。
+- 監査証跡欠落:
+  - 制御: 実行時スキーマ検証を必須化。
+
+## 7. 実行上の厳守事項
+- 本作業および後続作業で、`reference_standards` 違反は即時REJECTとする。
+- Git操作（`git commit` など）は本依頼では実行しない。
