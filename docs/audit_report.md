@@ -51,3 +51,30 @@
 - 規約準拠: **Fail（上記2件）**
 
 最終判定: **REJECT_TO_IMPLEMENT**
+
+## 4) Implementer向け実装アドバイス（再提出時チェックリスト）
+
+### A. Data Integrity（3章）是正の実装方針
+1. `AuditMetadataService.collect` の返却モデルを拡張し、最低でも以下を構造化して保持する。  
+- `input_hashes`: 実行時に参照した主要入力ファイル群の SHA-256（`{relative_path: sha256}`）  
+- `output_hashes`: 生成成果物の SHA-256（`{relative_path: sha256}`）  
+- `param_hash`: 実行パラメータJSON（または同等の設定シリアライズ）の SHA-256  
+- `log_hash`: 実行ログファイル本体の SHA-256  
+2. すべてのパスキーはプロジェクト相対パスで保存する（絶対パス禁止）。
+3. 履歴保存先（`history.json` など）へ上記項目を欠落なく永続化する。
+4. `main_window.py` の監査表示項目を拡張し、`script_sha256` だけでなく `param/input/output/log` の各ハッシュを確認可能にする。
+
+### B. UI責務分離（4章）是正の実装方針
+1. `MainWindow` から以下の直接呼び出しを除去し、UseCase/Port経由へ統一する。  
+- `generate_dockerfile`  
+- `save_definition`
+2. 「ビルド準備」「定義保存」「Dockerfile生成」「実行前判定」は Application/UseCase 層へ移管する。
+3. `MainWindow` は入力収集・イベント接続・表示更新に限定し、業務判断（分岐/整合性判定）を持たないようにする。
+
+### C. 再提出前の最小検証（必須）
+1. `pytest tests/` が全件Pass。  
+2. 新規テストを追加する。  
+- ハッシュ網羅性テスト（`param/input/output/log` が全て保存される）  
+- 相対パステスト（保存データに絶対パスが混入しない）  
+- UI分離テスト（UIからUseCaseをモック経由で呼ぶ構成の担保）  
+3. 監査証跡サンプルを1件作り、上記ハッシュ項目が実データで埋まっていることを確認する。
