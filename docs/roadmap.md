@@ -84,6 +84,7 @@
 - Structural Gate: 依存方向違反0、Port未経由境界越え0、UI禁止行為0、Qt命名規約違反0。
 - Audit Gate: ハッシュ4区分欠落0、相対パス違反0、`container_image_digest` 欠落0、`git_commit_hash` 欠落0。
 - Governance Gate: Builder/Validator分離違反0、監査入力境界違反0、REJECT必須要素欠落0。
+- REJECT Routing Gate: 設計不備は `REJECT_TO_ARCHITECT`、実装不備は `REJECT_TO_IMPLEMENT` へ固定ルーティングする。
 - Synchronization Gate: `docs/audit_report.md` と `docs/plan.md` の制約差分0、かつ計画更新日が監査更新日を超えた場合は監査再実行完了。
 
 ## 4. Execution Order
@@ -97,6 +98,8 @@
 - RC-1（ハッシュ対象曖昧）: 4区分スキーマ固定と欠落Failで封じ込める。
 - RC-2（UseCase->Qt逆流）: 明示禁止とCI静的検査Failで封じ込める。
 - RC-3（UIロジック流入）: UI禁止行為検査とレビュー基準で封じ込める。
+- 監査判定がPASSの場合もRC-1〜RC-3を削除しない。
+- 監査が重大指摘なしの場合もRC-1〜RC-3対応検査（ハッシュ4区分、`UseCase -> Qt` 禁止、UI複雑計算/業務フォーマット禁止）を縮退しない。
 - 監査同期不整合: 監査-計画差分検査を常時実行し、差分発生時は実装ジョブ開始前に停止する。
 
 ## 6. Definition of Done
