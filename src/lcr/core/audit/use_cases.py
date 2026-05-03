@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 class CollectAuditMetadataUseCase:
     """Collect audit metadata using abstract dependencies."""
 
@@ -67,3 +70,29 @@ class CollectAuditMetadataUseCase:
                 unavailable.append(key)
         if unavailable:
             raise ValueError(f"Incomplete audit metadata: unavailable fields: {', '.join(unavailable)}")
+
+
+class PrepareAuditMetadataUseCase:
+    """Application-layer orchestration for audit metadata collection."""
+
+    def __init__(self, collect_use_case, log_path_provider):
+        self.collect_use_case = collect_use_case
+        self.log_path_provider = log_path_provider
+
+    def execute(self, last_run_context, output_dir, exit_code):
+        output_files = self._collect_output_files(output_dir) if output_dir else []
+        log_path = str(self.log_path_provider("lcr_debug.log"))
+        return self.collect_use_case.execute(
+            last_run_context.get("image_name", ""),
+            last_run_context.get("script_path", ""),
+            param_payload=last_run_context.get("param_payload", {}),
+            input_files=last_run_context.get("input_files", []),
+            output_files=output_files if exit_code == 0 else [],
+            log_path=log_path if Path(log_path).exists() else None,
+        )
+
+    def _collect_output_files(self, output_dir):
+        out_dir = Path(output_dir)
+        if not out_dir.exists():
+            return []
+        return [str(path) for path in out_dir.rglob("*") if path.is_file()]

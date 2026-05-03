@@ -142,3 +142,43 @@ class RuntimeExecutionPreparationUseCase:
             check=False,
         )
         return result.returncode == 0
+
+    def prepare_execution(
+        self,
+        analyzer,
+        container_manager,
+        code_text: str,
+        script_path: str,
+        data_dir: Optional[str],
+        output_dir: Optional[str],
+        selected_rule: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        feature = analyzer.analyze(code_text)
+        search_terms = feature.imports + feature.keywords
+        if feature.validation_year:
+            search_terms.append(f"year:{feature.validation_year}")
+
+        runtime_rule = selected_rule or container_manager.resolve_runtime(search_terms, feature.version_hint)
+        reasons: List[str] = []
+        if feature.validation_year:
+            reasons.append(f"Validation Year ({feature.validation_year}) detected")
+        matches = [t for t in runtime_rule.get("triggers", []) if t in search_terms]
+        if matches:
+            reasons.append(f"Triggers {matches} detected")
+        match_libs = set(runtime_rule.get("libs", [])).intersection(set(search_terms))
+        if match_libs:
+            reasons.append(f"Libraries {sorted(match_libs)} matched")
+
+        config = container_manager.prepare_run_config(
+            analyzer.summary(code_text),
+            script_path,
+            data_dir=data_dir,
+            output_dir=output_dir,
+            override_image_rule=runtime_rule,
+        )
+        return {
+            "feature": feature,
+            "selected_rule": runtime_rule,
+            "config": config,
+            "reason_text": " / ".join(reasons) if reasons else "Default selection",
+        }

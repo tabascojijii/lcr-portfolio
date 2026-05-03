@@ -10,7 +10,6 @@ connecting the CodeAnalyzer, ContainerManager, and ContainerWorker.
 """
 
 import sys
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -30,7 +29,8 @@ from lcr.core.container.use_cases import (
 )
 from lcr.core.history.use_cases import SaveExecutionHistoryUseCase
 from lcr.core.detector.use_cases import CodeAnalysisUseCase
-from lcr.core.audit.use_cases import CollectAuditMetadataUseCase
+from lcr.core.audit.use_cases import CollectAuditMetadataUseCase, PrepareAuditMetadataUseCase
+from lcr.core.results.use_cases import LoadResultArtifactsUseCase
 from lcr.utils.path_helper import get_log_path
 from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 from lcr.ui.workers import ContainerWorker
@@ -71,6 +71,10 @@ class MainWindow(QMainWindow):
         self.collect_audit_metadata_use_case = CollectAuditMetadataUseCase(
             self.history_manager, self.audit_metadata_service
         )
+        self.prepare_audit_metadata_use_case = PrepareAuditMetadataUseCase(
+            self.collect_audit_metadata_use_case, get_log_path
+        )
+        self.load_result_artifacts_use_case = LoadResultArtifactsUseCase()
         self.worker = None
         self.current_output_dir = None
         self.selection_mode = 'Auto'
@@ -287,11 +291,6 @@ class MainWindow(QMainWindow):
         # Add right pane to splitter
         splitter.addWidget(right_widget)
         splitter.setSizes([600, 400])
-
-    def _to_project_relative_path(self, path_str: str) -> str:
-        """Convert a path to a project-root-relative path string."""
-        project_root = Path(__file__).resolve().parents[3]
-        return Path(os.path.relpath(path_str, project_root)).as_posix()
 
     def _refresh_env_list(self):
         """Reload definitions and update runtime combo dropdown."""
@@ -654,73 +653,41 @@ class MainWindow(QMainWindow):
         self.console_log.append("Preparing container environment...")
         
         try:
-            # 3. Analyze for Image Selection (refresh to be sure)
-            feature = self.analyzer.analyze(current_content)
-            
-            # Select Image based on analysis
-            # Using new resolve_runtime methodology
-            version_hint = feature.version_hint
-            search_terms = feature.imports + feature.keywords
-            if feature.validation_year:
-                 search_terms.append(f"year:{feature.validation_year}")
-            
-            # 4. Config
-            # Note: prepare_run_config internally calls select_image/resolve_runtime 
-            # We will use it directly to get standard config but we can double check the reasoning here for display
-            
-            # Get reasoning explicitly for UI display
-            # If Manual, use the ComboBox selected item
             idx = self.runtime_combo.currentIndex()
             if idx >= 0:
-                 selected_rule = self.runtime_combo.itemData(idx, Qt.UserRole)
+                selected_rule = self.runtime_combo.itemData(idx, Qt.UserRole)
             else:
-                 selected_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
+                selected_rule = None
 
             # Manual Compatibility Check UI
             if self.selection_mode == 'Manual':
-                 rule_ver = selected_rule.get('version', 'unknown')
-                 feature = self.analyzer.analyze(current_content)
-                 code_ver = feature.version_hint
-                 
-                 if not self.container_manager.is_version_compatible(code_ver, rule_ver):
-                     res = QMessageBox.warning(
-                         self, 
-                         "Compatibility Warning",
-                         f"You selected {rule_ver} but the code appears to be {code_ver}.\n\nUsage mistakes may cause errors. Continue?",
-                         QMessageBox.Yes | QMessageBox.No,
-                         QMessageBox.No
-                     )
-                     if res == QMessageBox.No:
-                         self._reset_buttons()
-                         self.runtime_combo.setEnabled(True)
-                         return
-            
-            # Construct explanation
-            
-            # Construct explanation
-            reasons = []
-            if feature.validation_year:
-                reasons.append(f"Validation Year ({feature.validation_year}) detected")
-            
-            matches = [t for t in selected_rule.get('triggers', []) if t in search_terms]
-            if matches:
-                reasons.append(f"Triggers {matches} detected")
-                
-            match_libs = set(selected_rule.get('libs', [])).intersection(set(search_terms))
-            if match_libs:
-                reasons.append(f"Libraries {list(match_libs)} matched")
-                
-            reason_text = " / ".join(reasons) if reasons else "Default selection"
+                probe = self.analyzer.analyze(current_content)
+                rule_ver = selected_rule.get('version', 'unknown') if selected_rule else "unknown"
+                if not self.container_manager.is_version_compatible(probe.version_hint, rule_ver):
+                    res = QMessageBox.warning(
+                        self,
+                        "Compatibility Warning",
+                        f"You selected {rule_ver} but the code appears to be {probe.version_hint}.\n\nUsage mistakes may cause errors. Continue?",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No
+                    )
+                    if res == QMessageBox.No:
+                        self._reset_buttons()
+                        self.runtime_combo.setEnabled(True)
+                        return
 
-            # Use Manager to prepare config
-            # Check for image existence before running
-            config = self.container_manager.prepare_run_config(
-                self.analyzer.summary(current_content), 
-                script_path, 
+            prepared = self.runtime_use_case.prepare_execution(
+                self.analyzer,
+                self.container_manager,
+                current_content,
+                script_path,
                 data_dir=data_dir,
                 output_dir=output_dir,
-                override_image_rule=selected_rule 
+                selected_rule=selected_rule,
             )
+            selected_rule = prepared["selected_rule"]
+            reason_text = prepared["reason_text"]
+            config = prepared["config"]
             
             # --- JIT Image Check ---
             # Try to verify if image exists using 'docker image inspect'
@@ -802,7 +769,7 @@ class MainWindow(QMainWindow):
             self.open_res_btn.setEnabled(False)
             self._clear_results_view()
             
-            output_dir_rel = self._to_project_relative_path(self.current_output_dir)
+            output_dir_rel = self.history_manager.to_relative_path(self.current_output_dir)
             self.console_log.append(f"Output Directory (Host): {output_dir_rel}")
             self.console_log.append(f"\n[Environment Decision Engine]")
             self.console_log.append(f"Selected Runtime: {selected_rule.get('name', config['image'])}")
@@ -882,7 +849,7 @@ class MainWindow(QMainWindow):
                     selection_mode=self.selection_mode,
                     selection_reason=reason,
                     image_tag="docker",
-                    audit_metadata=self._append_audit_metadata(exit_code),
+                    audit_metadata=self._build_audit_metadata(exit_code),
                 )
                 self._refresh_history_list()
                 self.console_log.append(f"[History] Record saved ({self.selection_mode}).")
@@ -895,7 +862,7 @@ class MainWindow(QMainWindow):
         
         if exit_code == 0 and self.current_output_dir:
             self.open_res_btn.setEnabled(True)
-            self._load_results(self.current_output_dir)
+            self._render_results(self.current_output_dir)
             
     def _clear_results_view(self):
         """Clear the content of the results preview tab."""
@@ -906,71 +873,58 @@ class MainWindow(QMainWindow):
             if widget:
                 widget.deleteLater()
     
-    def _load_results(self, output_dir_str):
-        """Scan output directory and display results."""
-        out_dir = Path(output_dir_str)
-        if not out_dir.exists():
+    def _render_results(self, output_dir_str):
+        """Render results preview from use-case data."""
+        result_data = self.load_result_artifacts_use_case.execute(output_dir_str)
+        if not result_data.get("exists"):
             return
-            
+
         found_files = False
-        
-        # Images
-        image_files = sorted(list(out_dir.glob("*.png")) + list(out_dir.glob("*.jpg")) + list(out_dir.glob("*.jpeg")))
-        if image_files:
+        image_paths = result_data.get("images", [])
+        if image_paths:
             found_files = True
-            self.res_content_layout.addWidget(QLabel(f"<b>Images ({len(image_files)}):</b>"))
-            for img_path in image_files:
+            self.res_content_layout.addWidget(QLabel(f"<b>Images ({len(image_paths)}):</b>"))
+            for image_path in image_paths:
+                img_path = Path(image_path)
                 lbl = QLabel()
                 pixmap = QPixmap(str(img_path))
                 if not pixmap.isNull():
-                    # Scale to fit width if too large
                     scaled_pix = pixmap.scaled(550, 550, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                     lbl.setPixmap(scaled_pix)
                     lbl.setToolTip(img_path.name)
                     lbl.setAlignment(Qt.AlignCenter)
-                    
-                    # Container for title + image
                     img_container = QGroupBox(img_path.name)
                     img_layout = QVBoxLayout()
                     img_layout.addWidget(lbl)
                     img_container.setLayout(img_layout)
                     self.res_content_layout.addWidget(img_container)
-        
-        # CSVs
-        csv_files = sorted(list(out_dir.glob("*.csv")))
-        if csv_files:
+
+        csv_previews = result_data.get("csv_previews", [])
+        if csv_previews:
             found_files = True
-            self.res_content_layout.addWidget(QLabel(f"<b>CSV Files ({len(csv_files)}):</b>"))
-            for csv_path in csv_files:
-                self.res_content_layout.addWidget(QLabel(f"📄 {csv_path.name}"))
-                # Simple preview of first 5 lines
-                try:
-                    with open(csv_path, 'r', encoding='utf-8') as f:
-                        lines = [f.readline().strip() for _ in range(5)]
-                        lines = [l for l in lines if l] # filter empty
-                        
-                    if lines:
-                        # Parse header
-                        headers = lines[0].split(',') # Basic split
-                        table = QTableWidget()
-                        table.setColumnCount(len(headers))
-                        table.setHorizontalHeaderLabels(headers)
-                        table.setRowCount(len(lines) - 1 if len(lines) > 1 else 0)
-                        
-                        for i, line in enumerate(lines[1:]):
-                            cols = line.split(',')
-                            for j, col in enumerate(cols):
-                                if j < len(headers):
-                                    table.setItem(i, j, QTableWidgetItem(col))
-                        
-                        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-                        table.setFixedHeight(150) # Limit height
-                        self.res_content_layout.addWidget(table)
-                except Exception:
+            self.res_content_layout.addWidget(QLabel(f"<b>CSV Files ({len(csv_previews)}):</b>"))
+            for preview in csv_previews:
+                self.res_content_layout.addWidget(QLabel(f"📄 {preview['name']}"))
+                if not preview.get("previewable", True):
                     self.res_content_layout.addWidget(QLabel("(Cannot preview CSV)"))
+                    continue
+                headers = preview.get("headers", [])
+                rows = preview.get("rows", [])
+                if not headers:
+                    continue
+                table = QTableWidget()
+                table.setColumnCount(len(headers))
+                table.setHorizontalHeaderLabels(headers)
+                table.setRowCount(len(rows))
+                for i, cols in enumerate(rows):
+                    for j, col in enumerate(cols):
+                        if j < len(headers):
+                            table.setItem(i, j, QTableWidgetItem(col))
+                table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+                table.setFixedHeight(150)
+                self.res_content_layout.addWidget(table)
 
         if found_files:
-            # Switch tab to notify user
             self.tabs.setCurrentIndex(1)
             self.console_log.append("[Info] Results detected and displayed in 'Results Preview' tab.")
         else:
@@ -985,18 +939,11 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.console_log.append(f"[Error] Failed to open folder: {e}")
 
-    def _append_audit_metadata(self, exit_code):
+    def _build_audit_metadata(self, exit_code):
         """Collect and append structured audit metadata."""
         try:
-            output_files = self._collect_output_files(self.current_output_dir) if self.current_output_dir else []
-            log_path = str(get_log_path("lcr_debug.log"))
-            metadata = self.collect_audit_metadata_use_case.execute(
-                self._last_run_context.get("image_name", ""),
-                self._last_run_context.get("script_path", ""),
-                param_payload=self._last_run_context.get("param_payload", {}),
-                input_files=self._last_run_context.get("input_files", []),
-                output_files=output_files if exit_code == 0 else [],
-                log_path=log_path if Path(log_path).exists() else None,
+            metadata = self.prepare_audit_metadata_use_case.execute(
+                self._last_run_context, self.current_output_dir, exit_code
             )
             self.console_log.append(f"[Audit] image_digest: {metadata['image_digest']}")
             self.console_log.append(f"[Audit] git_commit_hash: {metadata['git_commit_hash']}")
@@ -1011,12 +958,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.console_log.append(f"[Audit] metadata_collection_error: {e}")
             return {}
-
-    def _collect_output_files(self, output_dir):
-        out_dir = Path(output_dir)
-        if not out_dir.exists():
-            return []
-        return [str(p) for p in out_dir.rglob("*") if p.is_file()]
 
     def update_ui_state(self, state="idle"):
         """Centralized UI state management.
