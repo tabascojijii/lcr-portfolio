@@ -23,6 +23,19 @@ class EnvironmentDraft:
     base_images: List[Dict[str, Any]]
 
 
+@dataclass
+class ManualCompatibilityCheckResult:
+    requires_confirmation: bool
+    message: str
+
+
+@dataclass
+class MissingImageBuildDraft:
+    env_id: str
+    initial_config: Dict[str, Any]
+    recommendation_reason: str
+
+
 class EnvironmentDraftUseCase:
     """Prepare environment-creation inputs from code content."""
 
@@ -142,6 +155,58 @@ class RuntimeExecutionPreparationUseCase:
             check=False,
         )
         return result.returncode == 0
+
+    def prepare_manual_compatibility_check(
+        self,
+        analyzer,
+        container_manager,
+        code_text: str,
+        selected_rule: Optional[Dict[str, Any]],
+        selection_mode: str,
+    ) -> ManualCompatibilityCheckResult:
+        if selection_mode != "Manual" or not selected_rule:
+            return ManualCompatibilityCheckResult(False, "")
+
+        probe = analyzer.analyze(code_text)
+        rule_ver = selected_rule.get("version", "unknown")
+        compatible = container_manager.is_version_compatible(probe.version_hint, rule_ver)
+        if compatible:
+            return ManualCompatibilityCheckResult(False, "")
+
+        message = (
+            f"You selected {rule_ver} but the code appears to be {probe.version_hint}.\n\n"
+            "Usage mistakes may cause errors. Continue?"
+        )
+        return ManualCompatibilityCheckResult(True, message)
+
+    def prepare_missing_image_build_draft(
+        self,
+        analyzer,
+        container_manager,
+        code_text: str,
+        selected_rule: Dict[str, Any],
+    ) -> MissingImageBuildDraft:
+        env_id = selected_rule["id"]
+        existing_config = container_manager.get_definition(env_id)
+        if existing_config:
+            initial_config = dict(existing_config)
+            initial_config["id"] = env_id
+            initial_config["tag"] = env_id
+            return MissingImageBuildDraft(
+                env_id=env_id,
+                initial_config=initial_config,
+                recommendation_reason="Rebuilding existing definition (Image not built)",
+            )
+
+        analysis = analyzer.summary(code_text)
+        synthesized_config = container_manager.synthesize_definition_config(analysis, env_id)
+        synthesized_config["id"] = env_id
+        synthesized_config["tag"] = env_id
+        return MissingImageBuildDraft(
+            env_id=env_id,
+            initial_config=synthesized_config,
+            recommendation_reason="Synthesized from code analysis (Missing Image)",
+        )
 
     def prepare_execution(
         self,

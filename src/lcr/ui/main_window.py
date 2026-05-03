@@ -659,22 +659,25 @@ class MainWindow(QMainWindow):
             else:
                 selected_rule = None
 
-            # Manual Compatibility Check UI
-            if self.selection_mode == 'Manual':
-                probe = self.analyzer.analyze(current_content)
-                rule_ver = selected_rule.get('version', 'unknown') if selected_rule else "unknown"
-                if not self.container_manager.is_version_compatible(probe.version_hint, rule_ver):
-                    res = QMessageBox.warning(
-                        self,
-                        "Compatibility Warning",
-                        f"You selected {rule_ver} but the code appears to be {probe.version_hint}.\n\nUsage mistakes may cause errors. Continue?",
-                        QMessageBox.Yes | QMessageBox.No,
-                        QMessageBox.No
-                    )
-                    if res == QMessageBox.No:
-                        self._reset_buttons()
-                        self.runtime_combo.setEnabled(True)
-                        return
+            compatibility = self.runtime_use_case.prepare_manual_compatibility_check(
+                self.analyzer,
+                self.container_manager,
+                current_content,
+                selected_rule,
+                self.selection_mode,
+            )
+            if compatibility.requires_confirmation:
+                res = QMessageBox.warning(
+                    self,
+                    "Compatibility Warning",
+                    compatibility.message,
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if res == QMessageBox.No:
+                    self._reset_buttons()
+                    self.runtime_combo.setEnabled(True)
+                    return
 
             prepared = self.runtime_use_case.prepare_execution(
                 self.analyzer,
@@ -710,42 +713,21 @@ class MainWindow(QMainWindow):
                 
                 
                 if ans == QMessageBox.Yes:
-                    # [FIX] Prioritize loading existing definition by environment ID
-                    env_id = selected_rule['id']  # User-selected environment (e.g., "3.10test5")
-                    
-                    # Try to load existing definition first
-                    existing_config = self.container_manager.get_definition(env_id)
-                    
-                    if existing_config:
-                        # Existing definition found - use it with ID injection
-                        print(f"[UI] Loading existing definition for: {env_id}")
-                        existing_config['id'] = env_id
-                        existing_config['tag'] = env_id
-                        
-                        dialog = EnvironmentCreationDialog(
-                            parent=self,
-                            manager=self.container_manager,
-                            base_images=self.container_manager.get_available_runtimes(),
-                            initial_config=existing_config,
-                            recommended_base_id=env_id,
-                            recommendation_reason="Rebuilding existing definition (Image not built)"
-                        )
-                    else:
-                        # No definition exists - synthesize from code analysis
-                        print(f"[UI] Definition not found for '{env_id}', synthesizing from code analysis")
-                        analysis = self.analyzer.summary(current_content)
-                        synthesized_config = self.container_manager.synthesize_definition_config(analysis, env_id)
-                        synthesized_config['id'] = env_id
-                        synthesized_config['tag'] = env_id
-                        
-                        dialog = EnvironmentCreationDialog(
-                            parent=self,
-                            manager=self.container_manager,
-                            base_images=self.container_manager.get_available_runtimes(),
-                            initial_config=synthesized_config,
-                            recommended_base_id=env_id,
-                            recommendation_reason="Synthesized from code analysis (Missing Image)"
-                        )
+                    build_draft = self.runtime_use_case.prepare_missing_image_build_draft(
+                        self.analyzer,
+                        self.container_manager,
+                        current_content,
+                        selected_rule,
+                    )
+                    env_id = build_draft.env_id
+                    dialog = EnvironmentCreationDialog(
+                        parent=self,
+                        manager=self.container_manager,
+                        base_images=self.container_manager.get_available_runtimes(),
+                        initial_config=build_draft.initial_config,
+                        recommended_base_id=env_id,
+                        recommendation_reason=build_draft.recommendation_reason
+                    )
                     
                     # Handle dialog result
                     if dialog.exec():
