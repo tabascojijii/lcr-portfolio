@@ -67,6 +67,17 @@
 - 監査証跡テンプレートを固定する。
   - `input_artifacts` / `checked_constraints` / `findings` / `severity` / `routing` / `recheck_conditions`
 
+### 2.5 Audit Report 反映: 「重大指摘なし」を維持する予防統制
+- `docs/audit_report.md` の検証結果（ガバナンス/再現性/データ完全性/UI境界の4系統）を、各フェーズ完了条件にトレースして維持する。
+- 監査結果が PASS でも「未対策扱い」を禁止し、以下を継続義務とする。
+  - EMCS（M1-M5）を CI で定量出力し、閾値逸脱時は即 fail
+  - REJECT 処方テンプレートの必須項目欠落を schema 検証で fail
+  - Docker 再現性4要件（digest固定/アーカイブAPT/constraints/マルチステージ）を静的検査で fail-fast
+  - ALCOA++ 監査証跡（相対パス・ハッシュ完全化・`git_commit_hash`・image digest）の欠落を fail
+- 監査レポート運用ルール:
+  - 各フェーズ完了時に `docs/audit_report.md` を更新し、`checked_constraints` と `evidence` をフェーズ単位で追記する。
+  - 判定が PASS の場合でも、次フェーズへは「証拠付き PASS」のみ進行可とする。
+
 ## 3. 実装フェーズ計画
 
 ### Phase A: 設計固定（実装前ゲート）
@@ -87,6 +98,7 @@
   - EOL向けAPTアーカイブリポジトリへのリダイレクト
   - `constraints.txt` による pip 依存解決範囲固定
   - OpenCV等を想定したマルチステージビルド強制
+- 監査エビデンス出力（`docs/audit_report.md`）に、4系統基準ごとの `checked_constraints` と証拠リンクが追記済み。
 
 ### Phase B: Phase 5（Validation Guardrails）実装
 実装対象:
@@ -100,6 +112,7 @@
 完了条件:
 - AC-1〜AC-5 全充足
 - T5-1〜T5-4 自動テスト追加・pass
+- required/capability/mismatch/guard の監査レコードがスキーマ検証を通過（欠落0件）
 
 ### Phase C: Phase 6（Lifecycle Management）実装
 実装対象:
@@ -114,6 +127,7 @@
 完了条件:
 - AC6-1〜AC6-7 全充足
 - T6-1〜T6-6 自動テスト追加・pass
+- 削除/編集/クリーンアップ操作の監査レコードがスキーマ検証を通過（欠落0件）
 
 ### Phase D: アーキテクチャ収束と負債返済
 実装対象:
@@ -126,6 +140,7 @@
 - 依存方向違反 0 件
 - UI 層の外部I/O直接呼び出し 0 件
 - 主要 UseCase の単体テストで UI 非依存実行可能
+- `docs/audit_report.md` で Architecture 分類の未解決 finding が 0 件
 
 ## 4. 実施順序（再発防止重視）
 1. Phase A（設計固定）を完了するまで実装コード変更を最小化する。
