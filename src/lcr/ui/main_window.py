@@ -10,6 +10,7 @@ connecting the CodeAnalyzer, ContainerManager, and ContainerWorker.
 """
 
 import sys
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -279,6 +280,11 @@ class MainWindow(QMainWindow):
         # Add right pane to splitter
         splitter.addWidget(right_widget)
         splitter.setSizes([600, 400])
+
+    def _to_project_relative_path(self, path_str: str) -> str:
+        """Convert a path to a project-root-relative path string."""
+        project_root = Path(__file__).resolve().parents[3]
+        return Path(os.path.relpath(path_str, project_root)).as_posix()
 
     def _refresh_env_list(self):
         """Reload definitions and update runtime combo dropdown."""
@@ -803,7 +809,8 @@ class MainWindow(QMainWindow):
             self.open_res_btn.setEnabled(False)
             self._clear_results_view()
             
-            self.console_log.append(f"Output Directory (Host): {self.current_output_dir}")
+            output_dir_rel = self._to_project_relative_path(self.current_output_dir)
+            self.console_log.append(f"Output Directory (Host): {output_dir_rel}")
             self.console_log.append(f"\n[Environment Decision Engine]")
             self.console_log.append(f"Selected Runtime: {selected_rule.get('name', config['image'])}")
             self.console_log.append(f"Reason: {reason_text}")
@@ -817,7 +824,7 @@ class MainWindow(QMainWindow):
             
             self.worker.log_updated.connect(self._on_worker_output)
             self.worker.error_occurred.connect(self._on_worker_error)
-            self.worker.finished_with_code.connect(self._on_worker_finished)
+            self.worker.executionFinished.connect(self._on_worker_finished)
             self.worker.finished.connect(self._ensure_ui_reset)  # Backup cleanup
             
             self.worker.start()
@@ -1161,7 +1168,7 @@ class MainWindow(QMainWindow):
         )
         self.worker.log_updated.connect(self._on_worker_output)
         self.worker.error_occurred.connect(self._on_worker_error)
-        self.worker.finished_with_code.connect(self._on_worker_finished)
+        self.worker.executionFinished.connect(self._on_worker_finished)
         self.worker.start()
 
     def closeEvent(self, event):

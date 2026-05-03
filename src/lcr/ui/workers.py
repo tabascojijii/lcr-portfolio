@@ -123,7 +123,7 @@ class ContainerWorker(QThread):
 
     log_updated = Signal(str)
     error_occurred = Signal(str)
-    finished_with_code = Signal(int)
+    executionFinished = Signal(int)
 
     def __init__(self, docker_args: List[str], script_name: str = "script", parent=None):
         super().__init__(parent)
@@ -131,7 +131,7 @@ class ContainerWorker(QThread):
 
     def run(self):
         exit_code = self._service.execute(self.log_updated.emit, self.error_occurred.emit)
-        self.finished_with_code.emit(exit_code)
+        self.executionFinished.emit(exit_code)
 
     def stop(self):
         self._service.stop()
