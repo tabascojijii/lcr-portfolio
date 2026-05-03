@@ -8,12 +8,18 @@
 ## 1. Non-Negotiable Architecture & Integrity Constraints
 
 ### 1.1 Dependency Direction (Hard Constraint)
-- 許可依存: `UI -> UseCase -> Domain -> Infrastructure`。
+- 依存規則の矢印定義: 本章の `A -> B` は「A が B を静的依存（import/type参照）してよい」を意味する。
+- 許可依存（静的依存）:
+  - `UI -> UseCase`
+  - `UseCase -> Domain`
+  - `Infrastructure -> Domain`
+  - `Infrastructure -> UseCase`（UseCase/Domain が定義した Port の実装参照に限定）
 - 禁止依存:
   - `UseCase -> Qt`（明示禁止）
   - `Domain -> Qt`
   - `Domain -> Infrastructure`
-  - `UI -> Domain` の直接到達（UseCase経由を強制）
+  - `UseCase -> Infrastructure`（実装詳細への直接依存禁止）
+  - `UI -> Domain` の直接依存（UseCase経由を強制）
 - 境界越えは `Port/Interface (abc.ABC or typing.Protocol)` 経由のみ。
 
 ### 1.2 Humble Object Constraint (Hard Constraint)
