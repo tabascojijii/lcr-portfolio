@@ -151,9 +151,9 @@
 - 依存方向違反・責務混在・Port未使用箇所を特定し、段階的な改善計画を策定する。
 
 ### 2. 成果物（必須）
-- `docs/architecture_decoupling_assessment.md`
+- `artifacts/architecture_decoupling_assessment.md`
   - 現状のアーキテクチャ評価結果（違反一覧、影響、優先度）を記載すること。
-- `docs/refactoring_proposal.md`
+- `artifacts/refactoring_proposal.md`
   - 改善方針、段階的移行計画、テスト戦略、リスク対策を記載すること。
 
 ### 3. 検証観点（必須）
