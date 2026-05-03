@@ -1,32 +1,37 @@
 # Audit Report (Auditor)
 
 - Audit Date: 2026-05-04
-- Target: `docs/roadmap.md`
-- Absolute Criteria: `docs/plan.md`, `docs/reference_standards.md`
+- Target: `src/`, `tests/`, `artifacts/`
+- Absolute Criteria: `docs/reference_standards.md`, `docs/requirements.md` (Phase 6.1)
 
-## Verdict
-- 判定: **PASS**
-- 結論: `docs/roadmap.md` は、`docs/plan.md` の必須制約および `docs/reference_standards.md` の絶対基準に対して、重大な欠落・矛盾・緩和表現なしで整合している。
+## Step 1: Pytest Result
+- Command: `pytest tests/`
+- Result: **PASS**
+- Summary: `47 passed in 1.69s`
 
-## Validation Summary
-- 監査/ガバナンス:
-  - Builder/Validator分離、Validator入力境界（`requirements` と `diff` 限定）、REJECT時の処方的出力要件を満たす。
-- Docker再現性:
-  - `FROM` ダイジェスト固定、EOL APTアーカイブ、`constraints.txt`、マルチステージビルドを明記。
-- データ完全性:
-  - ハッシュ4区分（`all_input_files`/`all_output_files`/`all_parameter_files`/`audit_log_record`）と `container_image_digest`/`git_commit_hash` を明記。
-  - 相対パス強制と絶対パス禁止を明記。
-- アーキテクチャ境界:
-  - 許可依存・禁止依存（`UseCase -> Qt` 禁止含む）と Port/Protocol 経由制約を明記。
-  - UI Humble Object制約（業務判断・複雑計算・業務フォーマット・I/O等の禁止）を明記。
-  - シグナル/スロット命名規約を明記。
-- 同期運用:
-  - `audit_report.md` と `plan.md` の制約差分チェック、および監査更新日との再監査条件を明記。
-- RC維持:
-  - RC-1〜RC-3の固定化と縮退禁止を明記。
+## Step 2-3: Standards/Requirements Validation
 
-## Findings
-- 指摘事項なし（REJECT_TO_PM 該当 0件）。
+### Confirmed
+- `artifacts/architecture_decoupling_assessment.md` exists.
+- `artifacts/refactoring_proposal.md` exists.
+- Phase 6.1 AC6.1-1: violations are listed with `file path + 関数/クラス + 違反種別 + 根拠`.
+- Phase 6.1 AC6.1-3: priority plan `P0/P1/P2` is present.
+- Phase 6.1 AC6.1-4: verification strategy (tests/structural checks) is present.
+- Docker digest policy traces exist in generated Dockerfiles and tests are passing.
 
-## Final Decision
-- `AUDIT_PASS_ROADMAP`
+### Violations / Gaps
+1. **Phase 6.1 成果物要件違反（refactoring proposal の記載不足）**
+   - Requirement: `docs/requirements.md` Phase 6.1 「成果物（必須）」にて、`artifacts/refactoring_proposal.md` は「改善方針、段階的移行計画、テスト戦略、**リスク対策**」を記載すること。
+   - Finding: `artifacts/refactoring_proposal.md` には改善方針・P0/P1/P2計画・検証はあるが、`リスク対策` セクションまたは同等の明示記述がない。
+   - Impact: 変更時の失敗モード（段階移行中の互換性、ロールバック、監査ログ欠損時の扱い等）に対する制御が不明確で、受け入れ条件の「必須成果物要件」を満たさない。
+   - Prescriptive fix:
+     - `artifacts/refactoring_proposal.md` に `Risk Mitigation` セクションを追加し、最低限以下を定義すること。
+     - 段階移行中の後方互換維持策（Feature flag/adapter/dual-path）
+     - ロールバック条件と手順
+     - 監査ログ欠損・部分失敗時のフェイルセーフ
+     - 境界違反再発防止の自動テスト/静的チェック運用
+
+## Final Verdict
+- 判定: **REJECT**
+- Reason: テストは全件Passだが、Phase 6.1 の成果物必須要件（`refactoring_proposal.md` のリスク対策明示）に不適合。
+- Required status: `REJECT_TO_IMPLEMENT`
