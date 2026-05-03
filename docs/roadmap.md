@@ -16,6 +16,8 @@
 - 抽象化規律: 境界越え通信は `abc.ABC` または `typing.Protocol` を必須とする。
 - 監査証跡: `git_commit_hash`、image digest、相対パス、SHA-256（入力/出力/パラメータ/監査ログ）を必須化。
 - 再現性: Docker `FROM` digest固定、EOL向けAPTアーカイブ、`constraints.txt`、マルチステージビルドを必須化。
+- 危険操作統制: 削除/強制削除はデフォルト禁止。明示解除は承認済みUseCase経由のみ許可し、解除理由、承認者、対象ID、実行ID、UTC時刻、解除スコープを監査ログへ必須記録する。
+- Builder/Validator分離運用: Auditor入力は「要件文書」「参照規約」「変更差分+成果物」の3点に限定し、Builderの思考過程/下書き/私的メモ共有を禁止する。証拠なき口頭補足による合否変更を禁止する。
 
 ## 2. フェーズ計画
 
@@ -36,6 +38,7 @@
 - UI/UseCase/Infra違反が `file path + class/function + violation + evidence` 形式で列挙済み。
 - 改善項目に優先度（P0/P1/P2）と移管先レイヤーが付与済み。
 - Docker再現性4要件が非交渉ルールとして明文化済み。
+- `docs/audit_report.md` にフェーズ単位の `checked_constraints` と `evidence` 追記ルールが明文化され、以後の進行条件を「証拠付きPASS」に固定済み。
 
 ### Phase B: Phase 5（Validation Guardrails）
 目的:
@@ -71,6 +74,7 @@
 - AC6-1〜AC6-7 充足。
 - T6-1〜T6-6 追加・pass。
 - 削除/編集/クリーンアップ監査レコードの必須項目欠落0件。
+- 危険操作（削除/強制削除）のデフォルト禁止が有効であり、明示解除時は解除条件と監査証跡必須項目の欠落0件。
 
 ### Phase D: Phase 6.1（アーキテクチャ収束）
 目的:
@@ -120,6 +124,8 @@
 - M3 禁止API呼び出し件数 = 0
 - M4 循環依存件数 = 0
 - M5 REJECTテンプレート欠落項目数 = 0
+- Builder/Validator分離違反（監査入力3点逸脱、思考過程共有、証拠なき合否変更）: 1件以上でfail。
+- `docs/audit_report.md` フェーズ追記義務違反（`checked_constraints` または `evidence` 欠落）: 1件以上でfail。
 - いずれか閾値超過時は `REJECT_TO_ARCHITECT` を返却。
 
 ## 4. REJECT運用標準
