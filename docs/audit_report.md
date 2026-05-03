@@ -1,51 +1,44 @@
-# Audit Report: docs/plan.md vs docs/reference_standards.md
+# Audit Report
 
-## 判定
-- 結果: **REJECT_TO_ARCHITECT**
-- 理由: `docs/plan.md` は多くの要件を満たすが、絶対基準 `docs/reference_standards.md` の必須項目に対して未充足が残存しているため。
+## Verdict
+- 判定: 問題なし（PASS）
+- 理由: `docs/plan.md` は `docs/reference_standards.md` の必須規約を網羅し、禁止事項・必須検証項目・REJECT時の処方的要件まで具体化されている。
 
-## 指摘事項（重大度順）
+## Compliance Check Results
 
-1. **[重大] Docker再現性標準の必須項目が計画に不在**
-- 基準根拠: 2章「EOLスタックのコンテナ化およびビルド再現性標準」
-  - `FROM` のSHA256ダイジェスト固定
-  - EOL向けAPTのアーカイブリダイレクト
-  - `constraints.txt` によるpipバックトラッキング抑止
-  - OpenCV等ビルド時のマルチステージビルド
-- 観測事実: `docs/plan.md` に上記4点を実装計画・検証計画として明文化した記述がない。
-- 影響: 「100%確実な再現性」の中核要件が監査可能な形で担保されない。
-- 修正指示:
-  - Work BreakdownにDocker基準専用タスクを追加。
-  - Verification Planに各項目の静的/実行検証（例: Dockerfile lint + 実ビルド検証）を追加。
+### 1. 監査およびマルチエージェント・ガバナンス標準
+- 適合。
+- 根拠:
+  - EMCSに基づく客観メトリクス（M1〜M5）と閾値/REJECT条件を明示。
+  - Builder/Validator分離を明示し、監査入力を `requirements` と `diff` に限定。
+  - REJECT時の必須出力（失敗箇所・違反制約・観測証拠・修正ヒント・再検証条件・ルーティング先）を規定。
 
-2. **[重大] 監査ガバナンスのBuilder/Validator分離要件が未規定**
-- 基準根拠: 1章「Builder/Validatorの分離」
-- 観測事実: `docs/plan.md` は依存規約やCIゲートを規定しているが、「要件とDiffのみを入力に敵対的レビューする運用境界」を明示していない。
-- 影響: 監査の独立性が曖昧となり、サイレント逸脱検知能力が低下する。
-- 修正指示:
-  - 監査プロセス章を追加し、Auditor入力制約（requirements + diffのみ）を明文化。
-  - CI/運用で分離担保する手順を追記。
+### 2. EOLスタックのコンテナ化およびビルド再現性標準
+- 適合。
+- 根拠:
+  - `FROM` のSHA256ダイジェスト固定を必須化。
+  - EOL向けAPTアーカイブリポジトリへのリダイレクトを必須化。
+  - `constraints.txt` によるpip依存解決制約を必須化。
+  - ネイティブビルドに対するマルチステージビルド必須化。
 
-3. **[中] 客観評価（EMCSモデル相当）の判定メトリクス定義不足**
-- 基準根拠: 1章「客観的アーキテクチャ評価 (EMCSモデル)」
-- 観測事実: `docs/plan.md` には違反0件等のゲートはあるが、重大度判定の客観メトリクス（例: SRP違反閾値、複雑度閾値、違反分類規則）が不足。
-- 影響: 判定再現性が監査者依存となるリスク。
-- 修正指示:
-  - 監査判定表（違反タイプ、測定方法、閾値、判定）を追加。
+### 3. データ完全性と監査証跡標準
+- 適合。
+- 根拠:
+  - ハッシュ対象4区分（入力/出力/パラメータ/監査ログ）を全件必須化。
+  - 実行ログへの `container_image_digest` と `git_commit_hash` 記録を必須化。
+  - 相対パス強制および絶対パス検出時Fail-fastを規定。
 
-4. **[中] PyQt/PySideシグナル・スロット命名規約の担保計画が欠落**
-- 基準根拠: 4章「シグナル・スロットの命名規則」
-- 観測事実: `docs/plan.md` にはHumble Objectや依存方向はあるが、命名規約（シグナル=過去分詞、スロット=動詞）に対する実装/検査タスクがない。
-- 影響: UI層規律の一貫性要件が未達となる。
-- 修正指示:
-  - 命名規約チェック（静的検査またはレビューゲート）をP0/Structural Testsへ追加。
+### 4. PyQt / PySide モダンUIアーキテクチャ標準
+- 適合。
+- 根拠:
+  - Humble Object規約としてUI層の業務判断・I/O・複雑計算・業務フォーマットを禁止。
+  - 依存方向規約として `UseCase -> Qt` / `Domain -> Qt` 等を禁止。
+  - 境界越え通信を `abc.ABC` / `typing.Protocol` 経由に限定。
+  - シグナル（過去分詞）/スロット（動詞始まり）命名規約をCI検査対象として明示。
 
-## 参考（適合している主項目）
-- UseCase->Qt禁止、UI->Domain禁止、Port経由強制の方向性は基準に整合。
-- Humble Object趣旨（UIの責務制限）は概ね整合。
-- Data Integrity 4区分ハッシュ、digest/git hash、相対パス強制は整合。
-- REJECT時のルーティング方針は明示されている。
+## Findings
+- 重大/中程度/軽微いずれの違反も検出なし。
 
-## 最終結論
-- 絶対基準に対し未充足項目が残るため、本計画は現時点で承認不可。
-- 判定: **REJECT_TO_ARCHITECT**
+## Conclusion
+- `docs/plan.md` は `docs/reference_standards.md` に対して監査基準上の逸脱なし。
+- 最終判定: `AUDIT_PASS_PLAN`
