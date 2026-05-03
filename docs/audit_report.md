@@ -1,52 +1,53 @@
 # Audit Report
 
-## 1. Pytest Result
+## 1) pytest 実行結果
 
-Command: `pytest tests/`
+実行コマンド: `pytest tests/`
 
-Result summary:
-- collected: 34
-- passed: 34
-- failed: 0
-- error: 0
+結果:
+- `34 passed in 1.69s`
+- Fail/ERROR はなし
 
-Execution log (excerpt):
-```text
-============================= test session starts =============================
-platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0
-rootdir: C:\dev\lcr
-collected 34 items
-...
-============================= 34 passed in 1.54s ==============================
-```
+## 2) 基準照合結果（docs/reference_standards.md vs src/, tests/）
 
-## 2. Standards Compliance Audit (docs/reference_standards.md)
+判定: **REJECT（基準違反あり）**
 
-### Finding A (REJECT): PyQt/PySide Humble Object pattern violation
-- Standard: `4. PyQt / PySide モダンUIアーキテクチャ標準` の `Humble Object パターンの適用`
-- Reason:
-  - View(UI) がユースケース調停・環境選定・ビルド分岐・履歴保存指示まで直接実行しており、UI層に業務ロジックが集中している。
-  - `MainWindow` が肥大化しており、Presenter/ViewModel相当への移譲が不十分。
-- Evidence:
-  - `src/lcr/ui/main_window.py:617` (`_run_container`) で runtime解決、互換判定、build/run分岐を実行
-  - `src/lcr/ui/main_window.py:446` (`_show_create_env_dialog`) で推奨環境解決・定義合成を直接実行
-  - `src/lcr/ui/main_window.py:879` で履歴保存ユースケースをUIから直接実行
-- Required fix:
-  - 実行準備・環境解決・JIT build判定・履歴保存指示を Presenter / Application Service に移し、Viewは入力収集と表示更新に限定すること。
+### 指摘1: Data Integrity基準（3章）の未充足
+- 違反基準:
+  - 「すべての入出力データ、パラメータファイル、および実行ログ自体に暗号学的ハッシュを適用」
+- 根拠:
+  - `AuditMetadataService.collect` が出力しているハッシュは `script_sha256` のみで、入出力データ・パラメータファイル・実行ログ自体のハッシュ記録がない。
+  - 参照: `src/lcr/core/audit/metadata_service.py`（`collect` の返却キー）
+  - 参照: `src/lcr/ui/main_window.py:980`-`983`（ログ出力項目が image/git/path/script の4項目のみ）
+- 影響:
+  - ALCOA++想定の改ざん検知範囲が不足し、証跡の完全性が不足。
+- 修正指示:
+  - `collect` に以下を追加すること。
+    1. 実行時パラメータ（例: 実行設定JSON）のSHA-256
+    2. 主要入力データ群（少なくとも実行対象として参照したファイル群）のSHA-256
+    3. 主要出力成果物（生成後）のSHA-256
+    4. 実行ログファイル本体のSHA-256
+  - 追加項目を履歴保存先にも構造化保存し、テストで検証すること。
 
-### Finding B (REJECT): Interface discipline erosion via private API call from UI
-- Standard: `4. ... インターフェースによる規律`
-- Reason:
-  - UIから `ContainerManager` の private 相当メソッドへ直接アクセスしており、抽象境界が破れている。
-- Evidence:
-  - `src/lcr/ui/main_window.py:692` で `self.container_manager._check_version_compat(...)` を直接呼び出し
-  - `src/lcr/ui/ports.py` の `ContainerManagerPort` に private 由来メソッドが含まれている (`_check_version_compat`, `_apply_legacy_pins`)
-- Required fix:
-  - 公開ユースケース/公開メソッドへ再設計し、UIから private/内部詳細を呼ばないこと。
+### 指摘2: PyQt/PySide UIアーキテクチャ基準（4章）違反の疑い（Humble Object / 依存分離）
+- 違反基準:
+  - Viewはロジックを極小化し、複雑処理はPresenter/ViewModel/UseCaseへ委譲すること。
+  - UI層は外側レイヤーとして、内側のユースケースを通じて操作すること。
+- 根拠:
+  - `MainWindow` が単一クラス内で分析実行、環境解決、定義生成、ビルド起動、履歴反映、監査追記などを広くオーケストレーションしており、責務が肥大化。
+  - 参照: `src/lcr/ui/main_window.py:407`（`_run_analysis`）、`src/lcr/ui/main_window.py:604`（`_run_container`）、`src/lcr/ui/main_window.py:1086`（`_execute_save_and_build`）
+  - さらにUI層が `generate_dockerfile`, `save_definition` を直接呼び出している。
+  - 参照: `src/lcr/ui/main_window.py:27`, `src/lcr/ui/main_window.py:1121`, `src/lcr/ui/main_window.py:1091`
+- 影響:
+  - Viewのテスト容易性低下、変更影響範囲拡大、回帰リスク増加。
+- 修正指示:
+  - ビルド準備・定義保存・Dockerfile生成・実行前判定をUseCaseへ移管し、UIは入力収集と表示更新に限定すること。
+  - `MainWindow` から直接 `generate_dockerfile/save_definition` を除去し、Port経由で呼ぶ構成に統一すること。
+  - 上記分離を担保するユニットテスト（UIモック＋UseCase単体）を追加すること。
 
-## 3. Final Judgment
+## 3) 総合判定
 
-- `pytest`: PASS
-- standards compliance: FAIL (重大違反あり)
+- pytest: Pass
+- 規約準拠: **Fail（上記2件）**
 
-Conclusion: **REJECT**
+最終判定: **REJECT_TO_IMPLEMENT**
