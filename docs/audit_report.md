@@ -1,29 +1,40 @@
-# 監査報告書
+# 監査報告書（Plan監査）
 
-## 判定
-- 総合判定: **REJECT**
-- ステータス: **REJECT_TO_ARCHITECT**
+## 監査対象
+- 基準: `docs/reference_standards.md`（絶対基準）
+- 被監査計画: `docs/plan.md`
 
-## 指摘事項（重大度順）
+## 総合判定
+- 判定: **問題なし（PASS）**
+- 返却ステータス: `AUDIT_PASS_PLAN`
 
-1. **[Major] PyQt/PySide シグナル・スロット命名規約の拘束が計画に未定義**  
-   - 対象基準: `docs/reference_standards.md` セクション4「シグナル・スロットの命名規則」  
-     - シグナルは過去分詞形（例: `dataChanged`）  
-     - スロットは動作を示す動詞（例: `update_display`）
-   - 事実: `docs/plan.md` では UI責務境界・Humble Object・Protocol/ABC は定義されているが、命名規約の実装拘束・検証項目（静的検査/レビュー基準/テスト）が明示されていない。
-   - 影響: UI層での命名一貫性が崩れ、イベント契約の可読性・監査再現性が低下する。絶対基準の「違反時Fail」方針に照らし未充足。
-   - 修正指示（処方）:
-     - `docs/plan.md` に以下を明示追加すること。
-       - 実装拘束: シグナル命名は過去分詞形、スロット命名は動詞開始。
-       - 検証拘束: 命名規約違反を検知する静的検査またはレビュー・チェックリストを Gate とテスト計画に追加。
-       - REJECT条件: 命名規約違反1件でもFail。
+## 検証結果（基準別）
 
-## 準拠確認（問題なし）
-- Docker再現性4要件（digest固定 / archive apt / constraints / multistage）: 計画に明示あり。
-- ALCOA++監査証跡（`image_digest`、`git_commit_hash`、各SHA-256、相対パス）: 計画に明示あり。
-- EMCS客観メトリクスと閾値: 計画に明示あり。
-- Builder/Validator分離および入力境界: 計画に明示あり。
-- UI/UseCase/Domain/Infra の依存方向・Humble Object・Interface経由: 計画に明示あり。
+### 1. 監査およびマルチエージェント・ガバナンス標準
+- 適合: EMCS客観メトリクス（SRP/循環依存/層逆流/複雑度/監査キー欠落）を閾値付きで明示。
+- 適合: Builder/Validator分離について、Validator入力境界（許可入力/禁止入力）を運用要件として固定。
+- 適合: REJECT時の処方的指示（違反箇所・根拠・修正条件・再検証手順）を必須化。
 
-## 最終結論
-- `docs/plan.md` は主要論点の多くを満たすが、絶対基準である PyQt/PySide 命名規約の拘束と検証設計が欠落しているため、現時点では承認不可。
+### 2. EOLスタックのコンテナ化およびビルド再現性標準
+- 適合: `FROM` のSHA256ダイジェスト固定、タグ禁止を明記。
+- 適合: EOL OS時のAPTアーカイブリダイレクトを明記。
+- 適合: `constraints.txt` 必須化を明記。
+- 適合: マルチステージビルド必須化を明記。
+- 適合: 静的検査・ビルド検証・監査証跡記録まで計画化。
+
+### 3. データ完全性と監査証跡
+- 適合: `image_digest` と `git_commit_hash` の記録を必須化。
+- 適合: `input/output/parameter/log` のSHA-256記録を必須化。
+- 適合: `relative_paths` を監査ログ必須キーとして明記し、相対パス運用を計画に組み込み。
+
+### 4. PyQt / PySide モダンUIアーキテクチャ標準
+- 適合: Humble Object徹底（UIは入力受理/表示更新/イベント中継に限定）を明記。
+- 適合: UI/UseCase/Domain/Infraの責務分離と依存方向制約（層逆流0件）を明記。
+- 適合: `Protocol` / `ABC` の必須化を明記。
+- 適合: シグナル過去分詞・スロット動詞開始の命名規約とCI/レビューゲートを明記。
+
+## 指摘事項
+- 重大/軽微を含め、`reference_standards.md` への違反は検出されず。
+
+## 監査結論
+`docs/plan.md` は、`docs/reference_standards.md` の絶対基準に対して、必要拘束条件・検証手段・REJECT条件を網羅しており、監査上の不適合は確認されなかった。
