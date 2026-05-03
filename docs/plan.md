@@ -1,202 +1,202 @@
 # Implementation Plan (Architect)
 
-## 0. Plan Purpose
-- 本計画は `docs/core_philosophy.md` / `docs/requirements.md` / `docs/reference_standards.md` に完全準拠し、`docs/post_mortem.md` の構造的欠陥を解消した実装順序と検証ゲートを定義する。
-- 対象フェーズは Phase 5, Phase 6, Phase 6.1。
-- 目的は「動作達成」ではなく「監査可能で再現可能な実装の成立」。
+## 0. Scope and Objective
+- 本計画は `docs/core_philosophy.md`、`docs/requirements.md`、`docs/reference_standards.md` に完全準拠し、`docs/post_mortem.md` で特定された構造的欠陥を是正する。
+- 対象は Phase 5 / Phase 6 / Phase 6.1。
+- 成功条件は「機能実現」ではなく「監査可能性・再現可能性・疎結合性」の同時達成。
+- 本計画に曖昧語（例: 主要、必要に応じて、可能なら）を使用しない。
 
-## 1. Non-Negotiable Architecture & Integrity Constraints
+## 1. Non-Negotiable Constraints (Audit Hard Gates)
 
-### 1.1 Dependency Direction (Hard Constraint)
-- 依存規則の矢印定義: 本章の `A -> B` は「A が B を静的依存（import/type参照）してよい」を意味する。
-- 許可依存（静的依存）:
+### 1.1 Dependency Rule
+- 許可依存:
   - `UI -> UseCase`
   - `UseCase -> Domain`
   - `Infrastructure -> Domain`
-  - `Infrastructure -> UseCase`（UseCase/Domain が定義した Port の実装参照に限定）
+  - `Infrastructure -> UseCase`（UseCase/Domainで定義されたPort実装に限定）
 - 禁止依存:
   - `UseCase -> Qt`（明示禁止）
   - `Domain -> Qt`
   - `Domain -> Infrastructure`
-  - `UseCase -> Infrastructure`（実装詳細への直接依存禁止）
-  - `UI -> Domain` の直接依存（UseCase経由を強制）
-- 境界越えは `Port/Interface (abc.ABC or typing.Protocol)` 経由のみ。
+  - `UseCase -> Infrastructure`（具象直接依存禁止）
+  - `UI -> Domain`（直接参照禁止）
+- 境界越え通信は `abc.ABC` / `typing.Protocol` 経由のみ許可。
 
-### 1.2 Humble Object Constraint (Hard Constraint)
-- UI層（例: `MainWindow`, Dialog, Widget）で以下を禁止:
-  - 業務判断・分岐
-  - 永続化/外部I/O直接実行
+### 1.2 Humble Object Rule
+- UI層（Window/Dialog/Widget）で以下を禁止:
+  - 業務判断・業務分岐
+  - 永続化処理、外部I/O、Docker操作
   - 複雑計算
-  - フォーマット処理（業務意味を持つ整形）
-- UI責務は「入力受理」「表示更新」「UseCase呼び出し」だけに限定。
+  - 業務意味を持つフォーマット処理
+- UI層の許可責務:
+  - 入力受理
+  - 表示更新
+  - UseCase呼び出し
 
-### 1.3 Data Integrity Constraint (Hard Constraint)
-- ハッシュ対象は以下を **全件必須** とする（限定語禁止）:
+### 1.3 Data Integrity Rule
+- ハッシュ対象は以下4区分を全件必須とする:
   - `all_input_files`
   - `all_output_files`
   - `all_parameter_files`
-  - `audit_log_record`（ログ本体）
-- あわせて実行ログに以下を必須記録:
+  - `audit_log_record`
+- 実行ログ必須記録:
   - コンテナイメージダイジェスト
   - Gitコミットハッシュ（`git rev-parse HEAD`）
-- パス記録はプロジェクトルート相対パスのみ（絶対パスは fail-fast）。
+- パスは全てプロジェクトルート相対パス。絶対パスを検出した場合は fail-fast で処理中断。
 
-## 2. Delivery Strategy
-- 大規模一括置換は禁止。後方互換を維持した段階移行を行う。
-- 各段階の完了条件:
-  - 機能要件適合
-  - 設計適合（依存方向/UI責務/Data Integrity全件性）
-  - `pytest tests/` 全件Pass
-- Builder/Validator分離運用を固定:
-  - Builder（実装担当）とValidator（監査担当）は思考過程を共有しない。
-  - Validatorの監査入力は `requirements + diff` のみに限定する。
-  - `test evidence` は Builder 側の補助提出物として扱い、Validatorの判定入力には含めない。
-  - 監査プロセスで上記以外の入力が混入した場合は監査無効として再実施する。
-- REJECTルーティングを厳格化:
+## 2. Traceability Matrix (Requirement -> Implementation -> Test -> Gate)
+- R5-1 (Capability Mapping):
+  - 実装: Capability統合UseCase（knowledge=推定、execution=実証）
+  - テスト: T5-1補助（表示ソース区別）、T5-2
+  - ゲート: UIに推定/実証識別が存在
+- R5-2 (Mismatch Guard):
+  - 実装: required imports差分UseCase + Hard Guard
+  - テスト: T5-1
+  - ゲート: 差分1件以上でRun無効、強制実行経路0件
+- R5-3 (Forced Creation Flow):
+  - 実装: 適合環境なし時に作成ダイアログ遷移、初期候補自動投入、作成後Dynamic Refresh
+  - テスト: T5-3, T5-4
+  - ゲート: 再起動不要で実行可能化
+- R6-1〜R6-6:
+  - 実装: Environment Manager専用UI、2段階確認、一括削除継続、未使用抽出、メタ編集、監査ログ
+  - テスト: T6-1〜T6-6
+  - ゲート: 受け入れ基準AC6-1〜AC6-7一致
+- Phase 6.1:
+  - 実装: `artifacts/architecture_decoupling_assessment.md`、`artifacts/refactoring_proposal.md`
+  - テスト: 境界違反検出テスト、依存グラフ検査
+  - ゲート: AC6.1-1〜AC6.1-4一致
+
+## 3. Execution Strategy
+- 一括置換を禁止し、後方互換を保った段階移行を実施する。
+- 各フェーズは以下の順で完了判定する:
+  - Functional Gate
+  - Structural Gate
+  - Audit Gate
+- REJECTルーティング固定:
   - 設計不備: `REJECT_TO_ARCHITECT`
   - 実装不備: `REJECT_TO_IMPLEMENT`
 
-## 3. Work Breakdown Structure
+## 4. Work Breakdown
 
-### 3.1 P0: Governance Baseline (最優先)
-1. 監査スキーマ固定
-- 監査ログに必須項目を固定: 操作種別、時刻、対象一覧、成否、解放容量、実行理由、required imports、environment capability、mismatch結果、ガード発火状態、ハッシュ群、image digest、git hash。
+### 4.1 P0: Governance Baseline (先行必須)
+1. 監査ログスキーマ固定
+- 必須フィールド:
+  - `operation_type`
+  - `timestamp`
+  - `targets`
+  - `result`
+  - `released_size`
+  - `reason`
+  - `required_imports`
+  - `environment_capability`
+  - `mismatch_result`
+  - `guard_triggered`
+  - `hashes.all_input_files`
+  - `hashes.all_output_files`
+  - `hashes.all_parameter_files`
+  - `hashes.audit_log_record`
+  - `container_image_digest`
+  - `git_commit_hash`
 
-2. アーキテクチャ境界の検査ルール追加
-- 静的検査で `UseCase -> Qt` 直接依存をFail化。
-- UI層での禁止行為（複雑計算/フォーマット/直接I/O）を検出するルールを追加。
+2. 依存方向検査のCI組み込み
+- `UseCase -> Qt` を静的検査でFail。
+- `UI -> Domain` 直接依存をFail。
+- Port未経由の境界越えをFail。
 
-3. Data Integrity実装規約の固定
-- ハッシュ収集APIを「全件列挙入力」契約に統一し、`major`/`primary` 等の曖昧語を仕様・コード双方から排除。
+3. UI責務検査のCI組み込み
+- UI層におけるI/O直接実行をFail。
+- UI層における複雑計算/業務フォーマット処理をFail。
 
-### 3.2 P1: Phase 5 (Validation Guardrails)
-1. Capability Mapping
-- `user_knowledge.json`（推定）と実行実績（実証）を統合する UseCase を実装。
-- UIは推定/実証を識別表示するだけに留める。
+4. ハッシュ全件性検査のCI組み込み
+- 4区分のいずれか欠落時にFail。
+- 絶対パス検出時にFail。
 
-2. Mismatch Detection + Hard Guard
-- required imports（import名基準）と環境capability差分をUseCaseで算出。
-- 差分>0なら `Run` を無効化（オーバーライド禁止）。
-- 警告表示項目（不足import、不足理由、推奨環境、新規作成導線）をViewModelで構成しUIへ渡す。
+### 4.2 P1: Phase 5 Implementation
+1. Capability Mapping UseCase
+- import名基準でcapabilityを構築。
+- knowledge由来（推定）と実績由来（実証）を同時保持。
+
+2. Mismatch Guard UseCase
+- required importsとの差分を算出。
+- 差分が1件以上なら `Run` を無効化。
+- 警告モデルに不足一覧・不足理由・推奨環境・作成導線を格納。
 
 3. Forced Creation Flow
-- 適合環境なし時に新規環境作成ダイアログへ強制誘導。
-- 初期候補は `user_knowledge.json` 優先 + 既定候補補完。
-- 作成完了後、再起動なしの即時反映（Dynamic Refresh）を保証。
+- 適合環境0件時は作成ダイアログへ遷移。
+- 初期候補は `user_knowledge.json` 優先、不足分は既定候補で補完。
+- 作成完了イベントで一覧再読込し、即時実行可能状態へ遷移。
 
-### 3.3 P1: Docker/EOL Reproducibility Baseline
-1. Base Image Digest Pinning
-- `Dockerfile` の `FROM` はタグ禁止、SHA256ダイジェスト固定を必須化。
-- 実装タスク: 対象Dockerfileの `FROM` を全て digest 形式に更新。
-- 静的確認: `FROM .*:.*`（タグ形式）検出時はFail。
-- CIゲート条件: digest未固定0件。
+### 4.3 P1: Phase 6 Implementation
+1. Environment Manager専用ダイアログ
+- 一覧、検索/フィルタ、複数選択、削除プレビュー（件数/対象名/容量）を提供。
 
-2. EOL Repository Redirect
-- EOL OSのAPTソースをアーカイブリポジトリへ切替。
-- 実装タスク: `old-releases.ubuntu.com` / `archive.debian.org` への書換を標準化。
-- 静的確認: EOL系Dockerfileで標準ミラー参照が残存していないこと。
-- CIゲート条件: EOL対象でアーカイブ未設定0件。
+2. 一括削除
+- 対象は定義JSON + Docker image。
+- 2段階確認未完了では削除処理開始禁止。
+- 対象単位で独立実行し、失敗時も残件継続。
 
-3. pip Constraints Enforcement
-- 古い依存解決の暴走防止として `constraints.txt` 利用を必須化。
-- 実装タスク: pip install系コマンドへ constraints 適用を統一。
-- 静的確認: 対象ビルド手順で `-c constraints.txt` 欠落をFail。
-- CIゲート条件: constraints未適用0件。
+3. 未使用抽出
+- 最終利用日時 + 利用回数 + 保護フラグで判定。
+- 保護フラグ対象は候補除外。
 
-4. Multi-stage Build Enforcement
-- OpenCV等のビルドをマルチステージ化し、実行イメージにビルドツールを残さない。
-- 実装タスク: builder/runtime分離Dockerfileへ改修。
-- 静的確認: C/C++ビルド対象で単一ステージ構成をFail。
-- CIゲート条件: 対象Dockerfileのマルチステージ違反0件。
-
-### 3.4 P1: Phase 6 (Lifecycle Management)
-1. Environment Manager専用UI
-- 既存画面へ責務混在させず専用ダイアログを新設。
-- 一覧、検索/フィルタ、複数選択、削除プレビュー（件数・対象名・推定解放容量）を提供。
-
-2. Bulk Delete Safety
-- 削除対象: 定義JSON + Docker image。
-- 2段階確認完了まで削除不可。
-- 対象ごと独立処理、部分失敗時も継続実行し結果分離表示。
-
-3. Unused Extraction
-- 最終利用日時 + 利用回数 + 保護フラグ（Pin/Favorite）で判定。
-- 保護フラグ対象は候補から除外。
-
-4. Cleanup Scope
-- dangling + unused image を対象。
+4. クリーンアップ
+- dangling / unused image のみ対象。
 - build cache / volume は対象外。
 
-5. Rename/Metadata Edit
+5. メタデータ編集
 - 内部ID不変。
-- 表示名/説明/タグ/分類/保護フラグ編集可。
-- 入力バリデーション適用。
+- 表示名/説明/タグ/分類/保護フラグを編集可能。
+- 空値・長さ・禁止文字のバリデーションを適用。
 
-### 3.5 P2: Phase 6.1 (Decoupling Assessment)
+### 4.4 P2: Phase 6.1 Deliverables
 1. `artifacts/architecture_decoupling_assessment.md`
-- 違反一覧を `file path + 関数/クラス + 違反種別 + 根拠` で列挙。
+- 違反を `file path + class/function + violation type + evidence` 形式で列挙。
 
 2. `artifacts/refactoring_proposal.md`
-- 各違反の移管先レイヤ、必要Port設計、段階移行手順(P0/P1/P2)、検証方法を定義。
+- 各違反の移管先レイヤ、必要Port、段階移行（P0/P1/P2）、検証法を定義。
 
-## 4. Verification Gates
+## 5. Verification Plan
 
-### 4.1 Test Gate (Functional)
+### 5.1 Functional Tests
 - 必須: `pytest tests/` 全件Pass。
-- 最低限追加テスト:
-  - Phase5: T5-1〜T5-4
-  - Phase6: T6-1〜T6-6
+- 最低追加:
+  - T5-1 Guard発火テスト
+  - T5-2 適合環境実行テスト
+  - T5-3 強制作成導線テスト
+  - T5-4 作成後即時反映テスト
+  - T6-1 2段階確認ガードテスト
+  - T6-2 未使用判定テスト
+  - T6-3 部分失敗継続テスト
+  - T6-4 メタ編集/内部ID不変テスト
+  - T6-5 クリーンアップ範囲テスト
+  - T6-6 監査ログ完全性テスト
 
-### 4.2 Architecture Gate (Structural)
-- `UseCase -> Qt` 依存0件。
-- UI層の禁止行為0件（判断・直接I/O・複雑計算・フォーマット処理）。
-- 境界越えのPort未経由呼び出し0件。
-- Qtシグナル/スロット命名規約違反0件。
-  - シグナル: 過去分詞形（例: `dataChanged`）。
-  - スロット: 動作動詞（例: `update_display`）。
+### 5.2 Structural Tests
+- 依存方向違反0件（`UseCase -> Qt` 含む）。
+- UI禁止行為違反0件（業務判断/I-O/複雑計算/業務フォーマット）。
+- Port未経由境界越え0件。
 
-### 4.3 Audit Gate (Integrity)
-- ハッシュ対象4区分（`all_input_files` / `all_output_files` / `all_parameter_files` / `audit_log_record`）の欠落0件。
-- 相対パス強制違反0件。
-- image digest / git hash 記録欠落0件。
+### 5.3 Audit Tests
+- ハッシュ4区分の欠落0件。
+- パス相対化違反0件。
+- image digest / git hash 欠落0件。
 
-### 4.4 Process Gate (Governance)
-- Builder/Validator分離違反0件。
-- 監査入力物が `requirements + diff` 以外を含まないこと。
-- REJECT報告の必須項目（失敗箇所、違反制約、観測証拠、修正ヒント、再検証条件、ルーティング先）欠落0件。
-
-## 5. Implementation Sequence
-1. P0ガバナンス基盤を先行実装（検査ルール・監査スキーマ・ハッシュ契約）。
-2. Docker/EOL再現性基盤（3.3）を先行実装し、ビルド再現性ゲートを確立。
-3. Phase5をUseCase中心に実装し、UIは表示と操作導線のみ実装。
-4. Phase6を専用Environment Managerとして実装。
-5. Phase6.1成果物を作成し、違反残件を段階的に閉じる。
-6. 各ステップで `Functional -> Structural -> Audit` の順にゲート通過を確認。
-
-## 6. Risk Register and Countermeasures
-- リスク: UI側に判定ロジックが再流入。
-  - 対策: UI lintルール + PRチェックでUI禁止行為をFail化。
-- リスク: ハッシュ対象漏れの再発。
-  - 対策: 監査ログ生成時に4区分未充足なら即Fail。
-- リスク: 依存方向違反の潜在化。
-  - 対策: import依存検査をCI必須化し、例外運用を禁止。
-- リスク: Docker再現性基準の形骸化。
-  - 対策: digest固定/EOL repo/constraints/マルチステージを独立ゲート化し、1件でも違反時Fail。
-- リスク: Builder/Validator分離の運用逸脱。
-  - 対策: 監査入力テンプレートを固定し、許可以外入力の監査を無効化。
-- リスク: 部分失敗時の運用混乱。
-  - 対策: 成功/失敗対象と理由を分離した結果モデルを標準化。
+## 6. Risk Elimination (Post Mortem Direct Actions)
+- RC-1（ハッシュ対象曖昧）対策:
+  - 全件必須4区分をスキーマに固定し、欠落時Fail。
+- RC-2（UseCase->Qt 禁止不足）対策:
+  - 明示禁止 + CI検査 + 違反時マージ不可。
+- RC-3（UI計算/整形の流入）対策:
+  - UI禁止行為として明文化 + 検査ゲート化。
+- ループ再発防止:
+  - 設計不備は実装工程へ送らず `REJECT_TO_ARCHITECT` へ直送。
 
 ## 7. Definition of Done
-- 要件適合: Phase5/6/6.1の受け入れ基準を満たす。
-- 設計適合: 本計画 1章のHard Constraint違反が0。
-- Docker適合: digest固定 / EOL repo切替 / constraints適用 / マルチステージ の違反0件。
-- 命名規約適合: Qtシグナル/スロット命名規約違反0件。
-- 運用適合: Builder/Validator分離プロセス違反0件。
-- 監査適合: `docs/audit_report.md` 相当の監査でREJECT要因が0。
-- テスト適合: `pytest tests/` 全件Pass。
+- Phase 5/6/6.1 の受け入れ基準を満たす。
+- 1章のHard Constraint違反が0件。
+- `pytest tests/` 全件Pass。
+- 監査で `REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` 要因が0件。
+- 監査証跡に再現性必須情報（hash4区分、digest、git hash、相対パス）が欠落しない。
 
-## 8. Explicit Prohibitions
-- 本計画遂行中、git commit は実施しない。
-- 設計不備を実装努力で迂回しない（設計に戻して修正）。
-- 監査基準の曖昧語（例: 主要、必要に応じて、可能なら）を受け入れない。
+## 8. Explicit Prohibition
+- 本作業中の `git commit` を禁止する。
