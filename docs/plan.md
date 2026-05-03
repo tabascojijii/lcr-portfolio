@@ -44,6 +44,17 @@
   - Gitコミットハッシュ（`git rev-parse HEAD`）
 - パスは全てプロジェクトルート相対パス。絶対パスを検出した場合は fail-fast で処理中断。
 
+### 1.4 Docker Reproducibility Rule
+- `Dockerfile` の `FROM` はタグ指定を禁止し、SHA256ダイジェスト指定を必須とする。
+- EOL OSのAPTソースはアーカイブリポジトリへリダイレクトを必須とする。
+- pip依存解決は `constraints.txt` 適用を必須とし、無制約解決を禁止する。
+- OpenCV等のネイティブビルドはマルチステージビルドを必須とする。
+
+### 1.5 Audit Governance Separation Rule
+- Builder（実装）とValidator（監査）は入力境界を分離する。
+- Auditorの許可入力は `requirements` と `diff` のみとし、実装時の思考過程・内部メモへのアクセスを禁止する。
+- REJECT時は「失敗箇所・違反制約・観測証拠・修正ヒント・再検証条件・ルーティング先」を必須出力とする。
+
 ## 2. Traceability Matrix (Requirement -> Implementation -> Test -> Gate)
 - R5-1 (Capability Mapping):
   - 実装: Capability統合UseCase（knowledge=推定、execution=実証）
@@ -111,6 +122,21 @@
 - 4区分のいずれか欠落時にFail。
 - 絶対パス検出時にFail。
 
+5. Docker再現性検査のCI組み込み
+- `FROM` のダイジェスト固定違反をFail。
+- EOL向けAPTアーカイブ未設定をFail。
+- `constraints.txt` 未使用のpip解決をFail。
+- マルチステージビルド未適用をFail。
+
+6. 監査分離運用の固定
+- 監査ジョブは `requirements` と `diff` のみを入力として実行する。
+- 実装ジョブ成果物への付加情報は監査入力へ渡さない。
+- REJECTテンプレート必須項目欠落時は監査ジョブをFail。
+
+7. UI命名規約検査のCI組み込み
+- シグナル名は過去分詞形（例: `*Changed`, `*Completed`）以外をFail。
+- スロット名は動詞始まり（例: `update_*`, `load_*`, `apply_*`）以外をFail。
+
 ### 4.2 P1: Phase 5 Implementation
 1. Capability Mapping UseCase
 - import名基準でcapabilityを構築。
@@ -175,6 +201,29 @@
 - 依存方向違反0件（`UseCase -> Qt` 含む）。
 - UI禁止行為違反0件（業務判断/I-O/複雑計算/業務フォーマット）。
 - Port未経由境界越え0件。
+- シグナル/スロット命名規約違反0件。
+
+### 5.4 Objective Audit Metrics (EMCS)
+- M1: 依存方向違反件数
+  - 測定: 静的依存解析
+  - 閾値: 0件
+  - 判定: 1件以上でREJECT
+- M2: SRP違反件数（UIクラス）
+  - 測定: UIクラス内の業務判断/永続化/I-O/複雑計算/業務フォーマット検出
+  - 閾値: 0件
+  - 判定: 1件以上でREJECT
+- M3: 複雑度超過件数（UseCase/Domain）
+  - 測定: サイクロマティック複雑度
+  - 閾値: 10超の関数 0件
+  - 判定: 1件以上でREJECT
+- M4: 監査証跡欠落件数
+  - 測定: ハッシュ4区分 + digest + git hash + 相対パスの欠落検査
+  - 閾値: 0件
+  - 判定: 1件以上でREJECT
+- M5: Docker再現性違反件数
+  - 測定: ダイジェスト固定 / APTアーカイブ / constraints / マルチステージの4項目検査
+  - 閾値: 0件
+  - 判定: 1件以上でREJECT
 
 ### 5.3 Audit Tests
 - ハッシュ4区分の欠落0件。
@@ -197,6 +246,10 @@
 - `pytest tests/` 全件Pass。
 - 監査で `REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` 要因が0件。
 - 監査証跡に再現性必須情報（hash4区分、digest、git hash、相対パス）が欠落しない。
+- Docker再現性4要件（ダイジェスト固定、APTアーカイブ、constraints、マルチステージ）が全件充足。
+- 監査運用でBuilder/Validator分離が維持され、入力境界違反が0件。
+- EMCSメトリクス（M1-M5）が全て閾値内。
+- PyQt/PySideシグナル・スロット命名規約違反が0件。
 
 ## 8. Explicit Prohibition
 - 本作業中の `git commit` を禁止する。
