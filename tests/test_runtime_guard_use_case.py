@@ -40,3 +40,15 @@ def test_prepare_guard_normalizes_and_deduplicates_import_names():
     assert result["required_imports"] == ["cv2", "numpy"]
     assert result["mismatch_result"]["capability_imports"] == ["numpy"]
     assert result["mismatch_result"]["missing"] == ["cv2"]
+
+
+def test_prepare_guard_matches_imports_case_insensitively():
+    use_case = RuntimeExecutionPreparationUseCase()
+
+    result = use_case.prepare_guard(
+        required_imports=["NumPy", "PANDAS"],
+        environment_capability={"imports": ["numpy", "pandas"]},
+    )
+
+    assert result["guard_state"] == "pass"
+    assert result["mismatch_result"]["matched"] == ["numpy", "pandas"]

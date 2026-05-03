@@ -129,7 +129,7 @@ class RuntimeExecutionPreparationUseCase:
     def _normalize_imports(self, imports: List[str]) -> List[str]:
         normalized = []
         for name in imports:
-            cleaned = str(name).strip()
+            cleaned = str(name).strip().lower()
             if cleaned:
                 normalized.append(cleaned)
         return sorted(set(normalized))

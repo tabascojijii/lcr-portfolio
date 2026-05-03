@@ -66,9 +66,13 @@ class AuditMetadataService:
         return metadata
 
     def _normalize_relative_path(self, path_str: str) -> str:
+        if not path_str or not str(path_str).strip():
+            raise ValueError("relative path must not be empty")
         path = PurePath(path_str)
         if path.is_absolute():
             raise ValueError(f"script_path_rel must be relative: {path_str}")
+        if any(part == ".." for part in path.parts):
+            raise ValueError(f"relative path must stay within project root: {path_str}")
         return path.as_posix()
 
     def _resolve_image_digest(self, image_name: str) -> str:

@@ -111,3 +111,31 @@ def test_collect_rejects_absolute_script_rel_path(tmp_path, monkeypatch):
 
     with pytest.raises(ValueError):
         service.collect("img", str(script), str(script.resolve()))
+
+
+def test_collect_rejects_parent_traversal_in_relative_paths(tmp_path, monkeypatch):
+    script = tmp_path / "script.py"
+    script.write_text("print('ok')\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout=""),
+    )
+    service = AuditMetadataService()
+
+    with pytest.raises(ValueError):
+        service.collect("img", str(script), "../script.py")
+
+
+def test_collect_rejects_empty_relative_script_path(tmp_path, monkeypatch):
+    script = tmp_path / "script.py"
+    script.write_text("print('ok')\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout=""),
+    )
+    service = AuditMetadataService()
+
+    with pytest.raises(ValueError):
+        service.collect("img", str(script), "")
