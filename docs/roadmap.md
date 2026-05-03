@@ -1,8 +1,9 @@
 # LCR Roadmap（PM）
 
 ## 0. 目的と絶対基準
-- 本ロードマップは `docs/reference_standards.md` を唯一の絶対基準として策定する。
-- `docs/plan.md` の実装計画は、本基準に適合する範囲で実行順序・完了条件に落とし込む。
+- 本ロードマップの絶対基準は `docs/reference_standards.md` とする。
+- 必須要求入力は `docs/requirement.md` とし、要求充足を判定軸に含める。
+- 実行計画は `docs/plan.md` に準拠し、本基準・要求入力に適合する形で実行順序と完了条件へ展開する。
 - 監査（Auditor）は基準逸脱を不許容とし、各マイルストーンで REJECT/ACCEPT 判定可能な証跡を必須化する。
 
 ## 1. ロードマップ全体像
@@ -27,6 +28,12 @@
 **受け入れ基準（Gate-1）**
 - すべての違反が `reference_standards.md` の条項番号にマッピング済み
 - Builder/Validator分離で第三者が差分のみから再判定可能な記録形式である
+- EMCS客観評価メトリクス初期値を記録済みである（採取タイミング: Phase 1）
+  - SRP違反件数（閾値: 0件）
+  - 高複雑度関数件数（閾値: サイクロマティック複雑度 > 10 を 0件）
+  - 依存方向違反件数（閾値: 内側レイヤーから Qt 依存 0件）
+  - REJECT理由カテゴリ別件数（閾値: 未分類 0件）
+  - 証跡保存先: `artifacts/audit/phase1_emcs_metrics.md`, `artifacts/audit/reject_log_phase1.json`
 
 ### Phase 2（Week 2）: アーキテクチャ是正設計
 **目標**
@@ -115,9 +122,14 @@
 - KGI-1: 基準重大違反件数 = 0
 - KGI-2: 再検証シナリオ合格率 = 100%
 - KGI-3: 監査必須ログ項目充足率 = 100%
+- KGI-4: EMCS閾値違反件数 = 0（評価時点: Phase 5 Gate）
 - KPI-1: REJECT後の再提出リードタイム（中央値）
 - KPI-2: UI層ロジック残存件数
 - KPI-3: 再現不能ビルド発生率
+- KPI-4: SRP違反件数（閾値: 0、採取: Phase 1/5、保存: `artifacts/audit/phase1_emcs_metrics.md`, `artifacts/audit/phase5_emcs_metrics.md`）
+- KPI-5: 高複雑度関数件数（閾値: 複雑度 > 10 を 0、採取: Phase 1/5、保存: `artifacts/audit/phase1_emcs_metrics.md`, `artifacts/audit/phase5_emcs_metrics.md`）
+- KPI-6: 依存方向違反件数（閾値: 0、採取: Phase 1/5、保存: `artifacts/audit/phase1_emcs_metrics.md`, `artifacts/audit/phase5_emcs_metrics.md`）
+- KPI-7: REJECT理由カテゴリ別件数（閾値: 未分類 0、採取: Phase 1/5、保存: `artifacts/audit/reject_log_phase1.json`, `artifacts/audit/reject_log_phase5.json`）
 
 ## 4. リスクとエスカレーション
 - リスク: EOL依存取得の不安定化
@@ -130,6 +142,7 @@
 ## 5. トレーサビリティ（基準書対応）
 - 監査/ガバナンス標準（基準書1章）
   - Phase 1, 5, 6 で Builder/Validator分離、処方的REJECT運用を担保
+  - EMCS客観評価（SRP違反件数、高複雑度関数件数、依存方向違反件数、REJECT理由カテゴリ別件数）を Phase 1/5 で採取し、`artifacts/audit/` 配下へ保存
 - Docker再現性標準（基準書2章）
   - Phase 4 で digest固定、archive化、constraints、マルチステージを実装
 - データ完全性（基準書3章）
