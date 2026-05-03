@@ -8,12 +8,12 @@
 - 呼び出しフローと依存規則を分離して定義する。
   - 呼び出しフロー（実行時）: `UI -> UseCase -> Domain` および `UI -> UseCase -> Port -> Infrastructure`
   - コンパイル時依存（参照可能方向）: **外側 -> 内側のみ**（Infrastructure は UseCase/Domain の Port を実装するのみ）
-  - 非許可依存: `Domain -> Infrastructure`、`Domain -> UseCase/UI`、`UseCase -> UI`、`Domain -> Qt`
+  - 非許可依存: `Domain -> Infrastructure`、`Domain -> UseCase/UI`、`UseCase -> UI`、`Domain -> Qt`、`UseCase -> Qt`
   - 対応表（固定）:
     - Domain: 純粋ロジックのみ。外部I/O呼び出し禁止。
     - UseCase: Domain をオーケストレーションし、外部I/Oは Port 経由で委譲。
     - Infrastructure: Port 実装を提供。UseCase/Domain の具象実装へ逆参照しない。
-- UI（`MainWindow`/Dialog）は Humble Object とし、判断・分岐・永続化・外部I/Oを保持しない。
+- UI（`MainWindow`/Dialog）は Humble Object とし、判断・分岐・永続化・外部I/O・複雑計算・フォーマット処理を保持しない。
 - 監査証跡は ALCOA++ 準拠で、相対パス強制・ハッシュ対象完全化・再現性を満たす。
 - 危険操作（削除/強制削除）はデフォルト禁止、明示解除時のみ許可。
 - `pytest tests/` pass に加え、アーキテクチャゲート pass をリリース必須条件にする。
@@ -27,20 +27,22 @@
   - `git_commit_hash`（`git rev-parse HEAD`）
   - container image digest（`sha256:...`）
   - required imports / capability / mismatch 判定 / ガード発火状態
-  - 入力・出力・主要パラメータ・実行ログ本体の SHA-256
+  - `all_input_files`・`all_output_files`・`all_parameter_files`・`audit_log_record` の SHA-256（全件必須）
   - 成功/失敗、失敗理由、解放容量（該当時）
 - ハッシュ採取タイミング
-  - 実行前: 入力・パラメータ・required imports
-  - 実行後: 出力・実行ログ本体・結果サマリ
+  - 実行前: `all_input_files`・`all_parameter_files`・required imports
+  - 実行後: `all_output_files`・`audit_log_record`・結果サマリ
 - 保存形式
   - JSON Lines（1操作1レコード、追記専用）
 - 検証方式
   - 監査レコード完全性テスト（必須キー欠落時 fail）
+  - 対象件数一致テスト（列挙件数とハッシュ件数の一致、欠落時 fail）
 
 ### 2.2 RC-2 対策: UI/UseCase/Infra 境界の先行固定
 - UI から直接呼び出してよいのは UseCase 入出力 DTO のみ。
 - UI 直下禁止事項
   - Docker 実行、ファイル削除/保存、監査ログ書き込み、未使用判定ロジック、mismatch 判定ロジック
+  - 複雑計算・変換・集計・フォーマット処理（Presenter/ViewModel/UseCase へ移譲）
 - Port 定義を先に作成
   - `CapabilityRepositoryPort`
   - `ExecutionAuditPort`
@@ -48,7 +50,7 @@
   - `ContainerImagePort`
   - すべて `abc.ABC` または `typing.Protocol` で定義し、UI/UseCase から具象実装を直接参照しない。
 - `MainWindow`/Environment Manager はイベント受理と表示更新のみを担当。
-- `docs/allowed_ui_operations.md` に signal/slot 命名規約（signal: 過去分詞、slot: 動詞）を明記する。
+- `docs/allowed_ui_operations.md` に signal/slot 命名規約（signal: 過去分詞、slot: 動詞）と「UIでの計算・整形ロジック禁止」を明記する。
 
 ### 2.3 RC-3 対策: REJECT ルーティングの明確化
 - 監査指摘を `Requirement / Architecture / Implementation` の3レイヤーで分類。
@@ -157,8 +159,11 @@
 - 必須アーキテクチャゲート:
   - UI 層の禁止 API 呼び出し検出テスト
   - 依存方向違反検出テスト
+  - UseCase 層の Qt import 検出テスト（検出時 fail）
   - Port の `abc.ABC` / `typing.Protocol` 準拠検証（具象直参照を fail）
   - 監査ログ必須スキーマ完全性テスト
+  - ハッシュ対象全件一致テスト（`all_input_files` / `all_output_files` / `all_parameter_files` / `audit_log_record`）
+  - UIクラス内の計算・整形ロジック検出テスト（検出時 fail）
   - UI シグナル/スロット命名規約検査（signal: 過去分詞、slot: 動詞）
 - 必須ガバナンスゲート（EMCS定量評価）:
   - `M1: 依存違反件数` = 0 件で pass（証拠: 静的依存解析レポート）
