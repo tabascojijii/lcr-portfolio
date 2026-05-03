@@ -1,24 +1,33 @@
-# Roadmap Audit Report
+# Audit Report
 
-## 監査対象
-- 対象: `docs/roadmap.md`
-- 絶対基準: `docs/plan.md`, `docs/reference_standards.md`
+## 1. pytest 実行結果
+- 実行コマンド: `pytest tests/`
+- 結果: **43 passed / 0 failed**
+- 所要時間: 1.45s
 
-## 判定
-- 結果: **PASS**
-- 監査ステータス: `AUDIT_PASS_ROADMAP`
+## 2. 基準照合 (docs/reference_standards.md)
 
-## 検証結果（要点）
-- スコープ整合: Phase 5 / Phase 6 / Phase 6.1 を対象としており、`docs/plan.md` と一致。
-- 依存方向・Humble Object・Port経由原則: `docs/reference_standards.md` および `docs/plan.md` の必須制約を充足。
-- Data Integrity: ハッシュ4区分（全入力・全出力・全パラメータ・監査ログ本体）、image digest、git hash、相対パス強制を明示し、基準と一致。
-- Docker/EOL再現性: digest固定、EOLリポジトリ切替、constraints強制、マルチステージ強制を明示し、基準と一致。
-- ガバナンス: Builder/Validator分離、監査入力制約（requirements+diff）、処方的REJECT要件を明示し、基準と一致。
-- 検証ゲート: Functional / Structural / Audit / Governance を定義し、要求される監査観点を網羅。
-- 曖昧語排除・禁止事項: `docs/plan.md` の禁止方針と矛盾なし。
+### 2.1 監査・ガバナンス標準
+- テスト失敗なし。主要な品質ゲート（Docker digest policy、UI/usecase separation、audit metadata整合性）を `tests/` で確認。
 
-## 指摘事項
-- なし。
+### 2.2 Docker 再現性標準
+- `tests/test_dockerfile_digest_policy.py` により `src/lcr/core/container/images/Dockerfile.*` の `FROM ...@sha256:<64hex>` を検証。
+- `src/lcr/core/container/templates/base.Dockerfile.j2` で `constraints.txt` を `pip install -c` に適用。
+- EOL向けAPTリダイレクト（`archive.debian.org`）をテンプレート/生成Dockerfileで確認。
 
-## 結論
-`docs/roadmap.md` は、`docs/plan.md` および `docs/reference_standards.md` に照らして、監査上の重大な欠落・矛盾・逸脱を確認しなかったため、**受け入れ可能（PASS）**と判定する。
+### 2.3 データ完全性・監査証跡
+- `src/lcr/core/audit/metadata_service.py` で以下を確認:
+  - `git rev-parse HEAD` によるコミットハッシュ採取
+  - `image_digest` 採取
+  - script/parameter/input/output/log の SHA-256 記録
+  - `script_path_rel` 等の相対パス正規化（絶対パス・`..` を拒否）
+
+### 2.4 PyQt/PySide アーキテクチャ標準
+- `src/lcr/ui/ports.py` で `typing.Protocol` によるインターフェース分離を確認。
+- `tests/test_ui_usecase_separation.py` で UI が build preparation use case を経由することを検証。
+
+## 3. 指摘事項
+- **なし**（pytest失敗なし、参照基準に対する重大違反は確認されず）
+
+## 4. 監査判定
+- **AUDIT_PASS_IMPLEMENT**
