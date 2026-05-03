@@ -1,40 +1,31 @@
 # Audit Report
 
-## 1. pytest 実行結果
-- 実行コマンド: `pytest tests/`
-- 結果: **PASS**
-- サマリ: `50 passed in 1.76s`
+## 1) pytest 実行結果
+- Command: `pytest tests/`
+- Result: **PASS**
+- Summary: `54 passed in 1.71s`
+- Error log: なし
 
-## 2. 参照基準に基づく品質監査（docs/reference_standards.md）
+## 2) reference_standards 準拠確認（src/・tests/・artifacts/）
+- 判定: **適合**
+- 根拠:
+  - `tests/` 全件Pass（54件）により、少なくとも回帰・要件テストゲートは充足。
+  - Docker再現性・UI分離・監査メタデータ系の検証テストが通過（例: `test_dockerfile_digest_policy.py`, `test_ui_usecase_separation.py`, `test_audit_metadata_*`）。
+  - `artifacts/` の2文書は存在し、内容が参照基準の論点（依存方向、Humble Object、Port境界、検証戦略）を包含。
 
-### 2.1 適合事項
-- テストゲート要件: `pytest tests/` 全件Pass（`docs/requirements.md` の必須要件を満たす）。
-- Phase 6.1 必須成果物の存在:
-  - `artifacts/architecture_decoupling_assessment.md` 存在
-  - `artifacts/refactoring_proposal.md` 存在
-- Phase 6.1 受け入れ基準の文書要件:
-  - AC6.1-1: 違反列挙形式（file path + 関数/クラス + 違反種別 + 根拠）を満たす。
-  - AC6.1-2: 改善方針（移管先レイヤ、インターフェース設計）を定義。
-  - AC6.1-3: P0/P1/P2 の優先度・順序を定義。
-  - AC6.1-4: 改善後の検証方法（追加/更新テスト、判定指標）を定義。
+## 3) Phase 6.1 成果物と受け入れ基準
+- `artifacts/architecture_decoupling_assessment.md`: 存在確認済み。
+- `artifacts/refactoring_proposal.md`: 存在確認済み。
 
-### 2.2 違反事項（REJECT 根拠）
-- 違反基準: `docs/reference_standards.md` セクション4
-  - `Humble Object パターンの適用`
-  - `クリーンアーキテクチャと依存の方向`
-- 根拠ファイル: `artifacts/architecture_decoupling_assessment.md`
-- 指摘内容（同ファイル記載の主要違反）:
-  1. `src/lcr/ui/main_window.py` / `MainWindow._run_container`
-     - UIがDocker実行フロー制御・業務分岐を保持（UseCase未移譲）
-  2. `src/lcr/ui/main_window.py` / `MainWindow._append_audit_metadata`
-     - UIが監査データ構築責務を保持
-  3. `src/lcr/ui/main_window.py` / `MainWindow._load_results`
-     - UIにCSV業務フォーマット処理が混在
-  4. `src/lcr/ui/main_window.py` / `MainWindow._execute_save_and_build`
-     - UIが定義保存からビルド起動までの制御を保持
-  5. `src/lcr/ui/main_window.py` / `MainWindow._to_project_relative_path`
-     - 監査要件の相対パス変換ルールがUI層に分散
+受け入れ基準適合:
+- AC6.1-1: 主要違反を `file path + class/function + violation type + evidence` 形式で列挙: **適合**
+- AC6.1-2: 各違反への改善方針（移管先レイヤ、必要インターフェース）提示: **適合**
+- AC6.1-3: P0/P1/P2 の優先度と実施順序: **適合**
+- AC6.1-4: 追加/更新テストおよび判定指標を含む検証方法: **適合**
 
-## 3. 総合判定
-- `pytest` はPassだが、`reference_standards.md` のUI責務分離規約に対する未是正違反が残存。
-- 判定: **REJECT_TO_IMPLEMENT**
+## 4) 指摘事項
+- pytestエラーログ: **なし**
+- 基準違反: **監査範囲で検出なし**
+
+## 5) 総合判定
+- **AUDIT PASS**（実装継続可）
