@@ -1,31 +1,43 @@
-# 監査報告書（Roadmap監査）
+# 監査レポート
 
-## 監査対象
-- 対象: `docs/roadmap.md`
-- 絶対基準:
-  - `docs/plan.md`
-  - `docs/reference_standards.md`
+## 1. pytest 実行結果
+- 実行コマンド: `pytest tests/`
+- 結果: **37 passed, 0 failed**
+- 実行ログ要約:
+  - collected 37 items
+  - `tests/test_atomic_build.py` ほか全テスト成功
+  - `============================= 37 passed in 1.69s ==============================`
 
-## 総合判定
-- 判定: **問題なし（PASS）**
-- ステータス: `AUDIT_PASS_ROADMAP`
+## 2. reference_standards 適合性監査（src/ と tests/）
 
-## 評価結果（基準適合）
-1. `docs/plan.md` との整合性
-- Gate Sequence（A〜G）と実装順序が一致。
-- Phase 5（R5-1〜R5-3）のスコープと達成条件が一致。
-- EMCSメトリクス（M1〜M4）のFail条件が一致。
-- DoD（AC-1〜AC-5、pytest全件Pass、重大違反0件、RC-1〜RC-3証跡）が一致。
+### 2.1 コンテナ再現性標準（Digest固定・Archive repo・constraints・マルチステージ）
+- `FROM` のDigest固定:
+  - 生成済み Dockerfile 群で `@sha256:<64hex>` を使用していることを確認。
+  - `src/lcr/core/container/generator.py` の `_validate_digest_pinned_image` でDigest形式を強制していることを確認。
+- Archive repository:
+  - `src/lcr/core/container/templates/base.Dockerfile.j2` で `archive.debian.org` を使用する分岐を確認。
+- constraints.txt:
+  - テンプレート内 `pip install -c /tmp/build/constraints.txt` を確認。
+  - `generator.py` で `constraints.txt` を生成していることを確認。
+- マルチステージビルド:
+  - `base.Dockerfile.j2` が `AS builder` / `AS runtime` の2段構成であることを確認。
 
-2. `docs/reference_standards.md` との整合性
-- 第1章: Builder/Validator分離、処方的REJECT、客観メトリクス運用を明示。
-- 第2章: Docker再現性4要件（digest固定 / archive repo / constraints / multi-stage）を明示。
-- 第3章: ALCOA++監査証跡（image digest, git hash, relative path, SHA-256群）を明示。
-- 第4章: Humble Object、依存方向、Protocol/ABC、Signal/Slot命名規約を明示。
+### 2.2 データ完全性・監査証跡
+- `src/lcr/core/audit/metadata_service.py` にて以下を確認:
+  - `git rev-parse HEAD` によるコミットハッシュ取得
+  - `sha256` による script/params/input/output/log のハッシュ記録
+  - 相対パス正規化 (`_normalize_relative_path`) と絶対パス拒否
+- 対応テスト:
+  - `tests/test_audit_metadata_service.py`
+  - `tests/test_audit_metadata_reference_schema.py`
+  - 上記はいずれも pass。
 
-## 指摘事項
-- 重大指摘: なし
-- 軽微指摘: なし
+### 2.3 UIアーキテクチャ分離
+- `tests/test_ui_usecase_separation.py` が pass しており、UI/UseCase 分離の回帰は検出されず。
 
-## 監査結論
-`docs/roadmap.md` は `docs/plan.md` および `docs/reference_standards.md` の拘束条件を満たしており、差し戻し不要。
+## 3. 指摘事項
+- **重大/軽微ともに指摘なし。**
+- 判定に影響する pytest 失敗、または `docs/reference_standards.md` からの明確な逸脱は確認されなかった。
+
+## 4. 最終判定
+- **AUDIT_PASS_IMPLEMENT**
