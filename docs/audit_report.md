@@ -1,53 +1,39 @@
-# 監査報告書（Roadmap 監査）
+# 監査報告書（roadmap）
 
-## 判定
-REJECT_TO_PM
+## 監査対象
+- `docs/roadmap.md`
 
-## 総評
-`docs/roadmap.md` は `docs/reference_standards.md` との整合性は高いが、絶対基準である `docs/plan.md` の必須拘束を一部未充足のため、現時点では承認不可。
+## 監査基準（絶対基準）
+- `docs/plan.md`
+- `docs/reference_standards.md`
 
-## 指摘事項（重大度順）
+## 監査結果
+- 判定: **PASS（問題なし）**
+- 総括: `docs/roadmap.md` は、`docs/plan.md` のゲート構成・完了条件・REJECT運用、および `docs/reference_standards.md` の必須拘束（EMCS、Builder/Validator分離、処方的REJECT、Docker再現性4要件、ALCOA++監査証跡、UIアーキテクチャ規約、Qt命名規約）を矛盾なく包含している。
 
-1. **[Major] 完了条件の基準落ち（plan.md の完了定義未反映）**
-- 違反箇所: `docs/roadmap.md` セクション「1. 目標と完了条件」
-- 違反基準: `docs/plan.md` セクション「1. 目的と完了定義」
-- 事実:
-  - `plan.md` で必須の完了定義「AC-1〜AC-5 達成」「Docker再現性4要件の**静的検査・実行検証・証跡記録**すべてPass」「EMCS監査票に基づく**監査者差分0**」が、`roadmap.md` の完了条件に完全一致で固定されていない。
-- 影響:
-  - 完了判定が緩み、監査合格条件の解釈ぶれ（監査者間差分）を再発させる。
-- 修正条件:
-  - `roadmap.md` の完了条件に、`plan.md` の完了定義6項目を同等粒度で明記すること。
-- 再検証手順:
-  - 完了条件の各項目について `plan.md` との1対1対応表を提示し、欠落0件を確認する。
+## 検証観点ごとの確認
+1. 監査ガバナンス整合
+- EMCS客観指標による判定、Builder/Validator分離、処方的REJECT記載義務を明示。
+- REJECT分類（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT`）および違反原因レイヤー記録要件を明示。
 
-2. **[Major] UI禁止事項の拘束不足（運用境界の抜け）**
-- 違反箇所: `docs/roadmap.md` セクション「Phase 4 REJECT条件」
-- 違反基準: `docs/plan.md` セクション「3. RC-2 対応: UI/UseCase 境界不備」
-- 事実:
-  - `plan.md` のUI禁止事項は「JSON直接編集」「監査ログ直接書き込み」「Docker実行直接呼び出し」の3点。
-  - `roadmap.md` では「JSON直接編集」「ガード無視実行経路」に留まり、後者2点（監査ログ直書き・Docker直接呼び出し）が明示拘束されていない。
-- 影響:
-  - UI層への責務逆流を防ぐ境界が不完全となり、構造劣化リスクが残存する。
-- 修正条件:
-  - Phase 4 のREJECT条件へ「UIから監査ログ直接書き込み」「UIからDocker実行直接呼び出し」を追加すること。
-- 再検証手順:
-  - UI禁止API一覧とREJECT条件の一致チェックを実施し、3/3項目一致を確認する。
+2. Docker再現性標準整合
+- digest固定、APT archive切替、`constraints.txt` 強制、マルチステージを明示。
+- 静的検査・実行証跡・欠落時REJECT条件まで定義済み。
 
-3. **[Major] Docker再現性4要件の検証観点の固定不足**
-- 違反箇所: `docs/roadmap.md` セクション「Phase 2: 再現性基盤実装（Gate B）」
-- 違反基準: `docs/plan.md` セクション「4.1 Docker再現性4要件の固定（Critical対応）」
-- 事実:
-  - `plan.md` は Gate B に実装拘束だけでなく、検証拘束として「APTソース切替確認」「constraints適用ログ確認」を明示。
-  - `roadmap.md` は成果物に「ビルド検証証跡」はあるが、検証観点（APT切替確認・constraintsログ確認）をREJECT条件または検証要件として明示固定していない。
-- 影響:
-  - 実装のみで合格と誤判定され、再現性要件が形式化されない可能性がある。
-- 修正条件:
-  - Phase 2 に検証要件を追加し、少なくとも「APT archive切替証跡」「constraints適用ログ」を必須化すること。
-- 再検証手順:
-  - Gate B チェックリストに検証2項目を追加し、証跡リンク付きでPass判定できることを確認する。
+3. データ完全性・監査証跡整合
+- `image_digest` / `git_commit_hash` / 相対パス / 各SHA256 を必須キーとして明示。
+- 必須キー欠落時Fail（監査不成立）を明示。
 
-## 要確認（Open Question）
-- `roadmap.md` は「`plan.md` と `reference_standards.md` を同等の絶対基準」と宣言しているため、上記欠落は意図的な簡略化か、記載漏れかをPMが明示すること。
+4. UIアーキテクチャ標準整合
+- Humble Object、依存方向制約、Protocol/ABC、UI禁止事項（JSON直接編集・監査ログ直接書込・Docker直接呼出）を明示。
+- シグナル過去分詞・スロット動詞開始の命名規約と静的検査ゲートを明示。
 
-## 結論
-上記3件はいずれも絶対基準（特に `plan.md` の拘束）に対する不足であり、現版 `docs/roadmap.md` は **REJECT_TO_PM** と判定する。
+5. 計画整合（planトレース）
+- Gate A〜I の流れをPhase 1〜6へ展開し、対応関係が保たれている。
+- 完了条件・テスト系統（機能/Docker/アーキ/監査/ガバナンス）の要求水準を維持。
+
+## 指摘事項
+- なし。
+
+## 最終判定
+- `AUDIT_PASS_ROADMAP`
