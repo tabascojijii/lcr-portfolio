@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtCore import Qt, Slot, QUrl
 
-from lcr.core.container.use_cases import RuntimeExecutionPreparationUseCase
+from lcr.core.container.use_cases import EnvironmentDraftUseCase, RuntimeExecutionPreparationUseCase
 from lcr.core.container.generator import generate_dockerfile, save_definition
 from lcr.core.history.use_cases import SaveExecutionHistoryUseCase
 from lcr.core.detector.use_cases import CodeAnalysisUseCase
@@ -59,6 +59,7 @@ class MainWindow(QMainWindow):
             raise RuntimeError("Failed to initialize ContainerManager")
         self.history_manager = history_manager or deps["history_manager"]
         self.runtime_use_case = RuntimeExecutionPreparationUseCase()
+        self.environment_draft_use_case = EnvironmentDraftUseCase(self.analyzer, self.container_manager)
         self.save_history_use_case = SaveExecutionHistoryUseCase(self.history_manager)
         self.audit_metadata_service = audit_metadata_service or deps["audit_metadata_service"]
         self.code_analysis_use_case = CodeAnalysisUseCase(self.analyzer, self.container_manager)
@@ -450,31 +451,17 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Code", "Please select or paste code to analyze first.")
             return
 
-        # 1. Analyze
-        # We assume the user wants to base the env on the CURRENT code
-        analysis = self.analyzer.summary(current_content)
-        
-        # 2. Get Recommendation
-        feature = self.analyzer.analyze(current_content)
-        search_terms = feature.imports + feature.keywords
-        if feature.validation_year:
-             search_terms.append(f"year:{feature.validation_year}")
-        
-        recommended_rule = self.container_manager.resolve_runtime(search_terms, feature.version_hint)
-        rec_id = recommended_rule['id']
-        rec_reason = recommended_rule.get('reason', 'Best match')
-
-        # 3. Synthesize Initial Config
-        # This uses the new logic in manager to calculate diffs
-        initial_config = self.container_manager.synthesize_definition_config(analysis, rec_id)
+        draft = self.environment_draft_use_case.prepare(current_content)
+        rec_id = draft.recommended_rule['id']
+        rec_reason = draft.recommendation_reason
         
         # 4. Show Dialog
         # 4. Show Dialog
         dialog = EnvironmentCreationDialog(
             parent=self,
             manager=self.container_manager,
-            base_images=self.container_manager.get_available_runtimes(),
-            initial_config=initial_config,
+            base_images=draft.base_images,
+            initial_config=draft.initial_config,
             recommended_base_id=rec_id,
             recommendation_reason=rec_reason
         )
@@ -689,7 +676,7 @@ class MainWindow(QMainWindow):
                  feature = self.analyzer.analyze(current_content)
                  code_ver = feature.version_hint
                  
-                 if not self.container_manager._check_version_compat(code_ver, rule_ver):
+                 if not self.container_manager.is_version_compatible(code_ver, rule_ver):
                      res = QMessageBox.warning(
                          self, 
                          "Compatibility Warning",

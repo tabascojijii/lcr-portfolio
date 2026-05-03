@@ -927,6 +927,14 @@ class ContainerManager:
         if code_ver.startswith('3') and rule_ver == '3.x': return True
         return False
 
+    def is_version_compatible(self, code_ver: str, rule_ver: str) -> bool:
+        """Public compatibility API for callers outside manager internals."""
+        return self._check_version_compat(code_ver, rule_ver)
+
+    def apply_legacy_pins(self, pip_packages: List[str], python_version: str) -> List[str]:
+        """Public API for legacy pinning without exposing private helpers."""
+        return self._apply_legacy_pins(pip_packages, python_version)
+
     def select_image(self, analysis_result: AnalysisResult) -> ImageRule:
         """Legacy wrapper for backward compatibility."""
         # Convert analysis result to search terms

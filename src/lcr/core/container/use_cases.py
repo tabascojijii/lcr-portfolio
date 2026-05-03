@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import subprocess
 
 from lcr.core.container.generator import generate_dockerfile, save_definition
@@ -13,6 +13,41 @@ class BuildPreparationResult:
     tag: str
     apt_added_tools: List[str]
     has_opencv_pip_warning: bool
+
+
+@dataclass
+class EnvironmentDraft:
+    initial_config: Dict[str, Any]
+    recommended_rule: Dict[str, Any]
+    recommendation_reason: str
+    base_images: List[Dict[str, Any]]
+
+
+class EnvironmentDraftUseCase:
+    """Prepare environment-creation inputs from code content."""
+
+    def __init__(self, analyzer, container_manager):
+        self.analyzer = analyzer
+        self.container_manager = container_manager
+
+    def prepare(self, code_text: str) -> EnvironmentDraft:
+        analysis = self.analyzer.summary(code_text)
+        feature = self.analyzer.analyze(code_text)
+        search_terms = feature.imports + feature.keywords
+        if feature.validation_year:
+            search_terms.append(f"year:{feature.validation_year}")
+
+        recommended_rule = self.container_manager.resolve_runtime(search_terms, feature.version_hint)
+        rec_id = recommended_rule["id"]
+        rec_reason = recommended_rule.get("reason", "Best match")
+        initial_config = self.container_manager.synthesize_definition_config(analysis, rec_id)
+
+        return EnvironmentDraft(
+            initial_config=initial_config,
+            recommended_rule=recommended_rule,
+            recommendation_reason=rec_reason,
+            base_images=self.container_manager.get_available_runtimes(),
+        )
 
 
 class EnvironmentBuildPreparationUseCase:
@@ -29,7 +64,7 @@ class EnvironmentBuildPreparationUseCase:
 
         version = "3.6" if "3.6" in base_image else ""
         if version and self.container_manager:
-            pip_pkgs = self.container_manager._apply_legacy_pins(pip_pkgs, version)
+            pip_pkgs = self.container_manager.apply_legacy_pins(pip_pkgs, version)
             result["pip_packages"] = pip_pkgs
 
         if "python3-opencv" in apt_pkgs:
