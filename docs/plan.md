@@ -39,7 +39,9 @@
   - `ExecutionAuditPort`
   - `EnvironmentLifecyclePort`
   - `ContainerImagePort`
+  - すべて `abc.ABC` または `typing.Protocol` で定義し、UI/UseCase から具象実装を直接参照しない。
 - `MainWindow`/Environment Manager はイベント受理と表示更新のみを担当。
+- `docs/allowed_ui_operations.md` に signal/slot 命名規約（signal: 過去分詞、slot: 動詞）を明記する。
 
 ### 2.3 RC-3 対策: REJECT ルーティングの明確化
 - 監査指摘を `Requirement / Architecture / Implementation` の3レイヤーで分類。
@@ -55,6 +57,7 @@
 - `docs/audit_log_schema.md`
 - `docs/ui_usecase_boundary.md`
 - `docs/allowed_ui_operations.md`
+- `docs/container_reproducibility_policy.md`
 - `docs/architecture_decoupling_assessment.md`（Requirements 6.1）
 - `docs/refactoring_proposal.md`（Requirements 6.1）
 
@@ -62,6 +65,11 @@
 - 監査必須スキーマが固定され、必須キー一覧と採取タイミングが明文化済み。
 - `file path + class/function + violation + evidence` 形式で違反一覧化済み。
 - 改善項目に P0/P1/P2 優先度と移管先レイヤーが定義済み。
+- EOLコンテナ再現性ポリシーとして以下4点が非交渉ルール化済み。
+  - Dockerfile `FROM` の SHA256 ダイジェスト固定
+  - EOL向けAPTアーカイブリポジトリへのリダイレクト
+  - `constraints.txt` による pip 依存解決範囲固定
+  - OpenCV等を想定したマルチステージビルド強制
 
 ### Phase B: Phase 5（Validation Guardrails）実装
 実装対象:
@@ -94,6 +102,7 @@
 実装対象:
 - `MainWindow` から業務処理を UseCase 群へ段階移管
 - Port 未使用箇所の排除（境界バイパス禁止）
+- すべての Port を `abc.ABC` または `typing.Protocol` で定義
 - 循環依存の解消
 
 完了条件:
@@ -112,10 +121,16 @@
 - 必須アーキテクチャゲート:
   - UI 層の禁止 API 呼び出し検出テスト
   - 依存方向違反検出テスト
+  - Port の `abc.ABC` / `typing.Protocol` 準拠検証（具象直参照を fail）
   - 監査ログ必須スキーマ完全性テスト
+  - UI シグナル/スロット命名規約検査（signal: 過去分詞、slot: 動詞）
 - 必須再現性ゲート:
   - ログに `git_commit_hash` と image digest が存在
   - 相対パス以外を検出した場合 fail-fast
+  - Dockerfile `FROM` がタグのみ（digestなし）の場合 fail
+  - APTソースがEOL標準ミラーのままの場合 fail
+  - `constraints.txt` 未使用の `pip install` を検出した場合 fail
+  - 単一ステージでビルドツール同梱の実行イメージを検出した場合 fail
 
 ## 6. リスクと先回り策
 - リスク: 既存 UI に残る隠れた業務ロジックが移管漏れする。
