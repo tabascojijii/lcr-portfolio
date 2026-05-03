@@ -1,30 +1,53 @@
-# 監査レポート（Roadmap）
+# Audit Report
 
-## 監査対象
-- `docs/roadmap.md`
+## 1) pytest 実行結果
+- 実行コマンド: `pytest tests/`
+- 結果: **34 passed, 0 failed**
+- 抜粋ログ:
+  - `collected 34 items`
+  - `============================= 34 passed in 1.66s ==============================`
 
-## 絶対基準
-- `docs/plan.md`
-- `docs/reference_standards.md`
+## 2) reference_standards.md 照合結果（src/・tests/）
 
-## 判定
-- **問題なし（PASS）**
+### 判定: **REJECT**（基準違反あり）
 
-## 監査結果サマリ
-- `docs/roadmap.md` は、`docs/plan.md` が求める実行計画（Self-Learning Loop再検証中心、Knowledge Update / Real-time Feedback / Dynamic Refresh、異常系、監査準備）をフェーズ分解して具体化している。
-- `docs/reference_standards.md` の4章（監査ガバナンス、Docker再現性、データ完全性、PyQt/PySideアーキテクチャ）に対し、対応フェーズ・受け入れ基準・証跡保存先が明示されている。
-- REJECT時の処方的運用、Builder/Validator分離、EMCS客観メトリクス運用がロードマップへ組み込まれており、監査可能性の要件に適合している。
+### 違反1: UI層のHumble Object違反（UIに業務ロジック集中）
+- 対象基準: `4. PyQt / PySide モダンUIアーキテクチャ標準`
+  - `Humble Object パターンの適用`
+- 根拠:
+  - `src/lcr/ui/main_window.py:368` `_run_analysis` が解析実行、SLOC計算、ランタイム選択まで実施
+  - `src/lcr/ui/main_window.py:726` `prepare_run_config` 呼び出しと実行前判定をUIクラス内で実施
+  - `src/lcr/ui/main_window.py:741` `subprocess.run(["docker", "image", "inspect", ...])` をUIクラス内で直接実施
+  - `src/lcr/ui/main_window.py:901` 履歴保存 `save_record` までUIクラス内で実施
+- 指摘:
+  - Viewが表示責務を超えて、解析・実行制御・永続化制御を保持している。
+- 処方的修正指示:
+  - 解析/実行オーケストレーションをUseCase/Presenterへ分離し、UIは入力受け取りと表示更新に限定すること。
 
-## 詳細確認
-1. `plan.md` との整合
-- Phase A-E相当の作業が、RoadmapではPhase 1-6として不足なく展開されている。
-- `plan.md` のDoD要素（`pytest tests/`、再検証3シナリオ、重大違反0、再現可能証跡）がGate条件・Final Gateに反映されている。
+### 違反2: 依存方向違反（Core層がQtに依存）
+- 対象基準: `4. PyQt / PySide モダンUIアーキテクチャ標準`
+  - `クリーンアーキテクチャと依存の方向`
+- 根拠:
+  - `src/lcr/core/container/worker.py:18` `from PySide6.QtCore import QThread, Signal`
+  - `src/lcr/core/container/worker.py:21` `class ContainerWorker(QThread)`
+- 指摘:
+  - Core配下モジュールがUIフレームワーク(Qt)へ直接依存している。
+- 処方的修正指示:
+  - `core` からQt依存を除去し、実行処理は純粋Pythonサービスに分離すること。
+  - Qtスレッド/シグナル連携は `ui` 層アダプタ（例: `ui/workers.py`）へ移譲すること。
 
-2. `reference_standards.md` との整合
-- 監査/ガバナンス: EMCS指標、Builder/Validator分離、処方的REJECT運用の記載あり。
-- Docker再現性: digest固定、archiveリポジトリ、constraints、マルチステージの記載あり。
-- データ完全性: digest/commit hash/SHA-256/相対パス運用の記載あり。
-- UIアーキテクチャ: Humble Object、Clean Architecture、`abc.ABC`/`typing.Protocol`、命名規約の記載あり。
+### 違反3: インターフェース規律不足（具象依存）
+- 対象基準: `4. PyQt / PySide モダンUIアーキテクチャ標準`
+  - `インターフェースによる規律`
+- 根拠:
+  - `src/lcr/ui/main_window.py` で `ContainerManager`, `CodeAnalyzer`, `HistoryManager` 等の具象へ直接依存
+  - `src/lcr/ui/create_env_dialog.py` で `ContainerManager` 具象型を直接受け取り
+- 指摘:
+  - `abc.ABC` / `typing.Protocol` ベースのポートを介した境界が不十分。
+- 処方的修正指示:
+  - UIが依存する操作を `Protocol` で定義し、具象実装はDIで注入すること。
+  - テストではそのProtocolモックを使用してUI単体検証を可能にすること。
 
-## 指摘事項
-- 指摘なし（重大違反 0 件 / 軽微違反 0 件）
+## 3) 総合判定
+- pytestは全件Passだが、`reference_standards.md` のアーキテクチャ規約に対する重大違反を確認。
+- 最終判定: **REJECT_TO_IMPLEMENT**
