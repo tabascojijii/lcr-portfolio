@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional
+import subprocess
 
 from lcr.core.container.generator import generate_dockerfile, save_definition
 
@@ -59,3 +60,16 @@ class EnvironmentBuildPreparationUseCase:
             apt_added_tools=apt_added_tools,
             has_opencv_pip_warning=has_opencv_pip_warning,
         )
+
+
+class RuntimeExecutionPreparationUseCase:
+    """Use case for runtime pre-checks before UI starts execution worker."""
+
+    def image_exists(self, image_name: str) -> bool:
+        result = subprocess.run(
+            ["docker", "image", "inspect", image_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0

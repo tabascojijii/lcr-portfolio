@@ -13,9 +13,9 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QTextCursor, QColor
 
 from lcr.core.container.types import ImageRule
-from lcr.core.container.manager import ContainerManager
 from lcr.core.container.use_cases import EnvironmentBuildPreparationUseCase
 from lcr.ui.workers import BuildWorker
+from lcr.ui.ports import ContainerManagerPort
 
 class EnvironmentCreationDialog(QDialog):
     """
@@ -24,7 +24,7 @@ class EnvironmentCreationDialog(QDialog):
     and customize installed packages.
     """
     
-    def __init__(self, parent=None, manager: ContainerManager = None, base_images: List[ImageRule] = [], initial_config: Dict = {}, 
+    def __init__(self, parent=None, manager: ContainerManagerPort = None, base_images: List[ImageRule] = [], initial_config: Dict = {}, 
                  recommended_base_id: Optional[str] = None, recommendation_reason: Optional[str] = None):
         super().__init__(parent)
         self.setWindowTitle("Create New Runtime Environment")

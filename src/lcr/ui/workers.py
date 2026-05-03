@@ -12,6 +12,7 @@ import os
 import signal
 from typing import Optional, List
 from PySide6.QtCore import QThread, Signal
+from lcr.core.container.worker import ContainerExecutionService
 
 class BuildWorker(QThread):
     """
@@ -115,3 +116,22 @@ class BuildWorker(QThread):
                 print(f"Error cleaning up build process: {e}")
             finally:
                 self.process = None
+
+
+class ContainerWorker(QThread):
+    """Qt adapter for container execution service."""
+
+    log_updated = Signal(str)
+    error_occurred = Signal(str)
+    finished_with_code = Signal(int)
+
+    def __init__(self, docker_args: List[str], script_name: str = "script", parent=None):
+        super().__init__(parent)
+        self._service = ContainerExecutionService(docker_args=docker_args, script_name=script_name)
+
+    def run(self):
+        exit_code = self._service.execute(self.log_updated.emit, self.error_occurred.emit)
+        self.finished_with_code.emit(exit_code)
+
+    def stop(self):
+        self._service.stop()

@@ -12,7 +12,7 @@ connecting the CodeAnalyzer, ContainerManager, and ContainerWorker.
 import sys
 from pathlib import Path
 import io
-import datetime
+from typing import Optional
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
@@ -25,29 +25,38 @@ from PySide6.QtCore import Qt, Slot, QUrl
 
 from lcr.core.detector.analyzer import CodeAnalyzer
 from lcr.core.container.manager import ContainerManager
-from lcr.core.container.worker import ContainerWorker
+from lcr.core.container.use_cases import RuntimeExecutionPreparationUseCase
 from lcr.core.container.generator import generate_dockerfile, save_definition
 from lcr.core.history.manager import HistoryManager
-from lcr.core.history.types import ExecutionHistory
+from lcr.core.history.use_cases import SaveExecutionHistoryUseCase
 from lcr.core.audit import AuditMetadataService
 from lcr.ui.create_env_dialog import EnvironmentCreationDialog
+from lcr.ui.workers import ContainerWorker
+from lcr.ui.ports import ContainerManagerPort, HistoryManagerPort
 from utils.count_loc import count_lines_python
 
 
 class MainWindow(QMainWindow):
     """Main window of the application."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        analyzer: Optional[CodeAnalyzer] = None,
+        container_manager: Optional[ContainerManagerPort] = None,
+        history_manager: Optional[HistoryManagerPort] = None,
+    ):
         super().__init__()
         self.setWindowTitle("Legacy Code Reviver")
         self.resize(1200, 800)
 
         # backend components
-        self.analyzer = CodeAnalyzer()
-        self.container_manager = ContainerManager()
+        self.analyzer = analyzer or CodeAnalyzer()
+        self.container_manager = container_manager or ContainerManager()
         if not self.container_manager:
             raise RuntimeError("Failed to initialize ContainerManager")
-        self.history_manager = HistoryManager()
+        self.history_manager = history_manager or HistoryManager()
+        self.runtime_use_case = RuntimeExecutionPreparationUseCase()
+        self.save_history_use_case = SaveExecutionHistoryUseCase(self.history_manager)
         self.audit_metadata_service = AuditMetadataService()
         self.worker = None
         self.current_output_dir = None
@@ -738,14 +747,7 @@ class MainWindow(QMainWindow):
             # Note: prepare_run_config doesn't return existence, so we check here manually or via helper
             # For robustness, we'll try a lightweight subprocess check
             # Check if image exists
-            result = subprocess.run(
-                ["docker", "image", "inspect", image_name], 
-                capture_output=True,
-                text=True,
-                check=False  # Don't raise exception if image doesn't exist
-            )
-            
-            if result.returncode != 0:
+            if not self.runtime_use_case.image_exists(image_name):
                 # Image missing! Prompt JIT Build
                 print(f"[Info] Image {image_name} not found. Build is required.")
                 ans = QMessageBox.question(
@@ -872,9 +874,7 @@ class MainWindow(QMainWindow):
         
         # Save History
         try:
-            if self.current_output_dir: 
-                import uuid
-                
+            if self.current_output_dir:
                 # Determine detailed reason
                 reason = "Unknown"
                 if self.selection_mode == 'Manual':
@@ -886,19 +886,15 @@ class MainWindow(QMainWindow):
                 else:
                     # Auto reason (would be nice to capture from resolve_runtime log, but for now simple)
                     reason = "Auto: Detected"
-                
-                record: ExecutionHistory = {
-                    "id": str(uuid.uuid4()),
-                    "timestamp": datetime.datetime.now().replace(microsecond=0).isoformat(),
-                    "script_path": self.script_path_edit.text(),
-                    "runtime_name": self.runtime_combo.currentText(),
-                    "image_tag": "docker", # Placeholder or actual image
-                    "output_dir": self.current_output_dir,
-                    "status": "success" if exit_code == 0 else "failed",
-                    "selection_mode": self.selection_mode,
-                    "selection_reason": reason
-                }
-                self.history_manager.save_record(record)
+                self.save_history_use_case.save(
+                    script_path=self.script_path_edit.text(),
+                    runtime_name=self.runtime_combo.currentText(),
+                    output_dir=self.current_output_dir,
+                    exit_code=exit_code,
+                    selection_mode=self.selection_mode,
+                    selection_reason=reason,
+                    image_tag="docker",
+                )
                 self._refresh_history_list()
                 self.console_log.append(f"[History] Record saved ({self.selection_mode}).")
                 

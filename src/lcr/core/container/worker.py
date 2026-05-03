@@ -2,72 +2,35 @@
 # Released under the MIT license
 # https://opensource.org/licenses/MIT
 
-"""
-Container worker for executing Docker containers in background threads.
-
-This module provides ContainerWorker which:
-- Executes Docker containers in a QThread
-- Streams output via signals
-- Handles errors and cleanup properly
-- Based on LCR's TrainingWorker pattern
-"""
+"""Container process runner (framework-agnostic)."""
 
 import subprocess
-from pathlib import Path
-from typing import Optional
-from PySide6.QtCore import QThread, Signal
+from typing import Callable, Optional
 
 
-class ContainerWorker(QThread):
-    """
-    Worker thread for executing Docker containers.
-    
-    Refactored from LCR's TrainingWorker to execute legacy code
-    in Docker containers with real-time output streaming.
-    
-    Signals:
-        output_ready(str): Emitted when new output line is available
-        error_occurred(str): Emitted when an error occurs
-        finished_with_code(int): Emitted when execution completes with exit code
-    """
-    
-    # Signals
-    log_updated = Signal(str)
-    error_occurred = Signal(str)
-    finished_with_code = Signal(int)
-    
-    def __init__(
-        self, 
-        docker_args: list,
-        script_name: str = "script",
-        parent=None
-    ):
-        """
-        Initialize the ContainerWorker.
-        
-        Args:
-            docker_args: Complete docker run command arguments
-            script_name: Name of script being executed (for logging)
-            parent: Parent QObject
-        """
-        super().__init__(parent)
+class ContainerExecutionService:
+    """Pure Python service for running Docker process with streamed logs."""
+
+    def __init__(self, docker_args: list, script_name: str = "script"):
         self.docker_args = docker_args
         self.script_name = script_name
         self.process: Optional[subprocess.Popen] = None
         self._stop_requested = False
-    
 
-    def run(self):
-        """Execute the Docker container (runs in background thread)."""
+    def execute(
+        self,
+        on_log: Callable[[str], None],
+        on_error: Callable[[str], None],
+    ) -> int:
+        """Execute Docker command and stream outputs via callbacks."""
         exit_code = -1
         try:
-            self.log_updated.emit("=" * 70)
-            self.log_updated.emit(f"Starting container execution: {self.script_name}")
-            self.log_updated.emit("=" * 70)
-            self.log_updated.emit(f"Command: {' '.join(self.docker_args)}")
-            self.log_updated.emit("")
-            
-            # Start Docker process
+            on_log("=" * 70)
+            on_log(f"Starting container execution: {self.script_name}")
+            on_log("=" * 70)
+            on_log(f"Command: {' '.join(self.docker_args)}")
+            on_log("")
+
             self.process = subprocess.Popen(
                 self.docker_args,
                 stdout=subprocess.PIPE,
@@ -77,66 +40,51 @@ class ContainerWorker(QThread):
                 bufsize=1,
                 universal_newlines=True
             )
-            
-            # Stream output line by line
+
             for line in iter(self.process.stdout.readline, ''):
                 if self._stop_requested:
-                    self.log_updated.emit("\n[Execution stopped by user]")
+                    on_log("\n[Execution stopped by user]")
                     break
-                
                 if line:
-                    self.log_updated.emit(line.rstrip())
-            
-            # Wait for process to complete
+                    on_log(line.rstrip())
+
             if not self._stop_requested:
                 exit_code = self.process.wait()
-                
-                self.log_updated.emit("")
-                self.log_updated.emit("=" * 70)
+                on_log("")
+                on_log("=" * 70)
                 if exit_code == 0:
-                    self.log_updated.emit(f"Container execution completed successfully (exit code: {exit_code})")
+                    on_log(f"Container execution completed successfully (exit code: {exit_code})")
                 else:
-                    self.log_updated.emit(f"Container execution failed (exit code: {exit_code})")
-                self.log_updated.emit("=" * 70)
+                    on_log(f"Container execution failed (exit code: {exit_code})")
+                on_log("=" * 70)
             else:
                 exit_code = -1
-        
         except FileNotFoundError:
-            error_msg = (
-                "Docker command not found. Please ensure Docker is installed and "
-                "available in your system PATH."
-            )
-            self.error_occurred.emit(error_msg)
+            on_error("Docker command not found. Please ensure Docker is installed and available in your system PATH.")
             exit_code = -1
-        
         except Exception as e:
             import traceback
-            error_msg = f"Error executing container:\n{traceback.format_exc()}"
-            self.error_occurred.emit(error_msg)
+            on_error(f"Error executing container:\n{traceback.format_exc()}")
             exit_code = -1
-        
         finally:
             self._cleanup()
-            self.finished_with_code.emit(exit_code)
-            
+        return exit_code
+
     def stop(self):
-        """Request the worker to stop execution and kill the container process."""
+        """Request stop and terminate subprocess."""
         self._stop_requested = True
         self._cleanup()
-    
+
     def _cleanup(self):
-        """Clean up resources and kill subprocess."""
+        """Clean up running process."""
         if self.process:
             try:
                 if self.process.poll() is None:
-                    # Terminate first
                     self.process.terminate()
                     try:
                         self.process.wait(timeout=2)
                     except subprocess.TimeoutExpired:
-                        # Kill if stubborn
                         self.process.kill()
-                        self.log_updated.emit("Force killed container process.")
             except Exception:
                 pass
             self.process = None
