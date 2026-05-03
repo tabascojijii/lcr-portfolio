@@ -2,6 +2,7 @@
 
 ## 0. Scope and Objective
 - 本計画は `docs/core_philosophy.md`、`docs/requirements.md`、`docs/reference_standards.md` に完全準拠し、`docs/post_mortem.md` で特定された構造的欠陥を是正する。
+- `docs/audit_report.md` の最新判定を実行前ゲートとして取り込み、PASS時も是正項目の恒久化を継続する。
 - 対象は Phase 5 / Phase 6 / Phase 6.1。
 - 成功条件は「機能実現」ではなく「監査可能性・再現可能性・疎結合性」の同時達成。
 - 本計画に曖昧語（例: 主要、必要に応じて、可能なら）を使用しない。
@@ -55,6 +56,11 @@
 - Auditorの許可入力は `requirements` と `diff` のみとし、実装時の思考過程・内部メモへのアクセスを禁止する。
 - REJECT時は「失敗箇所・違反制約・観測証拠・修正ヒント・再検証条件・ルーティング先」を必須出力とする。
 
+### 1.6 Audit Synchronization Rule
+- 監査結果は常に最新の `docs/audit_report.md` を正とし、過去のREJECT分析は再発防止制約として維持する。
+- PASS判定時も、過去REJECT起因の制約（RC-1〜RC-3）は削除しない。
+- 監査文書と計画文書に不整合がある場合は、実装着手前に `plan.md` を先に更新する。
+
 ## 2. Traceability Matrix (Requirement -> Implementation -> Test -> Gate)
 - R5-1 (Capability Mapping):
   - 実装: Capability統合UseCase（knowledge=推定、execution=実証）
@@ -80,6 +86,7 @@
 ## 3. Execution Strategy
 - 一括置換を禁止し、後方互換を保った段階移行を実施する。
 - 各フェーズは以下の順で完了判定する:
+  - Plan Gate（設計制約の明文化完了）
   - Functional Gate
   - Structural Gate
   - Audit Gate
@@ -237,6 +244,8 @@
   - 明示禁止 + CI検査 + 違反時マージ不可。
 - RC-3（UI計算/整形の流入）対策:
   - UI禁止行為として明文化 + 検査ゲート化。
+- 監査同期不整合対策:
+  - `audit_report.md` の判定と `plan.md` 制約セットの差分をレビューし、差分が1件でもあれば実装着手を停止する。
 - ループ再発防止:
   - 設計不備は実装工程へ送らず `REJECT_TO_ARCHITECT` へ直送。
 
@@ -250,6 +259,7 @@
 - 監査運用でBuilder/Validator分離が維持され、入力境界違反が0件。
 - EMCSメトリクス（M1-M5）が全て閾値内。
 - PyQt/PySideシグナル・スロット命名規約違反が0件。
+- 最新 `docs/audit_report.md` と `docs/plan.md` の制約整合差分が0件。
 
 ## 8. Explicit Prohibition
 - 本作業中の `git commit` を禁止する。
