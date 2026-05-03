@@ -100,6 +100,40 @@ class EnvironmentBuildPreparationUseCase:
 class RuntimeExecutionPreparationUseCase:
     """Use case for runtime pre-checks before UI starts execution worker."""
 
+    def prepare_guard(
+        self,
+        required_imports: Optional[List[str]],
+        environment_capability: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        required = self._normalize_imports(required_imports or [])
+        capability_imports = self._normalize_imports((environment_capability or {}).get("imports", []))
+        capability_set = set(capability_imports)
+        missing = sorted([name for name in required if name not in capability_set])
+        matched = sorted([name for name in required if name in capability_set])
+        mismatch = {
+            "required": required,
+            "capability_imports": capability_imports,
+            "matched": matched,
+            "missing": missing,
+            "mismatch_count": len(missing),
+        }
+        guard_state = "blocked" if missing else "pass"
+        return {
+            "required_imports": required,
+            "environment_capability": environment_capability or {},
+            "mismatch_result": mismatch,
+            "guard_state": guard_state,
+            "can_run": guard_state == "pass",
+        }
+
+    def _normalize_imports(self, imports: List[str]) -> List[str]:
+        normalized = []
+        for name in imports:
+            cleaned = str(name).strip()
+            if cleaned:
+                normalized.append(cleaned)
+        return sorted(set(normalized))
+
     def image_exists(self, image_name: str) -> bool:
         result = subprocess.run(
             ["docker", "image", "inspect", image_name],
