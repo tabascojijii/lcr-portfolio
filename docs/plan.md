@@ -1,4 +1,4 @@
-# LCR 実装計画（Architect / Structural Recovery Plan v2）
+# LCR 実装計画（Architect / Structural Recovery Plan v3）
 
 ## 0. 読み込み結果と前提
 - 読み込み完了:
@@ -7,7 +7,7 @@
   - `docs/post_mortem.md`
   - `docs/audit_report.md`
 - 指定された `docs/core_philosophy.md` は現時点で存在しないため、`requirements.md` / `reference_standards.md` / `post_mortem.md` / `audit_report.md` を拘束条件として計画を再構成する。
-- 本計画の主目的は、`post_mortem.md` の RC-1〜RC-3 を起点に、`audit_report.md` の REJECT_TO_ARCHITECT 指摘5件を設計段階で全閉塞すること。
+- `docs/audit_report.md` の判定は **AUDIT_PASS_PLAN（重大指摘なし）**。したがって本改訂の主目的は「監査指摘対応」ではなく、`post_mortem.md` の RC-1〜RC-3 をプロセス/設計に埋め込み、再発を構造的に封じること。
 
 ## 1. 最上位拘束
 1. 要件拘束:
@@ -47,9 +47,9 @@
   - `REJECT_TO_IMPLEMENT`: 実装欠陥、テスト欠陥
 - REJECT時は処方的指示（違反箇所、根拠規約、修正条件、再検証手順）を必須化する。
 
-## 3. audit_report 指摘対応（設計追加）
+## 3. audit_report を踏まえた監査ベースライン固定
 
-### 3.1 EMCS定量メトリクス（指摘1対応）
+### 3.1 EMCS定量メトリクス（PASS維持条件）
 - M1 層間依存違反件数:
   - 定義: UI層からDomain/Infra具象への直接参照件数
   - 測定: 静的解析（importルール）+ レビュー
@@ -71,13 +71,13 @@
   - Fail条件: 100%未満
   - エビデンス: `docs/audit/evidence/audit_schema_check.json`
 
-### 3.2 Builder/Validator 分離（指摘2対応）
+### 3.2 Builder/Validator 分離（PASS維持条件）
 - Auditor入力境界を固定:
   - 許可入力: requirements、reference standards、対象Diff、テスト証跡
   - 禁止入力: Builderの思考ログ、未承認メモ、口頭補足
 - 監査テンプレートに「参照入力一覧」欄を必須化する。
 
-### 3.3 Docker再現性標準（指摘3対応）
+### 3.3 Docker再現性標準（PASS維持条件）
 - EOLスタック用コンテナ規約を実装計画へ編入する。
   - `FROM <image>@sha256:<digest>` を必須化
   - APTソースを archive/old-releases に固定
@@ -85,12 +85,12 @@
   - マルチステージで build/runtime を分離
 - 監査項目として「コンテナ再現性チェック」を追加する。
 
-### 3.4 Interface規律（指摘4対応）
+### 3.4 Interface規律（PASS維持条件）
 - View-UseCase 間、UseCase-Infra 間は `abc.ABC` または `typing.Protocol` 経由に限定する。
 - 具象クラスの直接newを禁止し、Composition Root で注入する。
 - テストに「具象依存禁止」チェックを追加する。
 
-### 3.5 Signal/Slot命名規約（指摘5対応）
+### 3.5 Signal/Slot命名規約（PASS維持条件）
 - Signal: 過去分詞（例: `capabilityUpdated`）
 - Slot: 動詞開始（例: `update_capability_display`）
 - レビュー観点とLint観点に命名検査を追加する。
