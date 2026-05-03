@@ -7,10 +7,12 @@
 ## 1. 目標と完了条件
 - 目標: Phase 5（Validation Guardrails）実装と、監査・再現性・UI境界・証跡要件の同時達成。
 - 完了条件:
-1. `reference_standards` の4章（監査ガバナンス / Docker再現性 / データ完全性 / UIアーキテクチャ）に違反0件。
-2. `plan.md` の Gate A〜I 完了。
-3. 監査必須キー欠落0件、層逆流0件、循環依存0件、SRP違反0件。
-4. `pytest tests/` 全件Pass。
+1. AC-1〜AC-5 達成。
+2. `pytest tests/` 全件Pass。
+3. 監査スキーマ必須項目充足率100%。
+4. UI/UseCase/Domain/Infra の依存方向違反0件。
+5. Docker再現性4要件の静的検査・実行検証・証跡記録が全てPass。
+6. EMCS監査票に基づく判定再現性（監査者差分0）を確認。
 
 ## 2. 絶対基準トレーサビリティ
 - 監査ガバナンス（EMCS / Builder-Validator分離 / 処方的REJECT）を全Gateで必須適用。
@@ -42,14 +44,17 @@
 2. EOL向けAPT archive切替。
 3. `constraints.txt` 強制。
 4. マルチステージビルド化。
+5. 検証要件の固定（APT archive切替証跡、`constraints.txt` 適用ログ確認）。
 - 成果物:
 1. Docker構成一式
 2. 静的検査ルール
-3. ビルド検証証跡
+3. ビルド検証証跡（APT archive切替証跡、`constraints.txt` 適用ログを含む）
 - REJECT条件:
 1. タグベースFROM。
 2. constraints未適用。
 3. 単一ステージでC/C++ビルド同居。
+4. APT archive切替証跡の欠落。
+5. `constraints.txt` 適用ログ証跡の欠落。
 
 ### Phase 3: 判定ロジック実装（Gate C, D）
 - スコープ:
@@ -75,7 +80,9 @@
 2. 新規環境作成フロー
 - REJECT条件:
 1. UIによるJSON直接編集。
-2. ガード無視実行経路の存在。
+2. UIから監査ログ直接書き込み。
+3. UIからDocker実行直接呼び出し。
+4. ガード無視実行経路の存在。
 
 ### Phase 5: 監査証跡と命名規約ゲート（Gate G, H）
 - スコープ:
