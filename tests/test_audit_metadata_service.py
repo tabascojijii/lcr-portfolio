@@ -2,6 +2,8 @@ import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from lcr.core.audit import AuditMetadataService
 
 
@@ -40,3 +42,31 @@ def test_collect_falls_back_when_image_or_git_unavailable(tmp_path, monkeypatch)
 
     assert metadata["image_digest"] == "unavailable:missing-image"
     assert metadata["git_commit_hash"] == "unavailable"
+
+
+def test_collect_normalizes_relative_script_path(tmp_path, monkeypatch):
+    script = tmp_path / "script.py"
+    script.write_text("print('ok')\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout=""),
+    )
+    service = AuditMetadataService()
+    metadata = service.collect("img", str(script), r"nested\script.py")
+
+    assert metadata["script_path_rel"] == "nested/script.py"
+
+
+def test_collect_rejects_absolute_script_rel_path(tmp_path, monkeypatch):
+    script = tmp_path / "script.py"
+    script.write_text("print('ok')\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout=""),
+    )
+    service = AuditMetadataService()
+
+    with pytest.raises(ValueError):
+        service.collect("img", str(script), str(script.resolve()))

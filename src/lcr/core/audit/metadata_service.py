@@ -1,5 +1,6 @@
 import hashlib
 import subprocess
+from pathlib import PurePath
 from typing import Dict
 
 
@@ -7,12 +8,19 @@ class AuditMetadataService:
     """Collect audit metadata required by project standards."""
 
     def collect(self, image_name: str, script_path: str, script_path_rel: str) -> Dict[str, str]:
+        relative_script_path = self._normalize_relative_path(script_path_rel)
         return {
             "image_digest": self._resolve_image_digest(image_name),
             "git_commit_hash": self._resolve_git_commit_hash(),
-            "script_path_rel": script_path_rel,
+            "script_path_rel": relative_script_path,
             "script_sha256": self._sha256_file(script_path),
         }
+
+    def _normalize_relative_path(self, path_str: str) -> str:
+        path = PurePath(path_str)
+        if path.is_absolute():
+            raise ValueError(f"script_path_rel must be relative: {path_str}")
+        return path.as_posix()
 
     def _resolve_image_digest(self, image_name: str) -> str:
         inspect = subprocess.run(
