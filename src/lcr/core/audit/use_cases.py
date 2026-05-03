@@ -13,6 +13,10 @@ class CollectAuditMetadataUseCase:
         input_files=None,
         output_files=None,
         log_path=None,
+        required_imports=None,
+        environment_capability=None,
+        mismatch_result=None,
+        guard_state="unknown",
     ):
         script_rel = self.history_manager.to_relative_path(script_path)
         input_files = input_files or []
@@ -31,4 +35,8 @@ class CollectAuditMetadataUseCase:
             output_files_rel=output_rel,
             log_path=log_path,
             log_path_rel=log_rel,
+            required_imports=required_imports or [],
+            environment_capability=environment_capability or {},
+            mismatch_result=mismatch_result or {},
+            guard_state=guard_state,
         )

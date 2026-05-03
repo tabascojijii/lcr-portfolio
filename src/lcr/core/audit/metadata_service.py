@@ -2,7 +2,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import PurePath
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 
 class AuditMetadataService:
@@ -20,22 +20,41 @@ class AuditMetadataService:
         output_files_rel: Optional[List[str]] = None,
         log_path: Optional[str] = None,
         log_path_rel: Optional[str] = None,
+        required_imports: Optional[List[str]] = None,
+        environment_capability: Optional[Dict[str, Any]] = None,
+        mismatch_result: Optional[Dict[str, Any]] = None,
+        guard_state: str = "unknown",
     ) -> Dict:
         relative_script_path = self._normalize_relative_path(script_path_rel)
+        input_hashes = self._hash_path_pairs(input_files or [], input_files_rel or [])
+        output_hashes = self._hash_path_pairs(output_files or [], output_files_rel or [])
+        param_sha256 = self._sha256_json(param_payload or {})
         metadata: Dict = {
+            # Required provenance
             "image_digest": self._resolve_image_digest(image_name),
             "git_commit_hash": self._resolve_git_commit_hash(),
             "script_path_rel": relative_script_path,
             "script_sha256": self._sha256_file(script_path),
-            "param_hash": self._sha256_json(param_payload or {}),
-            "input_hashes": self._hash_path_pairs(input_files or [], input_files_rel or []),
-            "output_hashes": self._hash_path_pairs(output_files or [], output_files_rel or []),
+            "param_hash": param_sha256,
+            "input_hashes": input_hashes,
+            "output_hashes": output_hashes,
             "log_hash": "unavailable",
             "log_path_rel": "",
+            # Extended audit schema (reference standards / roadmap)
+            "required_imports": sorted(set(required_imports or [])),
+            "environment_capability": environment_capability or {},
+            "mismatch_result": mismatch_result or {},
+            "guard_state": guard_state,
+            "parameter_sha256": param_sha256,
+            "input_sha256": input_hashes,
+            "output_sha256": output_hashes,
+            "log_sha256": "unavailable",
         }
         if log_path and log_path_rel:
             metadata["log_path_rel"] = self._normalize_relative_path(log_path_rel)
-            metadata["log_hash"] = self._sha256_file(log_path)
+            log_sha = self._sha256_file(log_path)
+            metadata["log_hash"] = log_sha
+            metadata["log_sha256"] = log_sha
         return metadata
 
     def _normalize_relative_path(self, path_str: str) -> str:
