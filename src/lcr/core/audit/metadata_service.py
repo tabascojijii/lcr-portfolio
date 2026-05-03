@@ -49,12 +49,20 @@ class AuditMetadataService:
             "input_sha256": input_hashes,
             "output_sha256": output_hashes,
             "log_sha256": "unavailable",
+            "relative_paths": {
+                "script": relative_script_path,
+                "inputs": sorted(input_hashes.keys()),
+                "outputs": sorted(output_hashes.keys()),
+                "log": "",
+            },
         }
         if log_path and log_path_rel:
-            metadata["log_path_rel"] = self._normalize_relative_path(log_path_rel)
+            normalized_log_path = self._normalize_relative_path(log_path_rel)
+            metadata["log_path_rel"] = normalized_log_path
             log_sha = self._sha256_file(log_path)
             metadata["log_hash"] = log_sha
             metadata["log_sha256"] = log_sha
+            metadata["relative_paths"]["log"] = normalized_log_path
         return metadata
 
     def _normalize_relative_path(self, path_str: str) -> str:

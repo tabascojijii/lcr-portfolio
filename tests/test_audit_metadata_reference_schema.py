@@ -40,3 +40,9 @@ def test_collect_includes_reference_schema_fields(tmp_path, monkeypatch):
     assert metadata["parameter_sha256"] == metadata["param_hash"]
     assert metadata["log_sha256"] == expected_log_hash
     assert metadata["log_hash"] == expected_log_hash
+    assert metadata["relative_paths"] == {
+        "script": "rel/script.py",
+        "inputs": [],
+        "outputs": [],
+        "log": "logs/run.log",
+    }

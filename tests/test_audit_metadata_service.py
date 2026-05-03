@@ -53,6 +53,12 @@ def test_collect_returns_expected_metadata(tmp_path, monkeypatch):
     assert metadata["output_hashes"] == {"results/output.csv": expected_output_hash}
     assert metadata["log_path_rel"] == "logs/run.log"
     assert metadata["log_hash"] == expected_log_hash
+    assert metadata["relative_paths"] == {
+        "script": "rel/script.py",
+        "inputs": ["data/input.csv"],
+        "outputs": ["results/output.csv"],
+        "log": "logs/run.log",
+    }
 
 
 def test_collect_falls_back_when_image_or_git_unavailable(tmp_path, monkeypatch):
@@ -71,6 +77,12 @@ def test_collect_falls_back_when_image_or_git_unavailable(tmp_path, monkeypatch)
     assert metadata["input_hashes"] == {}
     assert metadata["output_hashes"] == {}
     assert metadata["log_hash"] == "unavailable"
+    assert metadata["relative_paths"] == {
+        "script": "script.py",
+        "inputs": [],
+        "outputs": [],
+        "log": "",
+    }
 
 
 def test_collect_normalizes_relative_script_path(tmp_path, monkeypatch):
