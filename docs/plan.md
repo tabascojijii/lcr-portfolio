@@ -49,7 +49,8 @@
   - `pytest tests/` 全件Pass
 - Builder/Validator分離運用を固定:
   - Builder（実装担当）とValidator（監査担当）は思考過程を共有しない。
-  - Validatorの監査入力は `requirements + diff + test evidence` のみに限定する。
+  - Validatorの監査入力は `requirements + diff` のみに限定する。
+  - `test evidence` は Builder 側の補助提出物として扱い、Validatorの判定入力には含めない。
   - 監査プロセスで上記以外の入力が混入した場合は監査無効として再実施する。
 - REJECTルーティングを厳格化:
   - 設計不備: `REJECT_TO_ARCHITECT`
@@ -161,7 +162,7 @@
 
 ### 4.4 Process Gate (Governance)
 - Builder/Validator分離違反0件。
-- 監査入力物が `requirements + diff + test evidence` 以外を含まないこと。
+- 監査入力物が `requirements + diff` 以外を含まないこと。
 - REJECT報告の必須項目（失敗箇所、違反制約、観測証拠、修正ヒント、再検証条件、ルーティング先）欠落0件。
 
 ## 5. Implementation Sequence
