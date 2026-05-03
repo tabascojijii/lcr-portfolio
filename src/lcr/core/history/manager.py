@@ -105,8 +105,8 @@ class HistoryManager:
             
             # Portable Path Conversion
             portable_record = record.copy()
-            portable_record['script_path'] = self._to_relative(record['script_path'])
-            portable_record['output_dir'] = self._to_relative(record['output_dir'])
+            portable_record['script_path'] = self.to_relative_path(record['script_path'])
+            portable_record['output_dir'] = self.to_relative_path(record['output_dir'])
             
             history.append(portable_record)
             
@@ -146,15 +146,21 @@ class HistoryManager:
                 f"  Error: {e}\n"
                 f"  Record: {record}"
             )
+            raise
 
-    def _to_relative(self, path_str: str) -> str:
-        """Convert absolute path to relative if within project root."""
+    def to_relative_path(self, path_str: str) -> str:
+        """Convert path to project-root relative path, or raise if impossible."""
         try:
             p = Path(path_str).resolve()
             return str(p.relative_to(self.project_root))
         except ValueError:
-            # Path is not inside project root, keep as absolute
-            return path_str
+            raise ValueError(
+                f"Path must be inside project root for portable storage: {path_str}"
+            )
+
+    def _to_relative(self, path_str: str) -> str:
+        """Backward-compatible alias."""
+        return self.to_relative_path(path_str)
             
     def get_absolute_path(self, relative_path: str) -> str:
         """Evaluate stored relative path to absolute path on current system."""

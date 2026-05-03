@@ -11,7 +11,6 @@ connecting the CodeAnalyzer, ContainerManager, and ContainerWorker.
 
 import sys
 from pathlib import Path
-import io
 from typing import Optional
 
 from PySide6.QtWidgets import (
@@ -23,17 +22,15 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtCore import Qt, Slot, QUrl
 
-from lcr.core.detector.analyzer import CodeAnalyzer
-from lcr.core.container.manager import ContainerManager
 from lcr.core.container.use_cases import RuntimeExecutionPreparationUseCase
 from lcr.core.container.generator import generate_dockerfile, save_definition
-from lcr.core.history.manager import HistoryManager
 from lcr.core.history.use_cases import SaveExecutionHistoryUseCase
-from lcr.core.audit import AuditMetadataService
+from lcr.core.detector.use_cases import CodeAnalysisUseCase
+from lcr.core.audit.use_cases import CollectAuditMetadataUseCase
 from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 from lcr.ui.workers import ContainerWorker
-from lcr.ui.ports import ContainerManagerPort, HistoryManagerPort
-from utils.count_loc import count_lines_python
+from lcr.ui.ports import AnalyzerPort, AuditMetadataPort, ContainerManagerPort, HistoryManagerPort
+from lcr.ui.composition import build_main_window_dependencies
 
 
 class MainWindow(QMainWindow):
@@ -41,23 +38,32 @@ class MainWindow(QMainWindow):
 
     def __init__(
         self,
-        analyzer: Optional[CodeAnalyzer] = None,
+        analyzer: Optional[AnalyzerPort] = None,
         container_manager: Optional[ContainerManagerPort] = None,
         history_manager: Optional[HistoryManagerPort] = None,
+        audit_metadata_service: Optional[AuditMetadataPort] = None,
     ):
         super().__init__()
         self.setWindowTitle("Legacy Code Reviver")
         self.resize(1200, 800)
 
+        deps = {}
+        if not (analyzer and container_manager and history_manager and audit_metadata_service):
+            deps = build_main_window_dependencies()
+
         # backend components
-        self.analyzer = analyzer or CodeAnalyzer()
-        self.container_manager = container_manager or ContainerManager()
+        self.analyzer = analyzer or deps["analyzer"]
+        self.container_manager = container_manager or deps["container_manager"]
         if not self.container_manager:
             raise RuntimeError("Failed to initialize ContainerManager")
-        self.history_manager = history_manager or HistoryManager()
+        self.history_manager = history_manager or deps["history_manager"]
         self.runtime_use_case = RuntimeExecutionPreparationUseCase()
         self.save_history_use_case = SaveExecutionHistoryUseCase(self.history_manager)
-        self.audit_metadata_service = AuditMetadataService()
+        self.audit_metadata_service = audit_metadata_service or deps["audit_metadata_service"]
+        self.code_analysis_use_case = CodeAnalysisUseCase(self.analyzer, self.container_manager)
+        self.collect_audit_metadata_use_case = CollectAuditMetadataUseCase(
+            self.history_manager, self.audit_metadata_service
+        )
         self.worker = None
         self.current_output_dir = None
         self.selection_mode = 'Auto'
@@ -338,6 +344,23 @@ class MainWindow(QMainWindow):
         selection_type = "Manual" if is_manual else "Auto"
         self.console_log.append(f"[Runtime {selection_type}] Selected: {rule['name']} (Image: {rule['image']})")
 
+    def _apply_auto_selected_runtime(self, selected_rule):
+        """Apply auto-selected runtime to UI controls."""
+        if not selected_rule:
+            self.selection_mode = 'Manual'
+            self.mode_label.setText("Select Runtime (Analysis Failed)")
+            self.mode_label.setStyleSheet("color: red; font-weight: bold;")
+            return
+        self.runtime_combo.blockSignals(True)
+        index = self.runtime_combo.findText(selected_rule['name'])
+        if index >= 0:
+            self.runtime_combo.setCurrentIndex(index)
+        else:
+            self.console_log.append(f"[Warning] Auto-selected rule '{selected_rule['name']}' not found in list.")
+        self.runtime_combo.blockSignals(False)
+        self.selection_mode = 'Auto'
+        self._update_runtime_display(selected_rule, is_manual=False)
+
 
     @Slot()
     def _select_script(self):
@@ -391,56 +414,16 @@ class MainWindow(QMainWindow):
                 return
 
             try:
-                result = self.analyzer.summary(code_text)
-                version = result.get('version', 'Unknown')
-                libraries = result.get('libraries', [])
-                
-                self.version_label.setText(f"Detected Version: {version}")
-                self.libraries_label.setText(f"Detected Libraries: {', '.join(libraries) if libraries else 'None'}")
-                
-                stream = io.BytesIO(code_text.encode('utf-8'))
-                total, code, comments = count_lines_python(stream)
-                
-                ratio = 0.0
-                if (code + comments) > 0:
-                    ratio = (comments / (code + comments)) * 100
-                    
-                self.sloc_label.setText(f"SLOC: {code}")
-                self.ratio_label.setText(f"Comment Ratio: {ratio:.1f}%")
-                
-                self.console_log.append(f"\n[Analysis Completed] Version: {version}, Libs: {len(libraries)}, SLOC: {code}")
-                
-                # --- Auto Select Runtime ---
-                try:
-                    # 1. Analyze for features (needed for resolution)
-                    feature = self.analyzer.analyze(code_text)
-                    version_hint = feature.version_hint
-                    search_terms = feature.imports + feature.keywords
-                    if feature.validation_year:
-                         search_terms.append(f"year:{feature.validation_year}")
-                    
-                    # 2. Resolve
-                    selected_rule = self.container_manager.resolve_runtime(search_terms, version_hint)
-                    
-                    # 3. Update Combo (Silent)
-                    self.runtime_combo.blockSignals(True)
-                    index = self.runtime_combo.findText(selected_rule['name'])
-                    if index >= 0:
-                        self.runtime_combo.setCurrentIndex(index)
-                    else:
-                        self.console_log.append(f"[Warning] Auto-selected rule '{selected_rule['name']}' not found in list.")
-                    self.runtime_combo.blockSignals(False)
-                    
-                    # 4. Reset Mode and Update Display
-                    self.selection_mode = 'Auto'
-                    self._update_runtime_display(selected_rule, is_manual=False)
-                    
-                except Exception as e:
-                    self.console_log.append(f"[Analysis Error - AutoSelect] {e}")
-                    # Fallback to Manual Mode on error
-                    self.selection_mode = 'Manual'
-                    self.mode_label.setText("Select Runtime (Analysis Failed)")
-                    self.mode_label.setStyleSheet("color: red; font-weight: bold;")
+                view_data = self.code_analysis_use_case.execute(code_text)
+                self.version_label.setText(f"Detected Version: {view_data.version}")
+                libs_text = ", ".join(view_data.libraries) if view_data.libraries else "None"
+                self.libraries_label.setText(f"Detected Libraries: {libs_text}")
+                self.sloc_label.setText(f"SLOC: {view_data.sloc}")
+                self.ratio_label.setText(f"Comment Ratio: {view_data.comment_ratio:.1f}%")
+                self.console_log.append(
+                    f"\n[Analysis Completed] Version: {view_data.version}, Libs: {len(view_data.libraries)}, SLOC: {view_data.sloc}"
+                )
+                self._apply_auto_selected_runtime(view_data.selected_rule)
                 
             except Exception as e:
                 self.console_log.append(f"\n[Analysis Error] {e}")
@@ -998,9 +981,8 @@ class MainWindow(QMainWindow):
 
     def _append_audit_metadata(self, image_name, script_path):
         """Append minimal audit metadata required by reference standards."""
-        script_rel = self.history_manager._to_relative(script_path)
         try:
-            metadata = self.audit_metadata_service.collect(image_name, script_path, script_rel)
+            metadata = self.collect_audit_metadata_use_case.execute(image_name, script_path)
             self.console_log.append(f"[Audit] image_digest: {metadata['image_digest']}")
             self.console_log.append(f"[Audit] git_commit_hash: {metadata['git_commit_hash']}")
             self.console_log.append(f"[Audit] script_path_rel: {metadata['script_path_rel']}")

@@ -70,8 +70,8 @@ class TestHistoryManager(unittest.TestCase):
         restored_script = self.manager.get_absolute_path(loaded_record['script_path'])
         self.assertEqual(Path(restored_script).resolve(), abs_script)
 
-    def test_outside_project_root(self):
-        """Test that paths outside project root remain absolute."""
+    def test_outside_project_root_rejected(self):
+        """Test that paths outside project root are rejected for portability."""
         outside_path = "C:/Outside/file.py" if os.name == 'nt' else "/tmp/file.py"
         
         record: ExecutionHistory = {
@@ -84,10 +84,8 @@ class TestHistoryManager(unittest.TestCase):
              "status": "success"
         }
         
-        self.manager.save_record(record)
-        
-        loaded = self.manager.load_history()[0]
-        self.assertEqual(loaded['script_path'], outside_path)
+        with self.assertRaises(ValueError):
+            self.manager.save_record(record)
 
 if __name__ == '__main__':
     unittest.main()
