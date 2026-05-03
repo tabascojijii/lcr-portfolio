@@ -3,6 +3,7 @@
 ## 0. Scope and Objective
 - 本計画は `docs/core_philosophy.md`、`docs/requirements.md`、`docs/reference_standards.md` に完全準拠し、`docs/post_mortem.md` で特定された構造的欠陥を是正する。
 - `docs/audit_report.md` の最新判定を実行前ゲートとして取り込み、PASS時も是正項目の恒久化を継続する。
+- 2026-05-04時点の `docs/audit_report.md` は **PASS** であるため、新規是正ではなく「過去REJECT起因制約の固定化」と「監査-計画整合の継続検証」を目的化する。
 - 対象は Phase 5 / Phase 6 / Phase 6.1。
 - 成功条件は「機能実現」ではなく「監査可能性・再現可能性・疎結合性」の同時達成。
 - 本計画に曖昧語（例: 主要、必要に応じて、可能なら）を使用しない。
@@ -60,6 +61,8 @@
 - 監査結果は常に最新の `docs/audit_report.md` を正とし、過去のREJECT分析は再発防止制約として維持する。
 - PASS判定時も、過去REJECT起因の制約（RC-1〜RC-3）は削除しない。
 - 監査文書と計画文書に不整合がある場合は、実装着手前に `plan.md` を先に更新する。
+- 監査が「重大指摘なし」の場合も、RC-1〜RC-3に対応する検査項目（ハッシュ4区分、`UseCase -> Qt` 禁止、UI複雑計算/業務フォーマット禁止）を縮退しない。
+- 監査判定の更新日と計画更新日を比較し、計画更新日が新しい場合は監査再実行を必須とする。
 
 ## 2. Traceability Matrix (Requirement -> Implementation -> Test -> Gate)
 - R5-1 (Capability Mapping):
@@ -139,6 +142,11 @@
 - 監査ジョブは `requirements` と `diff` のみを入力として実行する。
 - 実装ジョブ成果物への付加情報は監査入力へ渡さない。
 - REJECTテンプレート必須項目欠落時は監査ジョブをFail。
+
+8. 監査-計画整合チェックのCI組み込み
+- `docs/audit_report.md` と `docs/plan.md` の制約差分を機械的に検査する。
+- 差分が1件以上ある場合は実装ジョブ開始前にFail。
+- PASS判定の有無に関わらず、差分検査は常時実行する。
 
 7. UI命名規約検査のCI組み込み
 - シグナル名は過去分詞形（例: `*Changed`, `*Completed`）以外をFail。
