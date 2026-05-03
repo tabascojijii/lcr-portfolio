@@ -88,6 +88,8 @@ class HistoryManager:
                     record['selection_mode'] = 'Unknown'
                 if 'selection_reason' not in record:
                     record['selection_reason'] = 'Legacy Record'
+                if 'audit_metadata' not in record:
+                    record['audit_metadata'] = {}
                     
             return data
         except (json.JSONDecodeError, IOError) as e:

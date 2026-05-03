@@ -23,11 +23,15 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtCore import Qt, Slot, QUrl
 
-from lcr.core.container.use_cases import EnvironmentDraftUseCase, RuntimeExecutionPreparationUseCase
-from lcr.core.container.generator import generate_dockerfile, save_definition
+from lcr.core.container.use_cases import (
+    EnvironmentBuildPreparationUseCase,
+    EnvironmentDraftUseCase,
+    RuntimeExecutionPreparationUseCase,
+)
 from lcr.core.history.use_cases import SaveExecutionHistoryUseCase
 from lcr.core.detector.use_cases import CodeAnalysisUseCase
 from lcr.core.audit.use_cases import CollectAuditMetadataUseCase
+from lcr.utils.path_helper import get_log_path
 from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 from lcr.ui.workers import ContainerWorker
 from lcr.ui.ports import AnalyzerPort, AuditMetadataPort, ContainerManagerPort, HistoryManagerPort
@@ -60,6 +64,7 @@ class MainWindow(QMainWindow):
         self.history_manager = history_manager or deps["history_manager"]
         self.runtime_use_case = RuntimeExecutionPreparationUseCase()
         self.environment_draft_use_case = EnvironmentDraftUseCase(self.analyzer, self.container_manager)
+        self.environment_build_preparation_use_case = EnvironmentBuildPreparationUseCase(self.container_manager)
         self.save_history_use_case = SaveExecutionHistoryUseCase(self.history_manager)
         self.audit_metadata_service = audit_metadata_service or deps["audit_metadata_service"]
         self.code_analysis_use_case = CodeAnalysisUseCase(self.analyzer, self.container_manager)
@@ -69,6 +74,7 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.current_output_dir = None
         self.selection_mode = 'Auto'
+        self._last_run_context = {}
 
 
         # setup UI
@@ -802,7 +808,12 @@ class MainWindow(QMainWindow):
             self.console_log.append(f"Selected Runtime: {selected_rule.get('name', config['image'])}")
             self.console_log.append(f"Reason: {reason_text}")
             self.console_log.append(f"Image Tag: {config['image']}")
-            self._append_audit_metadata(config['image'], script_path)
+            self._last_run_context = {
+                "image_name": config["image"],
+                "script_path": script_path,
+                "param_payload": config,
+                "input_files": [script_path],
+            }
             
             self.worker = ContainerWorker(
                 docker_args=docker_args,
@@ -871,6 +882,7 @@ class MainWindow(QMainWindow):
                     selection_mode=self.selection_mode,
                     selection_reason=reason,
                     image_tag="docker",
+                    audit_metadata=self._append_audit_metadata(exit_code),
                 )
                 self._refresh_history_list()
                 self.console_log.append(f"[History] Record saved ({self.selection_mode}).")
@@ -973,16 +985,38 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.console_log.append(f"[Error] Failed to open folder: {e}")
 
-    def _append_audit_metadata(self, image_name, script_path):
-        """Append minimal audit metadata required by reference standards."""
+    def _append_audit_metadata(self, exit_code):
+        """Collect and append structured audit metadata."""
         try:
-            metadata = self.collect_audit_metadata_use_case.execute(image_name, script_path)
+            output_files = self._collect_output_files(self.current_output_dir) if self.current_output_dir else []
+            log_path = str(get_log_path("lcr_debug.log"))
+            metadata = self.collect_audit_metadata_use_case.execute(
+                self._last_run_context.get("image_name", ""),
+                self._last_run_context.get("script_path", ""),
+                param_payload=self._last_run_context.get("param_payload", {}),
+                input_files=self._last_run_context.get("input_files", []),
+                output_files=output_files if exit_code == 0 else [],
+                log_path=log_path if Path(log_path).exists() else None,
+            )
             self.console_log.append(f"[Audit] image_digest: {metadata['image_digest']}")
             self.console_log.append(f"[Audit] git_commit_hash: {metadata['git_commit_hash']}")
             self.console_log.append(f"[Audit] script_path_rel: {metadata['script_path_rel']}")
             self.console_log.append(f"[Audit] script_sha256: {metadata['script_sha256']}")
+            self.console_log.append(f"[Audit] param_hash: {metadata['param_hash']}")
+            self.console_log.append(f"[Audit] input_hashes: {metadata['input_hashes']}")
+            self.console_log.append(f"[Audit] output_hashes: {metadata['output_hashes']}")
+            self.console_log.append(f"[Audit] log_path_rel: {metadata['log_path_rel']}")
+            self.console_log.append(f"[Audit] log_hash: {metadata['log_hash']}")
+            return metadata
         except Exception as e:
             self.console_log.append(f"[Audit] metadata_collection_error: {e}")
+            return {}
+
+    def _collect_output_files(self, output_dir):
+        out_dir = Path(output_dir)
+        if not out_dir.exists():
+            return []
+        return [str(p) for p in out_dir.rglob("*") if p.is_file()]
 
     def update_ui_state(self, state="idle"):
         """Centralized UI state management.
@@ -1086,10 +1120,9 @@ class MainWindow(QMainWindow):
     def _execute_save_and_build(self, config):
         """Save config and trigger build."""
         try:
-            name = config['tag']
-            # 1. Save
-            json_path = save_definition(config, name)
-            self.console_log.append(f"[Synthesizer] Definition saved: {json_path}")
+            result = self.environment_build_preparation_use_case.prepare(config)
+            name = result.tag
+            self.console_log.append(f"[Synthesizer] Definition saved for tag: {name}")
             
             # 2. Reload Manager
             self.container_manager.reload_definitions()
@@ -1117,16 +1150,13 @@ class MainWindow(QMainWindow):
                 self._update_runtime_display(self.runtime_combo.itemData(index, Qt.UserRole), is_manual=True)
             self.runtime_combo.blockSignals(False)
             
-            # 4. Generate Dockerfile (for build context)
-            tag, dockerfile_path = generate_dockerfile(config)
+            # 4. Trigger Build
+            build_args = result.build_args
             
-            # 5. Trigger Build
-            build_args = self.container_manager.get_build_command(dockerfile_path, tag)
-            
-            self.console_log.append(f"[Build] Starting build for {tag}...")
+            self.console_log.append(f"[Build] Starting build for {name}...")
             self.tabs.setCurrentIndex(0) # Show Console
             
-            self._start_worker(build_args, f"Build: {tag}")
+            self._start_worker(build_args, f"Build: {name}")
             
         except Exception as e:
             QMessageBox.critical(self, "Build Error", f"Failed to initiate build: {e}")

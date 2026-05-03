@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from typing import Dict
+from typing import Dict, Optional
 
 from lcr.core.history.types import ExecutionHistory
 
@@ -20,6 +20,7 @@ class SaveExecutionHistoryUseCase:
         selection_mode: str,
         selection_reason: str,
         image_tag: str,
+        audit_metadata: Optional[Dict] = None,
     ) -> ExecutionHistory:
         record: ExecutionHistory = {
             "id": str(uuid.uuid4()),
@@ -31,6 +32,7 @@ class SaveExecutionHistoryUseCase:
             "status": "success" if exit_code == 0 else "failed",
             "selection_mode": selection_mode,
             "selection_reason": selection_reason,
+            "audit_metadata": audit_metadata or {},
         }
         self.history_manager.save_record(record)
         return record

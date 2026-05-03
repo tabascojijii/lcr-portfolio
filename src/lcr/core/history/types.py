@@ -14,3 +14,4 @@ class ExecutionHistory(TypedDict):
     status: str       # success, failed, etc.
     selection_mode: str # 'Auto' | 'Manual'
     selection_reason: str # Justification
+    audit_metadata: Optional[dict]

@@ -5,6 +5,30 @@ class CollectAuditMetadataUseCase:
         self.history_manager = history_manager
         self.audit_metadata_service = audit_metadata_service
 
-    def execute(self, image_name: str, script_path: str):
+    def execute(
+        self,
+        image_name: str,
+        script_path: str,
+        param_payload=None,
+        input_files=None,
+        output_files=None,
+        log_path=None,
+    ):
         script_rel = self.history_manager.to_relative_path(script_path)
-        return self.audit_metadata_service.collect(image_name, script_path, script_rel)
+        input_files = input_files or []
+        output_files = output_files or []
+        input_rel = [self.history_manager.to_relative_path(p) for p in input_files]
+        output_rel = [self.history_manager.to_relative_path(p) for p in output_files]
+        log_rel = self.history_manager.to_relative_path(log_path) if log_path else None
+        return self.audit_metadata_service.collect(
+            image_name,
+            script_path,
+            script_rel,
+            param_payload=param_payload or {},
+            input_files=input_files,
+            input_files_rel=input_rel,
+            output_files=output_files,
+            output_files_rel=output_rel,
+            log_path=log_path,
+            log_path_rel=log_rel,
+        )

@@ -33,7 +33,19 @@ class AnalyzerPort(Protocol):
 
 
 class AuditMetadataPort(Protocol):
-    def collect(self, image_name: str, script_path: str, script_path_rel: str) -> Dict[str, str]: ...
+    def collect(
+        self,
+        image_name: str,
+        script_path: str,
+        script_path_rel: str,
+        param_payload: Optional[Dict] = None,
+        input_files: Optional[List[str]] = None,
+        input_files_rel: Optional[List[str]] = None,
+        output_files: Optional[List[str]] = None,
+        output_files_rel: Optional[List[str]] = None,
+        log_path: Optional[str] = None,
+        log_path_rel: Optional[str] = None,
+    ) -> Dict[str, Any]: ...
 
 
 class HistoryManagerPort(Protocol):
