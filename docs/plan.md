@@ -5,7 +5,10 @@
 - 過去の失敗ループ（実装差し戻しの反復）を断ち切るため、実装着手前に「監査スキーマ」「責務境界」「ゲート」を固定する。
 
 ## 1. 最上位方針（非交渉）
-- 依存方向は `UI -> UseCase -> Domain -> Infrastructure` を厳守する。
+- 呼び出しフローと依存規則を分離して定義する。
+  - 呼び出しフロー（実行時）: `UI -> UseCase -> Domain -> Infrastructure`
+  - コンパイル時依存（参照可能方向）: **外側 -> 内側のみ**
+  - 非許可依存: `Domain -> UseCase/UI/Infrastructure`、`UseCase -> UI`、`Domain -> Qt`
 - UI（`MainWindow`/Dialog）は Humble Object とし、判断・分岐・永続化・外部I/Oを保持しない。
 - 監査証跡は ALCOA++ 準拠で、相対パス強制・ハッシュ対象完全化・再現性を満たす。
 - 危険操作（削除/強制削除）はデフォルト禁止、明示解除時のみ許可。
@@ -49,6 +52,20 @@
   - 実装不備: `REJECT_TO_IMPLEMENT`
   - 設計不備: `REJECT_TO_ARCHITECT`
 - CI 監査レポートに「違反原因レイヤー」を必須出力項目として追加。
+- REJECTメッセージは処方的テンプレートを必須化する。
+  - 必須項目: `失敗箇所(file:line)`、`違反制約ID`、`観測証拠(ログ/差分)`、`修正ヒント`、`再検証条件`、`ルーティング先`
+  - いずれか欠落時は監査ジョブを fail とする。
+
+### 2.4 監査ガバナンス対策: Builder/Validator 分離
+- Validator（Auditor）入力を以下3点に限定する。
+  - 要件文書（`docs/requirements.md` ほか）
+  - 参照規約（`docs/reference_standards.md`）
+  - 変更差分 + 成果物（テスト結果、生成ドキュメント、CIログ）
+- 禁止事項:
+  - Builder（Implementer）の思考過程・下書き・私的メモの共有
+  - 口頭補足だけでの合否変更（証拠なき例外運用）
+- 監査証跡テンプレートを固定する。
+  - `input_artifacts` / `checked_constraints` / `findings` / `severity` / `routing` / `recheck_conditions`
 
 ## 3. 実装フェーズ計画
 
@@ -124,6 +141,13 @@
   - Port の `abc.ABC` / `typing.Protocol` 準拠検証（具象直参照を fail）
   - 監査ログ必須スキーマ完全性テスト
   - UI シグナル/スロット命名規約検査（signal: 過去分詞、slot: 動詞）
+- 必須ガバナンスゲート（EMCS定量評価）:
+  - `M1: 依存違反件数` = 0 件で pass（証拠: 静的依存解析レポート）
+  - `M2: UI層ロジック混入件数` = 0 件で pass（証拠: 禁止責務ルール検査）
+  - `M3: 禁止API呼び出し件数` = 0 件で pass（証拠: ルールベースgrep/AST検査）
+  - `M4: 循環依存件数` = 0 件で pass（証拠: 循環検出レポート）
+  - `M5: REJECTテンプレート欠落項目数` = 0 件で pass（証拠: 監査レポートスキーマ検証）
+  - Fail条件: `M1-M5` のいずれかが閾値超過なら `REJECT_TO_ARCHITECT` を返す。
 - 必須再現性ゲート:
   - ログに `git_commit_hash` と image digest が存在
   - 相対パス以外を検出した場合 fail-fast
