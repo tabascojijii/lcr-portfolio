@@ -25,6 +25,14 @@ class DeletePreview:
     confirmation_token: str
 
 
+@dataclass(frozen=True)
+class DeleteExecutionPolicy:
+    """Safety policy for staged deletion and rollback."""
+
+    rollback_on_any_failure: bool = False
+    stop_on_failure_count: Optional[int] = None
+
+
 class EnvironmentLifecycleUseCase:
     """Application use case for environment lifecycle management."""
 
@@ -79,18 +87,38 @@ class EnvironmentLifecycleUseCase:
         preview: DeletePreview,
         confirmation_token: str,
         delete_fn: Callable[[str], None],
+        rollback_fn: Optional[Callable[[str], None]] = None,
+        policy: Optional[DeleteExecutionPolicy] = None,
     ) -> Dict[str, List[str]]:
         if confirmation_token != preview.confirmation_token:
             raise ValueError("Second confirmation token mismatch.")
+        active_policy = policy or DeleteExecutionPolicy()
         deleted: List[str] = []
         failed: List[str] = []
+        rollback_failed: List[str] = []
         for env_id in preview.deletable_ids:
             try:
                 delete_fn(env_id)
                 deleted.append(env_id)
             except Exception:
                 failed.append(env_id)
-        return {"deleted": deleted, "failed": failed, "skipped_protected": list(preview.protected_ids)}
+                if active_policy.stop_on_failure_count and len(failed) >= active_policy.stop_on_failure_count:
+                    break
+        rolled_back: List[str] = []
+        if failed and active_policy.rollback_on_any_failure and rollback_fn:
+            for env_id in reversed(deleted):
+                try:
+                    rollback_fn(env_id)
+                    rolled_back.append(env_id)
+                except Exception:
+                    rollback_failed.append(env_id)
+        return {
+            "deleted": deleted,
+            "failed": failed,
+            "skipped_protected": list(preview.protected_ids),
+            "rolled_back": rolled_back,
+            "rollback_failed": rollback_failed,
+        }
 
     def select_cleanup_targets(self, docker_candidates: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """Allow only dangling/unused image cleanup targets."""

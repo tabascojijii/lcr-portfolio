@@ -17,6 +17,7 @@ class CollectAuditMetadataUseCase:
         environment_capability=None,
         mismatch_result=None,
         guard_state="unknown",
+        fail_on_incomplete_audit=False,
     ):
         script_rel = self.history_manager.to_relative_path(script_path)
         input_files = input_files or []
@@ -24,7 +25,7 @@ class CollectAuditMetadataUseCase:
         input_rel = [self.history_manager.to_relative_path(p) for p in input_files]
         output_rel = [self.history_manager.to_relative_path(p) for p in output_files]
         log_rel = self.history_manager.to_relative_path(log_path) if log_path else None
-        return self.audit_metadata_service.collect(
+        metadata = self.audit_metadata_service.collect(
             image_name,
             script_path,
             script_rel,
@@ -40,3 +41,29 @@ class CollectAuditMetadataUseCase:
             mismatch_result=mismatch_result or {},
             guard_state=guard_state,
         )
+        if fail_on_incomplete_audit:
+            self._ensure_required_audit_fields(metadata)
+        return metadata
+
+    def _ensure_required_audit_fields(self, metadata):
+        required_keys = (
+            "image_digest",
+            "git_commit_hash",
+            "script_path_rel",
+            "script_sha256",
+            "parameter_sha256",
+            "input_sha256",
+            "output_sha256",
+            "log_sha256",
+        )
+        missing = [key for key in required_keys if key not in metadata]
+        if missing:
+            raise ValueError(f"Incomplete audit metadata: missing keys: {', '.join(missing)}")
+
+        unavailable = []
+        for key in ("image_digest", "git_commit_hash", "log_sha256"):
+            value = str(metadata.get(key, "")).strip().lower()
+            if not value or value == "unavailable" or value.startswith("unavailable:"):
+                unavailable.append(key)
+        if unavailable:
+            raise ValueError(f"Incomplete audit metadata: unavailable fields: {', '.join(unavailable)}")

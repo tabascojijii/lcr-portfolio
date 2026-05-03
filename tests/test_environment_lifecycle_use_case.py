@@ -2,7 +2,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from lcr.core.container.lifecycle_use_cases import EnvironmentLifecycleUseCase, EnvironmentRecord
+from lcr.core.container.lifecycle_use_cases import (
+    DeleteExecutionPolicy,
+    EnvironmentLifecycleUseCase,
+    EnvironmentRecord,
+)
 
 
 def _record(env_id, protected=False, last_used_at=None, usage_count=0, category="legacy"):
@@ -51,6 +55,56 @@ def test_bulk_delete_uses_two_step_token_and_continues_on_failure():
     assert result["deleted"] == ["ok-1", "ok-2"]
     assert result["failed"] == ["ng"]
     assert result["skipped_protected"] == ["keep"]
+    assert result["rolled_back"] == []
+    assert result["rollback_failed"] == []
+
+
+def test_bulk_delete_rolls_back_when_policy_requires_it():
+    use_case = EnvironmentLifecycleUseCase()
+    records = [_record("ok-1"), _record("ng"), _record("ok-2")]
+    preview = use_case.build_delete_preview(records, ["ok-1", "ng", "ok-2"])
+    deleted = []
+    rolled_back = []
+
+    def _delete_fn(env_id):
+        if env_id == "ng":
+            raise RuntimeError("boom")
+        deleted.append(env_id)
+
+    def _rollback_fn(env_id):
+        rolled_back.append(env_id)
+
+    result = use_case.execute_bulk_delete(
+        preview,
+        preview.confirmation_token,
+        _delete_fn,
+        rollback_fn=_rollback_fn,
+        policy=DeleteExecutionPolicy(rollback_on_any_failure=True),
+    )
+    assert result["failed"] == ["ng"]
+    assert result["rolled_back"] == ["ok-2", "ok-1"]
+    assert rolled_back == ["ok-2", "ok-1"]
+
+
+def test_bulk_delete_stops_on_failure_threshold():
+    use_case = EnvironmentLifecycleUseCase()
+    records = [_record("ng-1"), _record("ng-2"), _record("ok")]
+    preview = use_case.build_delete_preview(records, ["ng-1", "ng-2", "ok"])
+    called = []
+
+    def _delete_fn(env_id):
+        called.append(env_id)
+        if env_id.startswith("ng"):
+            raise RuntimeError("boom")
+
+    result = use_case.execute_bulk_delete(
+        preview,
+        preview.confirmation_token,
+        _delete_fn,
+        policy=DeleteExecutionPolicy(stop_on_failure_count=1),
+    )
+    assert result["failed"] == ["ng-1"]
+    assert called == ["ng-1"]
 
 
 def test_cleanup_targets_are_restricted_to_dangling_or_unused_image():

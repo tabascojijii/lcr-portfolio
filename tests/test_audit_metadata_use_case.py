@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from lcr.core.audit.use_cases import CollectAuditMetadataUseCase
 
 
@@ -46,3 +48,26 @@ def test_collect_audit_use_case_converts_paths_to_relative(tmp_path):
     assert res["input_files_rel"] == ["in.txt"]
     assert res["output_files_rel"] == ["out.txt"]
     assert res["log_path_rel"] == "run.log"
+
+
+def test_collect_audit_use_case_fails_safe_on_incomplete_metadata(tmp_path):
+    script = tmp_path / "sample.py"
+    script.write_text("print(1)\n", encoding="utf-8")
+    history = _HistoryStub(tmp_path.resolve())
+
+    class _IncompleteAuditStub:
+        def collect(self, *args, **kwargs):
+            return {
+                "image_digest": "unavailable:image",
+                "git_commit_hash": "unavailable",
+                "script_path_rel": "sample.py",
+                "script_sha256": "x",
+                "parameter_sha256": "x",
+                "input_sha256": {},
+                "output_sha256": {},
+                "log_sha256": "unavailable",
+            }
+
+    use_case = CollectAuditMetadataUseCase(history, _IncompleteAuditStub())
+    with pytest.raises(ValueError):
+        use_case.execute("img", str(script), fail_on_incomplete_audit=True)
