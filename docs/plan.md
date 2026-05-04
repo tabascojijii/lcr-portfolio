@@ -139,6 +139,36 @@
 - P0/P1/P2優先度で段階移行計画
 - Port設計、移管先レイヤ、後方互換維持策、テスト戦略、リスク対策を提示
 
+### P3.1: REJECT収束実装（UI->Domain直参照 6件を0件へ）
+1. 目的
+- `artifacts/architecture_decoupling_assessment.md` の `UI->Domain直参照 6件` を 0件にする。
+
+2. 固定対象
+- `MainWindow._run_container`
+- `MainWindow._build_audit_metadata`
+- `MainWindow._load_results`
+- `MainWindow._execute_save_and_build`
+- `MainWindow._to_project_relative_path`
+- 上記に付随するUI内業務判断分岐
+
+3. 段階移行
+- Step A（優先）
+  - `RunExecutionOrchestrationUseCase` を導入し、`_run_container` の業務分岐を移管。
+  - `PathPolicyPort` を導入し、相対パス正規化をUI外へ移管。
+- Step B
+  - `BuildAuditRecordUseCase` を導入し、`_build_audit_metadata` の構築責務を移管。
+  - `ResultPreviewUseCase` を導入し、`_load_results` の解析/整形責務を移管。
+- Step C
+  - `EnvironmentLifecycleUseCase` を適用し、`_execute_save_and_build` の業務制御を移管。
+  - UIを「入力収集・表示更新・UseCase呼び出し」に限定。
+
+4. 収束判定（必須）
+- `UI->Domain直参照` 件数 = 0
+- `UseCase -> Qt` 件数 = 0
+- `循環依存` 件数 = 0
+- `pytest tests/` 全件Pass
+- `artifacts/architecture_decoupling_assessment.md` を更新し、実測0件を証跡化
+
 ## 5. Verification Plan
 
 ### 5.1 Functional Gate
