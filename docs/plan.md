@@ -64,9 +64,38 @@
 - UI責務違反検査をCI化。
 - 監査必須項目欠落検査をCI化。
 3. 監査ルーティング標準化
-- REJECTテンプレートに「原因層」「差し戻し先」「修正完了条件」を必須追加。
+- REJECTテンプレートに「失敗箇所」「違反制約」「具体修正指示」「原因層」「差し戻し先」「修正完了条件」を必須追加。
 4. DoR更新
 - 実装開始条件に「境界設計承認済み」「依存違反ゼロ化経路確定」を追加。
+
+### P0.1: EMCS監査モデル固定（実装前必須）
+1. EMCS評価表を監査仕様として固定
+- 監査判定は以下メトリクスの合算ではなく、`critical項目の即時REJECT` + `総合しきい値` の二重判定で行う。
+
+| metric_id | メトリクス名 | 測定方法 | 信頼性重み(R) | 影響度重み(I) | REJECT条件 |
+|---|---|---|---:|---:|---|
+| EMCS-01 | UI責務違反件数 | 静的解析 + レビュー証跡 | 3 | 3 | 1件以上で即REJECT |
+| EMCS-02 | 禁止依存件数（UI->Domain, UseCase->Qt 等） | importグラフ検査 | 3 | 3 | 1件以上で即REJECT |
+| EMCS-03 | 循環依存件数 | importグラフ検査 | 3 | 3 | 1件以上で即REJECT |
+| EMCS-04 | Port未経由境界越え件数 | 静的解析 + 境界テスト | 3 | 2 | 1件以上で即REJECT |
+| EMCS-05 | 監査証跡欠落件数（相対パス/ハッシュ4区分/digest/commit） | ログ検査テスト | 2 | 3 | 1件以上で即REJECT |
+| EMCS-06 | 構造ゲート誤判定件数 | CIゲート監査 | 2 | 2 | 1件以上でREJECT |
+- 補助指標として `EMCS_score = Σ(件数 × R × I)` を併記し、`EMCS_score > 0` は REJECT とする。
+2. 判定再現性の担保
+- 監査結果には `metric_id`・実測値・証拠パス・判定理由を必須記録し、監査者依存の自由記述判定を禁止する。
+
+### P0.2: Builder/Validator分離プロトコル（実装前必須）
+1. Auditor入力境界の固定
+- Auditorが参照可能な入力は以下のみに限定する。
+  - `docs/requirements.md`
+  - `docs/reference_standards.md`
+  - 変更Diff
+  - テスト結果証跡
+  - 監査証跡（ログ・メトリクス）
+2. 参照禁止情報
+- 実装者メモ、思考過程、口頭説明、チャット補足文脈を監査入力として使用してはならない。
+3. 入力境界遵守チェック
+- 監査記録テンプレートに `input_boundary_check: pass/fail` を必須項目として追加する。
 
 ### P1: Phase 5（Validation Guardrails）
 1. Capability Mapping UseCase（推定/実証の識別表示）。
@@ -128,6 +157,7 @@
 ### 5.4 Governance Gate
 - REJECTテンプレート必須項目欠落0。
 - 差し戻し先誤判定0（設計原因を実装へ返さない）。
+- `input_boundary_check` fail 0（Builder/Validator分離違反なし）。
 
 ## 6. Loop Blocking Protocol
 - 構造違反が1件でもあれば機能合格でも進行停止。
@@ -138,7 +168,17 @@
 - Phase 5 / 6 / 6.1 / 6.2 の受け入れ基準を満たす。
 - Functional / Structural / Audit / Governance の4ゲート全通過。
 - 実測値として「禁止依存0・循環依存0・UI責務違反0・監査欠落0」を提示できる。
+- EMCS評価表に基づく全メトリクス 0件（`EMCS_score = 0`）を提示できる。
 - 成果物（assessment/proposal）に証拠付きで追跡可能。
+
+## 9. REJECT Template（必須）
+- `failure_location`（file/class/function/line）
+- `violated_constraint`（基準章・条項ID）
+- `prescriptive_fix`（実施手順または最小修正案）
+- `cause_layer`（design / implementation）
+- `reject_target`（REJECT_TO_ARCHITECT / REJECT_TO_IMPLEMENT）
+- `done_condition`（再監査でPASSとなる客観条件）
+- `input_boundary_check`（pass/fail）
 
 ## 8. Explicit Prohibition
 - 本タスクでは `git commit` を実行しない。
