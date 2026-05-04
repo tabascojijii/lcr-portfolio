@@ -4,6 +4,7 @@
 - 本計画は `docs/core_philosophy.md`、`docs/requirements.md`、`docs/reference_standards.md`、`docs/post_mortem.md` を統合した実装計画である。
 - 目的は Phase 5 / Phase 6 / Phase 6.1 を、監査可能性・再現可能性・疎結合性の3条件を同時満足して完了させること。
 - 本計画の最優先は「過去の構造的欠陥（RC-1〜RC-3）の再発防止」であり、機能追加はその後に従属する。
+- `docs/audit_report.md` が PASS であっても、RC-1〜RC-3 の再流入防止を目的に本計画の Hard Constraints と検証ゲートは緩和しない（監査結果は最低条件であり、免除条件ではない）。
 
 ## 1. Post Mortem Driven Hard Constraints
 
@@ -110,6 +111,11 @@
 6. 監査入力境界ゲート追加（Builder/Validator分離）
 7. 監査テンプレート必須項目チェック追加（欠落時 Fail）
 8. Signal/Slot命名CIゲート追加（Signal=過去分詞、Slot=動詞）
+9. 実装着手前アーキテクト確認を追加（以下が1件でも未充足なら着手禁止）
+  - RC-1: hash4区分の全件定義が plan / schema / test で一致
+  - RC-2: 禁止依存（`UseCase -> Qt` 含む）が lint / test / review checklist で一致
+  - RC-3: UI禁止行為（複雑計算・業務フォーマット含む）が静的検査ルール化済み
+  - 監査ルーティング分離（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT`）がテンプレート化済み
 
 ### P1: Phase 5 実装
 1. Capability Mapping UseCase 実装
@@ -176,6 +182,8 @@
 - 実装不備を検出した場合は `REJECT_TO_IMPLEMENT` に固定する。
 - `docs/plan.md` と監査基準に差分がある限り実装着手を禁止する。
 - PASS時も RC-1〜RC-3 の制約を削除・緩和しない。
+- Auditor が「指摘なし（PASS）」を返した場合でも、直近の post mortem 起因制約（RC-1〜RC-3）に関する非回帰確認を毎回実施する。
+- 非回帰確認で1件でも未充足があれば、監査総合判定に関わらず `REJECT_TO_ARCHITECT` として設計へ差し戻す。
 
 ## 7. Definition of Done
 - Phase 5 / Phase 6 / Phase 6.1 の受け入れ基準を満たす。
