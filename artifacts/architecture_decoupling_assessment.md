@@ -1,17 +1,22 @@
 # Architecture Decoupling Assessment
 
-基準: `docs/reference_standards.md` の依存方向と Humble Object 規約を評価基準とする。
+基準: `docs/reference_standards.md` の依存方向規約・Humble Object 規約に基づき、現行コードを評価した。
 
-## Violations
+## Violations (file path + class/function + violation type + evidence)
 
-- file path + class/function + violation type + evidence: `src/lcr/ui/main_window.py` + `MainWindow._run_container` + `UIがDocker実行フローを直接制御` + `UI層で `container_manager.prepare_run_config(...)` と `container_manager.get_docker_run_args(...)` を呼び出し、実行構成決定を保持している（UseCaseへ未移譲）。`
-- file path + class/function + violation type + evidence: `src/lcr/ui/main_window.py` + `MainWindow._run_container` + `UIが不足環境時の業務分岐を実装` + `画像未存在時の再ビルド判断・ダイアログ遷移・合成判断をUI内if分岐で実装している。`
-- file path + class/function + violation type + evidence: `src/lcr/ui/main_window.py` + `MainWindow._append_audit_metadata` + `UIが監査データ構築責務を保持` + `output_files収集、log_path判定、監査メタ出力整形をUIで実施している。`
-- file path + class/function + violation type + evidence: `src/lcr/ui/main_window.py` + `MainWindow._load_results` + `UIに業務フォーマット処理が混在` + `CSV先頭行解析・列展開・テーブル成形をUI層が直接処理している。`
-- file path + class/function + violation type + evidence: `src/lcr/ui/main_window.py` + `MainWindow._execute_save_and_build` + `UIが環境定義保存とビルド開始のアプリ制御を保持` + `EnvironmentBuildPreparationUseCase 呼び出し後の再読込/選択/ビルド起動制御がUIへ残存。`
-- file path + class/function + violation type + evidence: `src/lcr/ui/main_window.py` + `MainWindow._to_project_relative_path` + `相対パス変換ルールがUIに分散` + `監査要件の相対パス規約実装がViewユーティリティとして配置されている。`
+- `src/lcr/ui/main_window.py` + `MainWindow._run_container` + `UI->Domain直参照` + `UIが `container_manager.prepare_run_config(...)` / `container_manager.get_docker_run_args(...)` を直接呼び、実行構成決定を担っている。`
+- `src/lcr/ui/main_window.py` + `MainWindow._run_container` + `UI->Domain直参照` + `UIが image 未存在時の再ビルド分岐・作成導線遷移判断を保持している。`
+- `src/lcr/ui/main_window.py` + `MainWindow._build_audit_metadata` + `UI->Domain直参照` + `監査対象ファイル収集と監査項目整形をUI層で実施している。`
+- `src/lcr/ui/main_window.py` + `MainWindow._load_results` + `UI->Domain直参照` + `CSV先頭行解析・プレビュー整形など業務フォーマット処理をUI層で実施している。`
+- `src/lcr/ui/main_window.py` + `MainWindow._execute_save_and_build` + `UI->Domain直参照` + `環境定義保存後の再読込・選択更新・ビルド起動制御をUIが保持している。`
+- `src/lcr/ui/main_window.py` + `MainWindow._to_project_relative_path` + `UI->Domain直参照` + `監査要件の相対パス正規化規則がUIユーティリティとして配置されている。`
 
-## Notes
+## Summary Counts
 
-- 依存方向違反（`UseCase -> Qt`、`Domain -> Infrastructure` 等）の明示的な逆流は、現状コードの範囲では主要箇所で未検出。
-- 一方で、Humble Object違反（UIへの業務判断・フォーマット・実行オーケストレーション集約）は複数確認されるため、優先是正対象。
+- `UI->Domain直参照`: 6件
+- `逆方向依存 (UseCase->UI / Domain->UI / Domain->Infrastructure)`: 0件
+- `循環依存`: 0件
+
+## Assessment
+
+依存方向の明示的逆流・循環は検出されなかった。一方でUI層に業務判断・監査整形・実行オーケストレーションが集中しており、Humble Object規約違反が継続している。

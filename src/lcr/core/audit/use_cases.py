@@ -50,14 +50,26 @@ class CollectAuditMetadataUseCase:
 
     def _ensure_required_audit_fields(self, metadata):
         required_keys = (
+            "operation_type",
+            "timestamp",
+            "targets",
+            "result",
+            "released_size",
+            "reason",
             "image_digest",
+            "container_image_digest",
             "git_commit_hash",
             "script_path_rel",
             "script_sha256",
+            "required_imports",
+            "environment_capability",
+            "mismatch_result",
+            "guard_triggered",
             "parameter_sha256",
             "input_sha256",
             "output_sha256",
             "log_sha256",
+            "hashes",
         )
         missing = [key for key in required_keys if key not in metadata]
         if missing:
@@ -70,6 +82,12 @@ class CollectAuditMetadataUseCase:
                 unavailable.append(key)
         if unavailable:
             raise ValueError(f"Incomplete audit metadata: unavailable fields: {', '.join(unavailable)}")
+
+        hashes = metadata.get("hashes") or {}
+        hash_keys = ("all_input_files", "all_output_files", "all_parameter_files", "audit_log_record")
+        missing_hash_keys = [k for k in hash_keys if k not in hashes]
+        if missing_hash_keys:
+            raise ValueError(f"Incomplete audit metadata: missing hashes keys: {', '.join(missing_hash_keys)}")
 
 
 class PrepareAuditMetadataUseCase:

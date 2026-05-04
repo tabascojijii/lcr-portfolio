@@ -13,6 +13,12 @@ class AuditMetadataService:
         image_name: str,
         script_path: str,
         script_path_rel: str,
+        operation_type: str = "run",
+        timestamp: str = "",
+        targets: Optional[List[str]] = None,
+        result: str = "unknown",
+        released_size: int = 0,
+        reason: str = "",
         param_payload: Optional[Dict] = None,
         input_files: Optional[List[str]] = None,
         input_files_rel: Optional[List[str]] = None,
@@ -29,9 +35,17 @@ class AuditMetadataService:
         input_hashes = self._hash_path_pairs(input_files or [], input_files_rel or [])
         output_hashes = self._hash_path_pairs(output_files or [], output_files_rel or [])
         param_sha256 = self._sha256_json(param_payload or {})
+        image_digest = self._resolve_image_digest(image_name)
         metadata: Dict = {
+            "operation_type": operation_type,
+            "timestamp": timestamp,
+            "targets": sorted(set(targets or [])),
+            "result": result,
+            "released_size": released_size,
+            "reason": reason,
             # Required provenance
-            "image_digest": self._resolve_image_digest(image_name),
+            "image_digest": image_digest,
+            "container_image_digest": image_digest,
             "git_commit_hash": self._resolve_git_commit_hash(),
             "script_path_rel": relative_script_path,
             "script_sha256": self._sha256_file(script_path),
@@ -45,10 +59,17 @@ class AuditMetadataService:
             "environment_capability": environment_capability or {},
             "mismatch_result": mismatch_result or {},
             "guard_state": guard_state,
+            "guard_triggered": guard_state == "blocked",
             "parameter_sha256": param_sha256,
             "input_sha256": input_hashes,
             "output_sha256": output_hashes,
             "log_sha256": "unavailable",
+            "hashes": {
+                "all_input_files": input_hashes,
+                "all_output_files": output_hashes,
+                "all_parameter_files": {"parameters.json": param_sha256},
+                "audit_log_record": "unavailable",
+            },
             "relative_paths": {
                 "script": relative_script_path,
                 "inputs": sorted(input_hashes.keys()),
@@ -62,6 +83,7 @@ class AuditMetadataService:
             log_sha = self._sha256_file(log_path)
             metadata["log_hash"] = log_sha
             metadata["log_sha256"] = log_sha
+            metadata["hashes"]["audit_log_record"] = log_sha
             metadata["relative_paths"]["log"] = normalized_log_path
         return metadata
 
