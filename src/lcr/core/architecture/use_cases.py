@@ -257,3 +257,77 @@ class SignalSlotNamingAuditUseCase:
     def _is_valid_slot_name(cls, name: str) -> bool:
         lowered = name.lower()
         return lowered.startswith(cls._SLOT_ALLOWED_PREFIXES)
+
+
+class StandardsTraceabilityUseCase:
+    """Builds auditable traceability and regression checklist records."""
+
+    def build_standards_traceability_matrix(self, rows: Sequence[Dict]) -> List[Dict]:
+        matrix = []
+        for item in rows:
+            matrix.append(
+                {
+                    "standard_section": item["standard_section"],
+                    "kpi": item["kpi"],
+                    "evidence_artifact": item["evidence_artifact"],
+                    "verification_method": item["verification_method"],
+                    "gate_timing": item["gate_timing"],
+                }
+            )
+        return matrix
+
+    def build_mainwindow_responsibility_diff(self) -> List[Dict]:
+        return [
+            {
+                "method": "MainWindow._run_container",
+                "before": [
+                    "Runtime compatibility decision",
+                    "Environment creation orchestration",
+                    "Build/run command assembly",
+                ],
+                "after": [
+                    "Collect input from UI widgets",
+                    "Call runtime preparation/use case",
+                    "Update dialogs and button states",
+                ],
+                "moved_to": [
+                    "RuntimeExecutionPreparationUseCase",
+                    "EnvironmentBuildPreparationUseCase",
+                ],
+            },
+            {
+                "method": "MainWindow._show_create_env_dialog",
+                "before": [
+                    "Concrete dialog invocation and option shaping",
+                    "Runtime definition lifecycle handling",
+                ],
+                "after": [
+                    "Delegate to EnvironmentDialogPort",
+                    "Reflect returned state to UI only",
+                ],
+                "moved_to": [
+                    "EnvironmentDialogPort",
+                    "EnvironmentBuildPreparationUseCase",
+                ],
+            },
+        ]
+
+    def build_known_regression_checklist(self) -> List[Dict]:
+        return [
+            {
+                "method": "MainWindow._run_container",
+                "checks": [
+                    "Direct import to Domain/Infrastructure concrete types is absent.",
+                    "Decision flow is completed in one UseCase boundary.",
+                    "UI responsibility is limited to input collection and view updates.",
+                ],
+            },
+            {
+                "method": "MainWindow._show_create_env_dialog",
+                "checks": [
+                    "Environment creation logic is not executed without Port/UseCase.",
+                    "Dialog result handling updates UI state only.",
+                    "No runtime definition mutation is implemented in MainWindow.",
+                ],
+            },
+        ]
