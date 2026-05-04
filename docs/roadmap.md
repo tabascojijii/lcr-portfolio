@@ -21,6 +21,7 @@
   - 依存方向図、責務表、Port一覧（`artifacts/refactoring_proposal.md`）
   - 違反一覧と是正方針（`artifacts/architecture_decoupling_assessment.md`）
   - 標準条項トレーサビリティマトリクス（KPI ↔ `docs/reference_standards.md`、監査可能形式）
+  - 標準条項トレーサビリティマトリクス保存先: `artifacts/standards_traceability_matrix.md`
   - `MainWindow._run_container` / `_show_create_env_dialog` の責務分離完了
   - 既知再発2メソッド（`_run_container`, `_show_create_env_dialog`）の専用監査チェックリスト証跡
 - 完了条件:
@@ -28,7 +29,14 @@
   - Port未経由 0
   - 循環依存 0
   - MainWindow業務ロジック 0
-  - 標準条項トレーサビリティマトリクス作成完了（監査可能）
+  - `MainWindow._run_container` は UseCase呼び出し + UI表示更新以外を保持しない
+  - `MainWindow._run_container` から Domain/Infrastructure実装型への直接import 0
+  - `MainWindow._show_create_env_dialog` は Port/UseCase非経由で環境生成ロジックへ到達しない
+  - 「不足import→候補生成→作成→再評価」の制御フローは1つのUseCase境界で完結する
+  - Dynamic Refresh（再起動不要反映）が実装されている
+  - 標準条項トレーサビリティマトリクス作成完了（`artifacts/standards_traceability_matrix.md`、監査可能）
+  - 標準条項トレーサビリティマトリクス更新タイミングは M1完了時および各Phase遷移判定前
+  - Phase遷移ゲートで KPI/標準条項対応を照合し、欠落があれば `REJECT_TO_PM`
   - 既知再発2メソッドの専用監査チェックリスト保存完了
   - Architect承認済み（未承認時は Phase C 以降へ遷移不可）
 
@@ -88,8 +96,11 @@
 - 構造ゲート:
   - 禁止依存/循環依存 0
   - Humble Object準拠（UI業務ロジック 0）
+  - Port経由率 100%（測定: importグラフ + 呼び出し経路監査）
+  - 内側層（UseCase/Domain）から外側層（UI/Infrastructure）への直接依存 0（測定: importグラフ）
   - Port定義が `abc.ABC` または `typing.Protocol`
   - シグナル/スロット命名規約違反 0
+  - 既知再発ポイント監査（`_run_container`, `_show_create_env_dialog`）違反 0（測定: 専用責務チェックリスト）
 
 ### 3.2 差し戻し規約
 
