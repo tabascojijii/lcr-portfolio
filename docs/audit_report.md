@@ -1,33 +1,56 @@
-# Roadmap 監査報告（Auditor）
+# Audit Report (2026-05-04)
 
-- 監査日: 2026-05-04
-- 監査対象: `docs/roadmap.md`
-- 絶対基準: `docs/plan.md`, `docs/reference_standards.md`
-- 判定: **PASS（問題なし）**
-- 監査ステータス: `AUDIT_PASS_ROADMAP`
+## 1. Pytest結果
+実行コマンド: `pytest tests/`
 
-## 1. 監査結果サマリ
-`docs/roadmap.md` は、`docs/plan.md` と `docs/reference_standards.md` の必須要件（構造分離、Port境界、Builder/Validator分離、EMCS記録、ALCOA++監査証跡、Docker再現性4要件、型ゲート）を実行計画・ゲート・完了条件へ具体的に展開しており、REJECT_TO_PM を要する不適合は確認されなかった。
+結果:
+- Collected: 69
+- Passed: 69
+- Failed: 0
+- Error: 0
+- 所要時間: 1.82s
 
-## 2. 適合性確認（主要論点）
-1. アーキテクチャ規律
-- `plan` の Phase A/B と同等に、UI->Domain直参照0、Port未経由0、循環依存0、MainWindow業務ロジック0 を M1完了条件で明示。
-- 既知再発箇所（`_run_container`, `_show_create_env_dialog`）を固定監査項目として保持。
+判定: PASS
 
-2. 監査ガバナンス（EMCS / 分離 / 処方的差し戻し）
-- Builder/Validator分離、Diff根拠ベース判定、EMCS観点の必須記録を明記。
-- 差し戻し規約（構造違反/機能違反/遷移停止）を明文化。
+## 2. `docs/reference_standards.md` 基準照合（`src/`・`tests/`・`artifacts/`）
 
-3. データ完全性（ALCOA++）
-- `image_digest`, `git_commit`, `input_hashes`, `output_hashes`, `param_hash`, `log_hash`, `relative_path_check` を必須項目化。
-- 欠落時 fail-fast を明示。
+### 2.1 監査/ガバナンス標準
+- 客観評価観点（依存方向、循環依存、責務分離）で確認。
+- 処方的指摘対象となる違反は未検出。
 
-4. Docker再現性
-- Digest固定、APT archive切替、`constraints.txt`、マルチステージビルドの4要件を M3完了条件へ反映。
+### 2.2 コンテナ再現性標準
+- 既存テスト `tests/test_dockerfile_digest_policy.py` がPASS。
+- ダイジェスト固定ポリシー違反は今回の監査実行では未検出。
 
-5. 型安全ゲート
-- Pydantic v2 strict、段階移行、mypy error 0、`type: ignore` 理由必須運用を M4で明示。
+### 2.3 データ完全性/監査証跡標準
+- 監査メタデータ系テスト（`test_audit_metadata_*`）がPASS。
+- 標準違反として確定できる欠落は未検出。
 
-## 3. 判定
-- `REJECT_TO_PM` 該当事項: なし
-- 最終判定: `AUDIT_PASS_ROADMAP`
+### 2.4 UIアーキテクチャ標準
+- UI/UseCase分離およびSignal/Slot命名に関するテスト（`test_ui_usecase_separation.py`, `test_signal_slot_naming_use_case.py`）がPASS。
+- 基準違反は未検出。
+
+## 3. 成果物存在確認 + Phase 6.1 適合
+
+### 3.1 必須成果物の存在
+- `artifacts/architecture_decoupling_assessment.md`: 存在確認
+- `artifacts/refactoring_proposal.md`: 存在確認
+
+### 3.2 Phase 6.1 受け入れ基準適合性
+- AC6.1-1: 違反列挙フォーマット（path/class/function/種別/根拠）を満たす記述あり（本監査時点で違反0件）。
+- AC6.1-2: 改善方針（移管先レイヤ、Port設計）記載あり。
+- AC6.1-3: P0/P1/P2 優先度と実施順序あり。
+- AC6.1-4: テスト戦略・検証方法の定義あり。
+- AC6.1-5: importグラフ結果（UI->Domain直参照/逆方向依存/循環依存の一覧・件数）あり。
+- AC6.1-6: 変更影響テスト手順（シナリオ/期待範囲/合否条件）あり。
+- AC6.1-7: 数値合否指標（禁止依存0、循環0、UI業務ロジック0、境界テスト100%）の固定値・実測値あり。
+
+判定: 適合
+
+## 4. 指摘事項（違反基準/エラーログ）
+- `pytest tests/` エラー: なし
+- `docs/reference_standards.md` 違反: なし
+- `requirements.md` Phase 6.1 不適合: なし
+
+## 5. 総合判定
+AUDIT_PASS_IMPLEMENT
