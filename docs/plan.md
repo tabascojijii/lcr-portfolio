@@ -32,6 +32,7 @@
 ### 2.3 監査KPI（必達）
 
 - 監査ログに required imports / capability / mismatch / guard発火状態を100%記録
+- 監査ログに `image_digest` / `git_commit` / `input_hashes` / `output_hashes` / `param_hash` / `log_hash` / `relative_path_check` を100%記録
 - 削除・編集・クリーンアップ操作で required監査項目欠落0件
 - 相対パス違反0件、ハッシュ対象欠落0件
 
@@ -44,11 +45,17 @@
   - UseCase呼び出しは Facade/Controller（Application層）経由。
 - UseCase/Application層:
   - 判定、ユースケース制御、トランザクション境界、エラー整形。
-  - Port Interface 以外で Infrastructure を参照しない。
+  - Port Interface（`abc.ABC` または `typing.Protocol`）以外で Infrastructure を参照しない。
 - Domain層:
   - 判定規則（未使用判定、ガード判定、メタデータ不変条件）を純粋ロジックで保持。
 - Infrastructure層:
   - Docker・ファイルI/O・監査ログ永続化の実装。
+
+### 3.1 UI命名規約（監査対象）
+
+- シグナル名は過去分詞形（例: `capabilityLoaded`）に固定する。
+- スロット名は動詞開始（例: `update_capability_view`）に固定する。
+- 命名違反はレビューゲートでFailとする（例外なし）。
 
 ## 4. 重点是正対象（Post Mortem直結）
 
@@ -77,11 +84,15 @@
 ### Phase A: 設計固定（着手前ゲート）
 
 1. 依存方向図・責務表・Port一覧を `artifacts/refactoring_proposal.md` に確定。
-2. 違反一覧（file/class/function/違反種別/根拠）を `artifacts/architecture_decoupling_assessment.md` に確定。
-3. 変更影響テスト仕様（UI変更時/Domain変更時）を定義。
+2. Port定義を `abc.ABC` / `typing.Protocol` のどちらで実装するかを境界ごとに固定。
+3. 違反一覧（file/class/function/違反種別/根拠）を `artifacts/architecture_decoupling_assessment.md` に確定。
+4. 変更影響テスト仕様（UI変更時/Domain変更時）を定義。
+5. KPIと `docs/reference_standards.md` 条項の対応マトリクス（トレーサビリティ）を作成。
 
 完了条件:
 - AC6.1-1〜AC6.1-7 を文書上で満たす。
+- Port境界に抽象インターフェース方針（ABC/Protocol）が明記されている。
+- 標準条項トレーサビリティマトリクスが監査可能な形で存在する。
 - 実装者レビュー前に Architect 承認済み状態にする。
 
 ### Phase B: 境界リファクタ（最優先）
@@ -100,10 +111,13 @@
 1. capability mapping（推定/実証の明示）
 2. mismatch時のHard Guard（Run無効化）
 3. 適合環境なし時の強制作成導線
-4. 監査ログへの必須項目記録
+4. 監査ログへの必須項目記録（ALCOA++項目を含む）
+5. コンテナ実行時の `image_digest` と `git rev-parse HEAD` 取得値を監査ログへ保存
+6. 入力/出力/パラメータ/実行ログ本体のSHA-256算出と保存
 
 完了条件:
 - AC-1〜AC-5, T5-1〜T5-4 を満たす。
+- ALCOA++必須フィールド欠落時にfail-fastする。
 
 ### Phase D: Phase 6要件の実装完了
 
@@ -114,9 +128,16 @@
 5. メタデータ編集（内部ID不変）
 6. 部分失敗継続と結果分離表示
 7. 監査ログ完全化
+8. Docker再現性実装（以下4要件）
+   - `FROM` をSHA256ダイジェスト固定
+   - EOL OSのAPTをアーカイブリポジトリへ切替
+   - `constraints.txt` によるpip依存解決制約
+   - OpenCV等ビルド対象でマルチステージビルドを適用
 
 完了条件:
 - AC6-1〜AC6-7, T6-1〜T6-6 を満たす。
+- Docker再現性4要件の監査チェックに全合格する。
+- 監査ログスキーマの必須フィールド欠落0件。
 
 ### Phase E: Phase 6.2/6.3 型ゲート導入
 
@@ -141,10 +162,26 @@
 - importグラフ検証（禁止依存/循環依存0件）
 - UI責務監査（業務ロジック0件）
 - Port経由率100%
+- Portが `abc.ABC` / `typing.Protocol` で定義済み
+- シグナル/スロット命名規約違反0件
 
 差し戻し規約:
 - 構造ゲート失敗時は `REJECT_TO_ARCHITECT`（設計是正）
 - 機能ゲート失敗時は `REJECT_TO_IMPLEMENT`（実装是正）
+
+## 6.1 監査プロセス運用（Builder/Validator分離）
+
+1. Builder（実装側）とValidator（監査側）は思考過程を共有しない。
+2. Validator入力は「要件文書 + 差分（Diff）+ 実測証跡」に限定する。
+3. 監査差し戻しは処方的記述（失敗箇所/違反基準/修正指示）を必須化する。
+4. 監査判定はEMCS観点（構造違反、複雑度、依存違反、影響度）で記録する。
+
+## 6.2 標準条項トレーサビリティ（監査用）
+
+- 標準1章（監査ガバナンス）: 6章・6.1章で運用規定化
+- 標準2章（Docker再現性）: Phase Dタスク8と完了条件へ反映
+- 標準3章（データ完全性/ALCOA++）: 2.3、Phase C、Phase D、8章対策へ反映
+- 標準4章（UIアーキテクチャ）: 3章、3.1章、Phase A/B、構造ゲートへ反映
 
 ## 7. 実装順序（クリティカルパス）
 
@@ -165,6 +202,10 @@
   - 対策: 互換アダプタを先行し、段階切替フラグで移行
 - リスク3: 監査ログ項目の欠落
   - 対策: 監査DTOの必須フィールド化 + 欠落時fail-fast
+- リスク4: Dockerビルドの再現性ドリフト
+  - 対策: ダイジェスト固定 + constraints固定 + APTアーカイブ固定 + マルチステージ強制
+- リスク5: 監査運用が形骸化し差し戻し理由が曖昧化
+  - 対策: Builder/Validator分離と処方的差し戻しテンプレートを必須化
 
 ## 9. 完了定義（DoD）
 
