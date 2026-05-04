@@ -35,7 +35,7 @@ from lcr.utils.path_helper import get_log_path
 from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 from lcr.ui.workers import ContainerWorker
 from lcr.ui.ports import AnalyzerPort, AuditMetadataPort, ContainerManagerPort, HistoryManagerPort
-from lcr.ui.composition import build_main_window_dependencies
+from lcr.bootstrap.composition import build_main_window_dependencies
 
 
 class MainWindow(QMainWindow):
@@ -468,7 +468,8 @@ class MainWindow(QMainWindow):
             base_images=draft.base_images,
             initial_config=draft.initial_config,
             recommended_base_id=rec_id,
-            recommendation_reason=rec_reason
+            recommendation_reason=rec_reason,
+            build_use_case=self.environment_build_preparation_use_case,
         )
         
         if dialog.exec():
@@ -554,7 +555,8 @@ class MainWindow(QMainWindow):
             base_images=self.container_manager.get_available_runtimes(),
             initial_config=existing_config,
             recommended_base_id=rec_id,
-            recommendation_reason=rec_reason
+            recommendation_reason=rec_reason,
+            build_use_case=self.environment_build_preparation_use_case,
         )
         
         # JIT Dialog handling
@@ -719,7 +721,8 @@ class MainWindow(QMainWindow):
                         base_images=self.container_manager.get_available_runtimes(),
                         initial_config=build_draft.initial_config,
                         recommended_base_id=env_id,
-                        recommendation_reason=build_draft.recommendation_reason
+                        recommendation_reason=build_draft.recommendation_reason,
+                        build_use_case=self.environment_build_preparation_use_case,
                     )
                     
                     # Handle dialog result

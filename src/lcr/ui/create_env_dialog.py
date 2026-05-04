@@ -2,7 +2,7 @@
 # Released under the MIT license
 # https://opensource.org/licenses/MIT
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
     QLineEdit, QComboBox, QTextEdit, QPushButton, 
@@ -12,8 +12,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QTextCursor, QColor
 
-from lcr.core.container.types import ImageRule
-from lcr.core.container.use_cases import EnvironmentBuildPreparationUseCase
 from lcr.ui.workers import BuildWorker
 from lcr.ui.ports import ContainerManagerPort
 
@@ -24,8 +22,8 @@ class EnvironmentCreationDialog(QDialog):
     and customize installed packages.
     """
     
-    def __init__(self, parent=None, manager: ContainerManagerPort = None, base_images: List[ImageRule] = [], initial_config: Dict = {}, 
-                 recommended_base_id: Optional[str] = None, recommendation_reason: Optional[str] = None):
+    def __init__(self, parent=None, manager: ContainerManagerPort = None, base_images: List[Dict[str, Any]] = [], initial_config: Dict = {},
+                 recommended_base_id: Optional[str] = None, recommendation_reason: Optional[str] = None, build_use_case: Any = None):
         super().__init__(parent)
         self.setWindowTitle("Create New Runtime Environment")
         self.resize(700, 850)
@@ -58,7 +56,7 @@ class EnvironmentCreationDialog(QDialog):
         self.worker: Optional[BuildWorker] = None
         self.is_building = False
         self.current_def_id = None  # Track ID for rollback
-        self.build_use_case = EnvironmentBuildPreparationUseCase(self.container_manager) if self.container_manager else None
+        self.build_use_case = build_use_case
         
         self._load_apt_warnings()
         self._setup_ui()
