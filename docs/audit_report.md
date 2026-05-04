@@ -1,38 +1,27 @@
-# Audit Report
-
-## 判定
-- 結果: PASS
-- 監査ステータス: `AUDIT_PASS_PLAN`
+# Audit Report: docs/roadmap.md
 
 ## 監査対象
-- 基準: `docs/reference_standards.md`
-- 計画: `docs/plan.md`
+- 基準: `docs/plan.md`（絶対基準）
+- 基準: `docs/reference_standards.md`（絶対基準）
+- 被監査: `docs/roadmap.md`
 
-## 検証結果（客観基準照合）
-1. 監査/ガバナンス標準
-- `EMCS` による客観メトリクス評価方針が明記されている（Section 5.4）。
-- Builder/Validator 分離および Auditor 入力境界（requirements/diff のみ）が明記されている（Section 2.2）。
-- REJECT 時の処方的要件（失敗箇所・違反制約・観測証拠・修正ヒント・再検証条件・ルーティング先）が明記されている（Section 2.2）。
+## 判定
+- 総合判定: **PASS**
+- 判定理由: `docs/roadmap.md` は、`docs/plan.md` と `docs/reference_standards.md` が要求する必須制約・実行順序・検証ゲート・差し戻しルールを欠落なく包含しており、監査上の不整合は確認されなかった。
 
-2. Docker 再現性標準
-- `FROM` の digest 固定が必須化されている（Section 2.1, 4/P0-5）。
-- EOL OS の APT archive リダイレクトが必須化されている（Section 2.1, 4/P0-5）。
-- `constraints.txt` 必須が明記されている（Section 2.1, 4/P0-5）。
-- マルチステージビルド必須が明記されている（Section 2.1, 4/P0-5）。
-
-3. Data Integrity 標準
-- ハッシュ対象4区分（input/output/parameter/audit log）全件必須が明記されている（Section 1.1, 4/P0-1, 5.3）。
-- `container_image_digest` と `git_commit_hash` の記録必須が明記されている（Section 1.1, 4/P0-1, 5.3）。
-- 相対パス強制および絶対パス fail-fast が明記されている（Section 1.1, 5.3）。
-
-4. PyQt/PySide アーキテクチャ標準
-- Humble Object 制約（UIの業務判断/I-O/複雑計算/業務フォーマット禁止）が明記されている（Section 1.3, 5.2）。
-- 依存方向規律（`UI -> UseCase -> Domain`、禁止依存の列挙）が明記されている（Section 1.2, 5.2）。
-- `abc.ABC` / `typing.Protocol` を介した境界越え通信が必須化されている（Section 1.2）。
-- Signal/Slot 命名規約（Signal=過去分詞、Slot=動詞）とCI検証が明記されている（Section 1.4, 4/P0-8, 5.2）。
+## 検証結果（要点）
+- RC-1（Data Integrity）: 4区分ハッシュ、`container_image_digest`、`git_commit_hash`、相対パス強制を明記。
+- RC-2（Dependency Boundary）: 許可方向・禁止依存・Port経由強制を明記。
+- RC-3（Humble Object）: UI禁止行為とUI許可行為を明記。
+- RC-4（Signal/Slot Naming）: 命名規約とCI/Lintでの機械検証を明記。
+- Docker再現性: digest固定、archiveリダイレクト、`constraints.txt`、multi-stageを明記。
+- Auditorガバナンス: Builder/Validator分離、Auditor入力境界、REJECT必須記載項目、ルーティング先を明記。
+- 実行順序: P0→P1→P2→P3 を mandatory として固定。
+- Verification Gates: Functional/Structural/Audit/EMCS(M1-M6) を網羅。
+- Loop Prevention: `REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` の振り分けと、差分解消まで着手禁止を明記。
 
 ## 指摘事項
-- なし（`docs/reference_standards.md` に対する計画上の逸脱は検出されない）。
+- なし。
 
 ## 結論
-- `docs/plan.md` は、`docs/reference_standards.md` の絶対基準を満たしているため、監査判定は `AUDIT_PASS_PLAN` とする。
+- `docs/roadmap.md` は絶対基準に適合しており、差し戻し不要。
