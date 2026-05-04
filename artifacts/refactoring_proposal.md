@@ -18,7 +18,7 @@
 
 - `RunExecutionOrchestrationUseCase` を追加し、以下を移管:
   - capability mapping
-n  - mismatch guard
+  - mismatch guard
   - forced creation flow
 - UIは `can_run` と `requires_creation` の結果のみを受け取り、ボタン状態と遷移だけを担当。
 - テスト戦略:
@@ -45,3 +45,36 @@ n  - mismatch guard
   - 対策: 互換キーを残す、欠落キーはデフォルト値を付与する。
 - リスク: 削除処理の失敗時挙動が変化する。
   - 対策: 部分失敗継続を固定し、`rollback_on_any_failure=False` を既定とする。
+
+## Change Impact Test Protocol (AC6.1-6)
+
+### シナリオA: UI変更時のDomain影響最小化
+
+- 変更シナリオ:
+  - `src/lcr/ui/main_window.py` の表示文言・レイアウト・ボタン状態更新のみに限定した変更を加える。
+- 期待影響範囲:
+  - Domain層ファイル差分 0件
+  - Domain層テスト失敗 0件
+- 合否条件:
+  - `pytest tests/` 実行時に Domain関連テストが全Pass
+  - 依存方向違反件数が増加しない
+
+### シナリオB: Domain変更時のUI影響最小化
+
+- 変更シナリオ:
+  - UseCase/Domainの内部ロジックをPort契約を維持したまま変更する。
+- 期待影響範囲:
+  - UI層修正はDTO受け渡し調整の最小範囲に限定
+  - 画面イベント結線（Signal/Slot）変更なし
+- 合否条件:
+  - UI E2E主要導線（Run/Build/History）が回帰しない
+  - `pytest tests/` 全Pass
+
+## Fixed Numeric Acceptance Thresholds (AC6.1-7)
+
+- 禁止依存件数: **0件**
+- 循環依存件数: **0件**
+- UI層業務ロジック件数: **0件**
+- 境界違反テスト pass率: **100%**
+
+上記閾値を1つでも満たさない場合は、Phase 6.1 を未達（REJECT）と判定する。
