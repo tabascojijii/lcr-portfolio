@@ -45,21 +45,43 @@ class DecouplingAssessmentUseCase:
                     "remediation": {
                         "target_layer": item.target_layer,
                         "port_name": item.port_name,
+                        "interface_design": f"Introduce/extend Port `{item.port_name}` for boundary isolation.",
                         "acceptance_test_id": item.acceptance_test_id,
+                        "completion_criteria": (
+                            "No direct boundary bypass remains and acceptance test passes."
+                        ),
                     },
                 }
             )
         return entries
+
+    def build_verification_matrix(self, test_specs: Sequence[Dict]) -> List[Dict]:
+        matrix = []
+        for item in test_specs:
+            matrix.append(
+                {
+                    "test_id": item["test_id"],
+                    "test_type": item["test_type"],
+                    "pass_condition": item["pass_condition"],
+                    "fail_condition": item["fail_condition"],
+                    "metric_key": item["metric_key"],
+                }
+            )
+        return matrix
 
     def build_change_impact_test_plan(self) -> List[Dict]:
         return [
             {
                 "scenario_id": "CIT-UI-001",
                 "scenario": "UI change does not impact Domain behavior",
-                "steps": [
+                "preconditions": [
+                    "Current main branch test suite is green.",
+                    "Baseline import graph snapshot is available.",
+                ],
+                "operations": [
                     "Change UI widget layout/labels only.",
                     "Run domain and use case tests.",
-                    "Verify no domain module was edited.",
+                    "Compare changed files against domain modules.",
                 ],
                 "expected_impact_scope": "Only UI layer files are modified.",
                 "pass_condition": "All domain/use case tests pass and domain diff is zero.",
@@ -67,10 +89,14 @@ class DecouplingAssessmentUseCase:
             {
                 "scenario_id": "CIT-DOM-001",
                 "scenario": "Domain change does not require UI modification",
-                "steps": [
+                "preconditions": [
+                    "A Port contract exists between UI and the target Domain behavior.",
+                    "Baseline UI import graph snapshot is available.",
+                ],
+                "operations": [
                     "Modify domain rule implementation behind a Port contract.",
                     "Run UI integration tests.",
-                    "Verify UI modules import surface is unchanged.",
+                    "Compare UI import graph with baseline.",
                 ],
                 "expected_impact_scope": "Domain and use case layers only.",
                 "pass_condition": "UI tests pass and UI import graph diff is zero.",

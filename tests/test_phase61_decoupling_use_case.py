@@ -21,8 +21,35 @@ def test_build_violation_entries_include_id_and_remediation_contract():
     assert entries[0]["remediation"] == {
         "target_layer": "UseCase",
         "port_name": "ScriptExecutionPort",
+        "interface_design": "Introduce/extend Port `ScriptExecutionPort` for boundary isolation.",
         "acceptance_test_id": "AT-DEC-001",
+        "completion_criteria": "No direct boundary bypass remains and acceptance test passes.",
     }
+
+
+def test_build_verification_matrix_has_test_level_pass_fail_metrics():
+    use_case = DecouplingAssessmentUseCase()
+    matrix = use_case.build_verification_matrix(
+        [
+            {
+                "test_id": "T61-001",
+                "test_type": "updated",
+                "pass_condition": "Forbidden dependency count is zero.",
+                "fail_condition": "Any UI->Domain direct dependency detected.",
+                "metric_key": "forbidden_dependency_count",
+            }
+        ]
+    )
+
+    assert matrix == [
+        {
+            "test_id": "T61-001",
+            "test_type": "updated",
+            "pass_condition": "Forbidden dependency count is zero.",
+            "fail_condition": "Any UI->Domain direct dependency detected.",
+            "metric_key": "forbidden_dependency_count",
+        }
+    ]
 
 
 def test_change_impact_test_plan_includes_ui_and_domain_scenarios():
@@ -32,7 +59,8 @@ def test_change_impact_test_plan_includes_ui_and_domain_scenarios():
     scenario_ids = {item["scenario_id"] for item in plan}
     assert scenario_ids == {"CIT-UI-001", "CIT-DOM-001"}
     for item in plan:
-        assert item["steps"]
+        assert item["preconditions"]
+        assert item["operations"]
         assert item["expected_impact_scope"]
         assert item["pass_condition"]
 
