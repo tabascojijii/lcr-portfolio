@@ -444,139 +444,14 @@ class MainWindow(QMainWindow):
         rec_id = draft.recommended_rule['id']
         rec_reason = draft.recommendation_reason
         
-        # 4. Show Dialog
-        # 4. Show Dialog
-        dialog = EnvironmentCreationDialog(
-            parent=self,
+        self._open_environment_creation_dialog(
             base_images=draft.base_images,
             initial_config=draft.initial_config,
             recommended_base_id=rec_id,
             recommendation_reason=rec_reason,
-            build_use_case=self.environment_build_preparation_use_case,
+            success_title="Ready",
+            success_prefix="Environment",
         )
-        
-        if dialog.exec():
-            # 5. Handle Success
-            # The dialog now handles the build process internally.
-            
-            # Reload definitions to see the new image
-            self.environment_build_preparation_use_case.reload_runtime_definitions()
-            self._refresh_env_list() # [FIX] Use correct method name
-            
-            # Select the new environment
-            new_config = dialog.result_config
-            if new_config:
-                tag = new_config.get('tag')
-                if tag:
-                    # Find and select the new item
-                    # Try to match the name (which comes from tag usually)
-                    # Our _refresh_env_list adds items by rule['name']
-                    # For generated envs, rule['name'] is usually the tag.
-                    # Find and select the new item robustly
-                    found_idx = -1
-                    for i in range(self.runtime_combo.count()):
-                        rule = self.runtime_combo.itemData(i, Qt.UserRole)
-                        if rule and rule.get('image') == tag:
-                            found_idx = i
-                            break
-                    
-                    if found_idx >= 0:
-                        self.runtime_combo.setCurrentIndex(found_idx)
-                        self._on_runtime_combo_activated(found_idx)
-            
-            QMessageBox.information(self, "Ready", f"Environment '{tag}' is ready to use.")
-            
-
-
-    def _run_jit_build(self, base_rule, code_content):
-        """
-        Triggered when a required image is missing.
-        Loads existing definition if available, or synthesizes new config.
-        """
-        rec_id = base_rule['id']
-        rec_reason = "Required for execution (Missing Image)"
-        
-        # Try to load existing definition from disk via Manager
-        existing_config = self.environment_build_preparation_use_case.get_definition(rec_id)
-        
-        if existing_config:
-            print(f"[JIT] Loaded existing definition for '{rec_id}'")
-            rec_reason = "Using existing definition (Image not built yet)"
-            # [FIX] Explicitly inject ID to ensure dialog locks it
-            existing_config['id'] = rec_id
-        # Else: existing_config is None, will fall through to synthesis below
-        
-        # If no existing definition, synthesize new one
-        if existing_config is None:
-            build_draft = self.runtime_use_case.prepare_missing_image_build_draft(
-                analyzer=None,
-                container_manager=None,
-                code_text=code_content,
-                selected_rule=base_rule,
-            )
-            existing_config = build_draft.initial_config
-            rec_reason = build_draft.recommendation_reason
-            print(f"[JIT] Synthesized config for '{rec_id}' (Fallback)")
-
-        # [CRITICAL FIX] Always inject the requested ID into config
-        # This ensures the Dialog treats it as an "Existing Definition" (Locked Name)
-        # preventing it from reverting to 'custom-auto-gen' or timestamp.
-        if existing_config:
-            existing_config['id'] = rec_id
-            existing_config['tag'] = rec_id
-        
-        # === DEBUG LOGGING ===
-        print(f"--- [DEBUG] Pre-Dialog Check ---")
-        print(f"1. Selected ID from base_rule: '{rec_id}'")
-        print(f"2. Config prepared for dialog: {existing_config is not None}")
-        if existing_config:
-            print(f"3. Config has 'id' key: {'id' in existing_config}")
-            print(f"4. Config['id'] value: '{existing_config.get('id', 'MISSING')}'")
-            print(f"5. Config['tag'] value: '{existing_config.get('tag', 'MISSING')}'")
-        else:
-            print("3. Config is None!")
-        # === END DEBUG ===
-        
-        dialog = EnvironmentCreationDialog(
-            parent=self,
-            base_images=self.environment_build_preparation_use_case.list_available_runtimes(),
-            initial_config=existing_config,
-            recommended_base_id=rec_id,
-            recommendation_reason=rec_reason,
-            build_use_case=self.environment_build_preparation_use_case,
-        )
-        
-        # JIT Dialog handling
-        if dialog.exec():
-            # Success - Image built
-            self.environment_build_preparation_use_case.reload_runtime_definitions()
-            self._refresh_env_list()
-            
-            new_config = dialog.result_config
-            if new_config:
-                tag = new_config.get('tag')
-                self.console_log.append(f"[JIT] Environment '{tag}' created successfully.")
-                
-                # Update selection robustly
-                found_idx = -1
-                for i in range(self.runtime_combo.count()):
-                    rule = self.runtime_combo.itemData(i, Qt.UserRole)
-                    if rule and rule.get('image') == tag:
-                        found_idx = i
-                        break
-                
-                if found_idx >= 0:
-                    self.runtime_combo.setCurrentIndex(found_idx)
-                    self._on_runtime_combo_activated(found_idx)
-            
-            # Important: JIT flow usually implies we want to run immediately, 
-            # but since we just had a blocking dialog, user might want to check things.
-            # We reset buttons to allow them to click Run again.
-            self._reset_buttons()
-            
-        else:
-            # Cancelled
-            self._reset_buttons()
 
 
         
@@ -741,18 +616,56 @@ class MainWindow(QMainWindow):
             return
 
         env_id = build_draft.env_id
-        dialog = EnvironmentCreationDialog(
-            parent=self,
+        self._open_environment_creation_dialog(
             base_images=build_draft.base_images,
             initial_config=build_draft.initial_config,
             recommended_base_id=env_id,
             recommendation_reason=build_draft.recommendation_reason,
+            success_title="Build Complete",
+            success_prefix="Environment",
+        )
+
+    def _open_environment_creation_dialog(
+        self,
+        *,
+        base_images,
+        initial_config,
+        recommended_base_id: str,
+        recommendation_reason: str,
+        success_title: str,
+        success_prefix: str,
+    ) -> None:
+        """Open environment creation dialog and apply created runtime to current selection."""
+        dialog = EnvironmentCreationDialog(
+            parent=self,
+            base_images=base_images,
+            initial_config=initial_config,
+            recommended_base_id=recommended_base_id,
+            recommendation_reason=recommendation_reason,
             build_use_case=self.environment_build_preparation_use_case,
         )
         if dialog.exec():
             self.environment_build_preparation_use_case.reload_runtime_definitions()
             self._refresh_env_list()
-            QMessageBox.information(self, "Build Complete", f"Environment '{env_id}' is ready to use.")
+            new_tag = self._select_runtime_by_image_tag(dialog.result_config)
+            if new_tag:
+                self.console_log.append(f"[Environment] '{new_tag}' is ready to use.")
+                QMessageBox.information(self, success_title, f"{success_prefix} '{new_tag}' is ready to use.")
+
+    def _select_runtime_by_image_tag(self, result_config) -> Optional[str]:
+        """Select runtime combo item by generated image tag."""
+        if not result_config:
+            return None
+        tag = result_config.get("tag")
+        if not tag:
+            return None
+        for i in range(self.runtime_combo.count()):
+            rule = self.runtime_combo.itemData(i, Qt.UserRole)
+            if rule and rule.get("image") == tag:
+                self.runtime_combo.setCurrentIndex(i)
+                self._on_runtime_combo_activated(i)
+                break
+        return tag
 
     @Slot()
     def _stop_container(self):
@@ -1049,15 +962,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Build Error", f"Failed to initiate build: {e}")
             self.console_log.append(f"[Build Error] {e}")
-
-    def _run_jit_build(self, rule, code_content):
-        """Handle JIT build from Run flow."""
-        # 1. Open Dialog pre-filled with this rule?
-        # Or if "Synthesize" was clicked, maybe we should offer to Synthesize FROM the missing rule 
-        # OR just offer to create a NEW one. 
-        # The prompt said "Synthesize and build".
-        # Let's open the Dialog, pre-set with what we know.
-        self._show_create_env_dialog()
 
     def _start_worker(self, args, script_name):
         """Common worker starter."""
