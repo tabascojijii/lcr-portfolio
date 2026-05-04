@@ -1,32 +1,50 @@
-# 監査レポート（Auditor）
+# 監査レポート
 
 - 監査日: 2026-05-04
 - 監査対象: `docs/plan.md`
-- 絶対基準: `docs/reference_standards.md`
-- 総合判定: **REJECT_TO_ARCHITECT**
+- 判定基準: `docs/reference_standards.md`（絶対基準）
+- 総合判定: **PASS**
+- ステータス出力: `AUDIT_PASS_PLAN`
 
-## 指摘事項（重大度順）
+## 1. 監査およびマルチエージェント・ガバナンス標準
 
-### 1. 依存方向定義がクリーンアーキテクチャ標準に抵触（重大）
-- 該当箇所: `docs/plan.md` セクション「3. ターゲットアーキテクチャ」
-- 記載: 「依存方向は `UI -> UseCase -> Domain -> Infrastructure` に固定する。」
-- 違反基準: `docs/reference_standards.md` 4章「クリーンアーキテクチャと依存の方向」
-  - 内側ビジネスルール（Entities/Use Cases）がUI等の外側技術へ依存してはならない。
-- 客観的根拠:
-  - 上記記載は依存方向として `Domain -> Infrastructure` を明示しており、内側から外側への依存を許容する定義になっている。
-  - これは依存逆転（Port/Adapter）前提の境界規律と整合しない。
-- 影響:
-  - Domain純粋性の毀損、テスト容易性低下、実装時の境界逸脱再発リスク増大。
-- 修正指示（処方）:
-  1. 依存方向定義を「**内側は外側に依存しない**」形に明文化する。
-  2. 依存関係は少なくとも `UI -> Application/UseCase -> Domain` とし、InfrastructureはPort実装として外側に配置する旨へ修正する。
-  3. `docs/plan.md` の3章と6章（構造ゲート）の記述を同一モデルで整合させ、`Domain -> Infrastructure` と読める表現を削除する。
+判定: 適合
 
-## 適合確認（参考）
-- 標準1章（監査ガバナンス）: Builder/Validator分離、処方的差し戻し、EMCS観点の記述は概ね適合。
-- 標準2章（Docker再現性）: ダイジェスト固定・APTアーカイブ・constraints・マルチステージの4要件は計画上に明記。
-- 標準3章（データ完全性）: `image_digest`/`git_commit` 記録、SHA-256、相対パス監査の記述あり。
-- 標準4章（UI/Humble Object, 命名規約, IF規律）: 多くは適合だが、上記依存方向定義の矛盾により不合格。
+根拠:
+- 客観評価: `構造KPI/品質KPI/監査KPI` を定量化し、`EMCS観点` での記録を明示（6.1章）。
+- Builder/Validator分離: 6.1章で「思考過程を共有しない」「入力を要件+Diff+実測証跡に限定」を明記。
+- 処方的差し戻し: 6.1章で「失敗箇所/違反基準/修正指示」を必須化。
 
-## 最終判定
-- 問題あり: **REJECT_TO_ARCHITECT**
+## 2. EOLスタックのコンテナ化およびビルド再現性標準
+
+判定: 適合
+
+根拠:
+- `FROM` ダイジェスト固定を Phase D タスク8に明記。
+- EOL APT のアーカイブ切替を Phase D タスク8に明記。
+- `constraints.txt` による pip 依存制約を Phase D タスク8に明記。
+- マルチステージビルド適用を Phase D タスク8に明記。
+
+## 3. データ完全性と監査証跡
+
+判定: 適合
+
+根拠:
+- `image_digest` と `git_commit`（`git rev-parse HEAD`）の記録を 2.3/Phase C に明記。
+- 相対パス検証（`relative_path_check`）を 2.3 に明記。
+- `input_hashes` / `output_hashes` / `param_hash` / `log_hash` を 2.3/Phase C で必須化。
+
+## 4. PyQt / PySide モダンUIアーキテクチャ標準
+
+判定: 適合
+
+根拠:
+- Humble Object: `MainWindow` をイベント中継に限定（2.1, 4.1, Phase B）。
+- 依存方向: `UI -> Application/UseCase -> Domain` を固定し、内側から外側への依存を禁止（3章, 構造ゲート）。
+- インターフェース規律: Port を `abc.ABC` / `typing.Protocol` で定義する方針を明記（3章, Phase A, 構造ゲート）。
+- シグナル/スロット命名規約を 3.1 と構造ゲートで監査対象化。
+
+## 結論
+
+`docs/plan.md` は `docs/reference_standards.md` の必須条項を網羅し、監査基準に対する明確な未充足・矛盾は確認されなかった。
+したがって本監査の判定は **PASS** とする。
