@@ -36,6 +36,24 @@ class MissingImageBuildDraft:
     recommendation_reason: str
 
 
+@dataclass
+class RuntimeExecutionPlan:
+    selected_rule: Dict[str, Any]
+    reason_text: str
+    config: Dict[str, Any]
+    docker_args: List[str]
+    run_context: Dict[str, Any]
+    output_dir_rel: str
+    runtime_name: str
+
+
+@dataclass
+class BuildExecutionPlan:
+    tag: str
+    build_args: List[str]
+    selected_runtime_image: str
+
+
 class EnvironmentDraftUseCase:
     """Prepare environment-creation inputs from code content."""
 
@@ -107,6 +125,19 @@ class EnvironmentBuildPreparationUseCase:
             tag=tag,
             apt_added_tools=apt_added_tools,
             has_opencv_pip_warning=has_opencv_pip_warning,
+        )
+
+    def prepare_execution_plan(self, config: Dict, available_runtimes: List[Dict[str, Any]]) -> BuildExecutionPlan:
+        prepared = self.prepare(config)
+        selected_image = prepared.tag
+        for runtime in available_runtimes:
+            if runtime.get("image") == prepared.tag:
+                selected_image = runtime.get("image", prepared.tag)
+                break
+        return BuildExecutionPlan(
+            tag=prepared.tag,
+            build_args=prepared.build_args,
+            selected_runtime_image=selected_image,
         )
 
 
@@ -247,3 +278,41 @@ class RuntimeExecutionPreparationUseCase:
             "config": config,
             "reason_text": " / ".join(reasons) if reasons else "Default selection",
         }
+
+    def prepare_execution_plan(
+        self,
+        analyzer,
+        container_manager,
+        history_manager,
+        code_text: str,
+        script_path: str,
+        data_dir: Optional[str],
+        output_dir: Optional[str],
+        selected_rule: Optional[Dict[str, Any]],
+    ) -> RuntimeExecutionPlan:
+        prepared = self.prepare_execution(
+            analyzer,
+            container_manager,
+            code_text,
+            script_path,
+            data_dir=data_dir,
+            output_dir=output_dir,
+            selected_rule=selected_rule,
+        )
+        config = prepared["config"]
+        image_name = config["image"]
+        output_dir_abs = config["host_work_dir"]
+        return RuntimeExecutionPlan(
+            selected_rule=prepared["selected_rule"],
+            reason_text=prepared["reason_text"],
+            config=config,
+            docker_args=container_manager.get_docker_run_args(config),
+            run_context={
+                "image_name": image_name,
+                "script_path": script_path,
+                "param_payload": config,
+                "input_files": [script_path],
+            },
+            output_dir_rel=history_manager.to_relative_path(output_dir_abs),
+            runtime_name=prepared["selected_rule"].get("name", image_name),
+        )

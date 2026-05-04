@@ -679,18 +679,19 @@ class MainWindow(QMainWindow):
                     self.runtime_combo.setEnabled(True)
                     return
 
-            prepared = self.runtime_use_case.prepare_execution(
+            execution_plan = self.runtime_use_case.prepare_execution_plan(
                 self.analyzer,
                 self.container_manager,
+                self.history_manager,
                 current_content,
                 script_path,
                 data_dir=data_dir,
                 output_dir=output_dir,
                 selected_rule=selected_rule,
             )
-            selected_rule = prepared["selected_rule"]
-            reason_text = prepared["reason_text"]
-            config = prepared["config"]
+            selected_rule = execution_plan.selected_rule
+            reason_text = execution_plan.reason_text
+            config = execution_plan.config
             
             # --- JIT Image Check ---
             # Try to verify if image exists using 'docker image inspect'
@@ -742,30 +743,22 @@ class MainWindow(QMainWindow):
                     return
 
 
-            docker_args = self.container_manager.get_docker_run_args(config)
-
-            
             # Store output dir for result loading
             self.current_output_dir = config['host_work_dir']
             self.res_timestamp_label.setText(f"Run Timestamp (Latest): {Path(self.current_output_dir).name}")
             self.open_res_btn.setEnabled(False)
             self._clear_results_view()
             
-            output_dir_rel = self.history_manager.to_relative_path(self.current_output_dir)
+            output_dir_rel = execution_plan.output_dir_rel
             self.console_log.append(f"Output Directory (Host): {output_dir_rel}")
             self.console_log.append(f"\n[Environment Decision Engine]")
-            self.console_log.append(f"Selected Runtime: {selected_rule.get('name', config['image'])}")
+            self.console_log.append(f"Selected Runtime: {execution_plan.runtime_name}")
             self.console_log.append(f"Reason: {reason_text}")
             self.console_log.append(f"Image Tag: {config['image']}")
-            self._last_run_context = {
-                "image_name": config["image"],
-                "script_path": script_path,
-                "param_payload": config,
-                "input_files": [script_path],
-            }
+            self._last_run_context = execution_plan.run_context
             
             self.worker = ContainerWorker(
-                docker_args=docker_args,
+                docker_args=execution_plan.docker_args,
                 script_name=config['script_name']
             )
             
@@ -924,18 +917,11 @@ class MainWindow(QMainWindow):
     def _build_audit_metadata(self, exit_code):
         """Collect and append structured audit metadata."""
         try:
-            metadata = self.prepare_audit_metadata_use_case.execute(
+            metadata, lines = self.prepare_audit_metadata_use_case.execute_with_log_lines(
                 self._last_run_context, self.current_output_dir, exit_code
             )
-            self.console_log.append(f"[Audit] image_digest: {metadata['image_digest']}")
-            self.console_log.append(f"[Audit] git_commit_hash: {metadata['git_commit_hash']}")
-            self.console_log.append(f"[Audit] script_path_rel: {metadata['script_path_rel']}")
-            self.console_log.append(f"[Audit] script_sha256: {metadata['script_sha256']}")
-            self.console_log.append(f"[Audit] param_hash: {metadata['param_hash']}")
-            self.console_log.append(f"[Audit] input_hashes: {metadata['input_hashes']}")
-            self.console_log.append(f"[Audit] output_hashes: {metadata['output_hashes']}")
-            self.console_log.append(f"[Audit] log_path_rel: {metadata['log_path_rel']}")
-            self.console_log.append(f"[Audit] log_hash: {metadata['log_hash']}")
+            for line in lines:
+                self.console_log.append(line)
             return metadata
         except Exception as e:
             self.console_log.append(f"[Audit] metadata_collection_error: {e}")
@@ -1043,8 +1029,12 @@ class MainWindow(QMainWindow):
     def _execute_save_and_build(self, config):
         """Save config and trigger build."""
         try:
-            result = self.environment_build_preparation_use_case.prepare(config)
-            name = result.tag
+            available_runtimes = self.container_manager.get_available_runtimes()
+            plan = self.environment_build_preparation_use_case.prepare_execution_plan(
+                config,
+                available_runtimes,
+            )
+            name = plan.tag
             self.console_log.append(f"[Synthesizer] Definition saved for tag: {name}")
             
             # 2. Reload Manager
@@ -1062,7 +1052,7 @@ class MainWindow(QMainWindow):
                  # Try finding by data tag
                  for i in range(self.runtime_combo.count()):
                      r = self.runtime_combo.itemData(i, Qt.UserRole)
-                     if r['image'] == name:
+                     if r['image'] == plan.selected_runtime_image:
                          index = i
                          break
             
@@ -1074,7 +1064,7 @@ class MainWindow(QMainWindow):
             self.runtime_combo.blockSignals(False)
             
             # 4. Trigger Build
-            build_args = result.build_args
+            build_args = plan.build_args
             
             self.console_log.append(f"[Build] Starting build for {name}...")
             self.tabs.setCurrentIndex(0) # Show Console

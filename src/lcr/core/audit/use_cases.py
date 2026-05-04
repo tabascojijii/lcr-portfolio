@@ -109,6 +109,20 @@ class PrepareAuditMetadataUseCase:
             log_path=log_path if Path(log_path).exists() else None,
         )
 
+    def execute_with_log_lines(self, last_run_context, output_dir, exit_code):
+        metadata = self.execute(last_run_context, output_dir, exit_code)
+        return metadata, [
+            f"[Audit] image_digest: {metadata.get('image_digest', '')}",
+            f"[Audit] git_commit_hash: {metadata.get('git_commit_hash', '')}",
+            f"[Audit] script_path_rel: {metadata.get('script_path_rel', '')}",
+            f"[Audit] script_sha256: {metadata.get('script_sha256', '')}",
+            f"[Audit] param_hash: {metadata.get('param_hash', '')}",
+            f"[Audit] input_hashes: {metadata.get('input_hashes', '')}",
+            f"[Audit] output_hashes: {metadata.get('output_hashes', '')}",
+            f"[Audit] log_path_rel: {metadata.get('log_path_rel', '')}",
+            f"[Audit] log_hash: {metadata.get('log_hash', '')}",
+        ]
+
     def _collect_output_files(self, output_dir):
         out_dir = Path(output_dir)
         if not out_dir.exists():
