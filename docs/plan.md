@@ -38,18 +38,20 @@
 
 ## 3. ターゲットアーキテクチャ
 
-依存方向は `UI -> UseCase -> Domain -> Infrastructure` に固定する。
+依存規律は「**内側は外側へ依存しない**」を絶対条件とし、依存方向は `UI -> Application/UseCase -> Domain` に固定する。Infrastructure は外側に配置し、UseCase/Domain は Port（`abc.ABC` / `typing.Protocol`）越しにのみ利用する（依存逆転）。
 
 - UI層:
   - 入力受付、表示更新、2段階確認ダイアログ表示のみ。
   - UseCase呼び出しは Facade/Controller（Application層）経由。
 - UseCase/Application層:
   - 判定、ユースケース制御、トランザクション境界、エラー整形。
-  - Port Interface（`abc.ABC` または `typing.Protocol`）以外で Infrastructure を参照しない。
+  - Port Interface（`abc.ABC` または `typing.Protocol`）以外で Infrastructure 実装を参照しない。
 - Domain層:
   - 判定規則（未使用判定、ガード判定、メタデータ不変条件）を純粋ロジックで保持。
+  - Infrastructure / UI / フレームワークへ依存しない。
 - Infrastructure層:
-  - Docker・ファイルI/O・監査ログ永続化の実装。
+  - Docker・ファイルI/O・監査ログ永続化のAdapter実装。
+  - 内側層（UseCase/Domain）が定義したPortを実装する。
 
 ### 3.1 UI命名規約（監査対象）
 
@@ -162,6 +164,7 @@
 - importグラフ検証（禁止依存/循環依存0件）
 - UI責務監査（業務ロジック0件）
 - Port経由率100%
+- 内側層（UseCase/Domain）から外側層（UI/Infrastructure）への直接依存0件
 - Portが `abc.ABC` / `typing.Protocol` で定義済み
 - シグナル/スロット命名規約違反0件
 
