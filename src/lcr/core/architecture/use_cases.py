@@ -1,4 +1,6 @@
+import ast
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Sequence
 
 
@@ -12,6 +14,14 @@ class ViolationRecord:
     target_layer: str
     port_name: str
     acceptance_test_id: str
+
+
+@dataclass(frozen=True)
+class NamingViolation:
+    file_path: str
+    symbol: str
+    violation_type: str
+    evidence: str
 
 
 class DecouplingAssessmentUseCase:
@@ -139,3 +149,111 @@ class DecouplingAssessmentUseCase:
             },
             "procedure": dict(self.IMPORT_GRAPH_PROCEDURE),
         }
+
+
+class SignalSlotNamingAuditUseCase:
+    """Static audit for Signal/Slot naming in src/lcr/ui."""
+
+    _SIGNAL_ALLOWED_SUFFIXES = ("ed", "en", "n")
+    _SLOT_ALLOWED_PREFIXES = (
+        "on_",
+        "run",
+        "update",
+        "select",
+        "open",
+        "refresh",
+        "load",
+        "save",
+        "prepare",
+        "handle",
+        "start",
+        "stop",
+        "clear",
+        "render",
+        "build",
+        "confirm",
+        "apply",
+        "populate",
+        "reset",
+        "execute",
+        "close",
+        "show",
+        "append",
+        "ensure",
+    )
+
+    def audit_ui_paths(self, root: Path) -> Dict:
+        files = sorted(root.rglob("*.py"))
+        violations: List[NamingViolation] = []
+        signal_count = 0
+        slot_count = 0
+
+        for path in files:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign) and self._is_signal_call(node.value):
+                    signal_count += 1
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            name = target.id
+                            if not self._is_valid_signal_name(name):
+                                violations.append(
+                                    NamingViolation(
+                                        file_path=str(path).replace("\\", "/"),
+                                        symbol=name,
+                                        violation_type="signal_naming",
+                                        evidence="Signal name must be past-participle style.",
+                                    )
+                                )
+                if isinstance(node, ast.FunctionDef) and self._has_slot_decorator(node):
+                    slot_count += 1
+                    name = node.name.lstrip("_")
+                    if not self._is_valid_slot_name(name):
+                        violations.append(
+                            NamingViolation(
+                                file_path=str(path).replace("\\", "/"),
+                                symbol=node.name,
+                                violation_type="slot_naming",
+                                evidence="Slot name must start with an action verb.",
+                            )
+                        )
+
+        return {
+            "files_scanned": len(files),
+            "signals_scanned": signal_count,
+            "slots_scanned": slot_count,
+            "violations": violations,
+            "violation_count": len(violations),
+        }
+
+    @classmethod
+    def _is_signal_call(cls, value: ast.AST) -> bool:
+        if not isinstance(value, ast.Call):
+            return False
+        func = value.func
+        if isinstance(func, ast.Name):
+            return func.id == "Signal"
+        return isinstance(func, ast.Attribute) and func.attr == "Signal"
+
+    @classmethod
+    def _has_slot_decorator(cls, func: ast.FunctionDef) -> bool:
+        for deco in func.decorator_list:
+            if isinstance(deco, ast.Name) and deco.id == "Slot":
+                return True
+            if isinstance(deco, ast.Call):
+                inner = deco.func
+                if isinstance(inner, ast.Name) and inner.id == "Slot":
+                    return True
+                if isinstance(inner, ast.Attribute) and inner.attr == "Slot":
+                    return True
+        return False
+
+    @classmethod
+    def _is_valid_signal_name(cls, name: str) -> bool:
+        lowered = name.lower().replace("_", "")
+        return lowered.endswith(cls._SIGNAL_ALLOWED_SUFFIXES)
+
+    @classmethod
+    def _is_valid_slot_name(cls, name: str) -> bool:
+        lowered = name.lower()
+        return lowered.startswith(cls._SLOT_ALLOWED_PREFIXES)

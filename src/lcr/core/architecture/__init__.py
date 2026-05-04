@@ -1,3 +1,13 @@
-from .use_cases import DecouplingAssessmentUseCase, ViolationRecord
+from .use_cases import (
+    DecouplingAssessmentUseCase,
+    NamingViolation,
+    SignalSlotNamingAuditUseCase,
+    ViolationRecord,
+)
 
-__all__ = ["DecouplingAssessmentUseCase", "ViolationRecord"]
+__all__ = [
+    "DecouplingAssessmentUseCase",
+    "NamingViolation",
+    "SignalSlotNamingAuditUseCase",
+    "ViolationRecord",
+]
