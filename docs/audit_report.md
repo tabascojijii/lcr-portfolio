@@ -3,10 +3,10 @@
 ## 1. Pytest Execution Result
 - Command: `pytest tests/`
 - Result: **PASS**
-- Summary: `64 passed in 1.96s`
+- Summary: `64 passed in 2.19s`
 - Key log excerpt:
   - `collected 64 items`
-  - `============================= 64 passed in 1.96s =============================`
+  - `============================= 64 passed in 2.19s =============================`
 
 ## 2. Reference Standards Conformance Check (`docs/reference_standards.md`)
 
@@ -42,10 +42,10 @@
     - 循環依存0件
     - UI層業務ロジック0件
     - 境界違反テスト100% Pass
-  - Actual (from `artifacts/architecture_decoupling_assessment.md` / `artifacts/refactoring_proposal.md`):
-    - `UI->Domain直参照`: **2件**
+  - Actual:
+    - `UI->Domain直参照`: **2件**（`artifacts/architecture_decoupling_assessment.md`）
     - `循環依存`: 0件
-    - Remaining Deltaに未解消課題を明記
+    - `Remaining Delta` に未解消課題を明記（`artifacts/refactoring_proposal.md`）
   - Therefore fixed numeric acceptance is not met.
 
 ## 5. Final Audit Decision
