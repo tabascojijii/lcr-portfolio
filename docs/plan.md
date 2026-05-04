@@ -1,235 +1,211 @@
-# LCR 実装計画（Architect）
+# 実装計画（Architect / Loop Break Plan）
 
 - 作成日: 2026-05-04
-- 参照: `docs/core_philosophy.md`, `docs/requirements.md`, `docs/reference_standards.md`, `docs/post_mortem.md`
-- 目的: UI疎結合・監査可能性・安全性を満たしつつ、過去の監査ループ要因を構造的に除去する。
+- 対象: Phase 5, Phase 6, Phase 6.1, 6.2, 6.3, 6.4
+- 根拠: `docs/core_philosophy.md`, `docs/requirements.md`, `docs/reference_standards.md`, `docs/post_mortem.md`
 
-## 1. 計画の前提（失敗分析の反映）
+## 1. 計画目的
 
-本計画は以下を絶対条件として開始する。
+過去の失敗（2026-05-04 時点の監査差し戻し反復）を、実装テクニックではなく工程設計そのものの是正で終わらせる。  
+中核は次の2点。
 
-1. 設計課題は実装へ押し戻さない（Architect責務で境界を先に固定）。
-2. `pytest` 合格と構造準拠を独立ゲート化する。
-3. UIからDomainへの直接参照を「禁止ルール」ではなく「経路設計」で不可能化する。
-4. `MainWindow` は Humble Object とし、判断・分岐・永続化・外部I/Oを持たせない。
-5. 2026-05-04 の差し戻し実績（`_run_container`, `_show_create_env_dialog`）を「再発禁止の固定監査項目」として扱う。
+1. 設計課題を実装へ返さない（Architect先行で境界を固定）
+2. 機能ゲートと構造ゲートを分離し、両方合格まで進行禁止
 
-## 2. 最終達成指標（固定KPI）
+## 2. 再発防止の固定原則（Post Mortem反映）
 
-### 2.1 構造KPI（必達）
+1. `MainWindow` は Humble Object とし、判断・分岐・永続化・外部I/Oを保持しない。
+2. `UI -> UseCase -> Domain` の依存方向を固定し、境界越えは Port のみ。
+3. `UI->Domain` 直参照は「禁止」ではなく「経路上不可能」な設計にする。
+4. 差し戻し区分を強制運用する。
+- 構造違反: `REJECT_TO_ARCHITECT`
+- 機能不備: `REJECT_TO_IMPLEMENT`
+5. 同一構造違反2回連続で、実装作業を停止し Architect 再設計へ自動移送する。
+
+## 3. 完了KPI（固定）
+
+### 3.1 構造KPI
 
 - `UI->Domain` 直参照: 0件
+- Port未経由の境界越え: 0件
 - 逆方向依存（内側→外側）: 0件
 - 循環依存: 0件
-- `MainWindow` の業務ロジックメソッド: 0件（イベント中継のみ）
-- Port未経由の境界越え: 0件
+- `MainWindow._run_container` の業務ロジック: 0件
+- `MainWindow._show_create_env_dialog` の候補生成/環境作成制御: 0件
 
-### 2.2 品質KPI（必達）
+### 3.2 品質KPI
 
-- `pytest tests/`: 全件Pass
-- `mypy`（Phase 6.3対象範囲）: 0 error
-- DTO境界（Phase 6.2）での型違反既知残: 0件
+- `pytest tests/` 全件Pass
+- Phase 6.2 DTO strict/fail-fast違反: 0件
+- Phase 6.3 mypyエラー: 0件
+- `type: ignore` 無理由コメント: 0件
 
-### 2.3 監査KPI（必達）
+### 3.3 監査KPI
 
-- 監査ログに required imports / capability / mismatch / guard発火状態を100%記録
-- 監査ログに `image_digest` / `git_commit` / `input_hashes` / `output_hashes` / `param_hash` / `log_hash` / `relative_path_check` を100%記録
-- 削除・編集・クリーンアップ操作で required監査項目欠落0件
-- 相対パス違反0件、ハッシュ対象欠落0件
+- 相対パス違反: 0件
+- ハッシュ対象欠落: 0件
+- 実行ログへの `image_digest` / `git_commit` 記録欠落: 0件
+- Phase 5/6 監査必須項目欠落: 0件
 
-## 3. ターゲットアーキテクチャ
+## 4. 先行設計成果物（実装着手条件）
 
-依存規律は「**内側は外側へ依存しない**」を絶対条件とし、依存方向は `UI -> Application/UseCase -> Domain` に固定する。Infrastructure は外側に配置し、UseCase/Domain は Port（`abc.ABC` / `typing.Protocol`）越しにのみ利用する（依存逆転）。
+以下が揃うまで、実装着手を禁止する。
 
-- UI層:
-  - 入力受付、表示更新、2段階確認ダイアログ表示のみ。
-  - UseCase呼び出しは Facade/Controller（Application層）経由。
-- UseCase/Application層:
-  - 判定、ユースケース制御、トランザクション境界、エラー整形。
-  - Port Interface（`abc.ABC` または `typing.Protocol`）以外で Infrastructure 実装を参照しない。
-- Domain層:
-  - 判定規則（未使用判定、ガード判定、メタデータ不変条件）を純粋ロジックで保持。
-  - Infrastructure / UI / フレームワークへ依存しない。
-- Infrastructure層:
-  - Docker・ファイルI/O・監査ログ永続化のAdapter実装。
-  - 内側層（UseCase/Domain）が定義したPortを実装する。
+1. `artifacts/architecture_decoupling_assessment.md`
+- 違反一覧（`file + class/function + 違反種別 + 根拠`）
+- 実測件数（`UI->Domain`, 逆依存, 循環依存）
 
-### 3.1 UI命名規約（監査対象）
+2. `artifacts/refactoring_proposal.md`
+- `_run_container` / `_show_create_env_dialog` の責務移管先
+- Port定義（`abc.ABC` or `typing.Protocol`）
+- P0/P1/P2 優先度と段階移行順
+- 変更影響テスト（UI変更時/Domain変更時）
 
-- シグナル名は過去分詞形（例: `capabilityLoaded`）に固定する。
-- スロット名は動詞開始（例: `update_capability_view`）に固定する。
-- 命名違反はレビューゲートでFailとする（例外なし）。
+3. トレーサビリティ表
+- 要件（core/requirements/reference）と実装タスク・テスト・監査項目を1対1対応で記録
 
-## 4. 重点是正対象（Post Mortem直結）
+## 5. 実行フェーズ
 
-### 4.1 `MainWindow._run_container` の責務移管
+### Phase A: Architecture Lock（最優先）
 
-- 移管先: `RunContainerUseCase`（新設または既存強化）
-- UIに残す処理:
-  - ユーザー操作イベント受信
-  - 実行可否の表示反映
-  - 結果通知表示
-- UseCaseへ移す処理:
-  - required imports抽出結果との照合
-  - capability mismatch判定
-  - 実行ガード発火判断
-  - 監査記録指示
-- 実装完了判定（必須）:
-  - `MainWindow._run_container` が UseCase呼び出し + UI表示更新以外を保持しないこと
-  - 同メソッドから Domain/Infrastructure 実装型への直接importが0件であること
-  - 監査証跡として「移管前後の責務差分表」を成果物に残すこと
+目的: 監査差し戻し原因を設計で先に除去。
 
-### 4.2 `MainWindow._show_create_env_dialog` の境界統制
-
-- 移管先: `CreateEnvironmentFlowUseCase`
-- UIはダイアログ表示と入力値受け渡しのみ。
-- 環境候補生成、knowledge参照、作成後の再評価トリガはUseCase側で実施。
-- 環境作成完了後の再起動不要反映（Dynamic Refresh）をUseCase完了条件に含める。
-- 実装完了判定（必須）:
-  - `MainWindow._show_create_env_dialog` が Port/UseCase非経由で環境生成ロジックへ到達しないこと
-  - 「不足import→候補生成→作成→再評価」の制御フローが1つのUseCase境界で完結すること
-  - UI層は候補計算ロジックを持たないこと（0件）
-
-## 5. フェーズ別実行計画
-
-### Phase A: 設計固定（着手前ゲート）
-
-1. 依存方向図・責務表・Port一覧を `artifacts/refactoring_proposal.md` に確定。
-2. Port定義を `abc.ABC` / `typing.Protocol` のどちらで実装するかを境界ごとに固定。
-3. 違反一覧（file/class/function/違反種別/根拠）を `artifacts/architecture_decoupling_assessment.md` に確定。
-4. 変更影響テスト仕様（UI変更時/Domain変更時）を定義。
-5. KPIと `docs/reference_standards.md` 条項の対応マトリクス（トレーサビリティ）を作成。
+タスク:
+1. `MainWindow` 責務をイベント中継/表示更新のみに限定
+2. 実行導線を `RunContainerUseCase` へ集約
+3. 環境作成導線を `CreateEnvironmentFlowUseCase` へ集約
+4. UIからDomain/Infrastructure実装型への直接importを除去
+5. Port境界を定義し、UIからの呼び出し先をFacade/UseCaseに固定
 
 完了条件:
-- AC6.1-1〜AC6.1-7 を文書上で満たす。
-- Port境界に抽象インターフェース方針（ABC/Protocol）が明記されている。
-- 標準条項トレーサビリティマトリクスが監査可能な形で存在する。
-- 実装者レビュー前に Architect 承認済み状態にする。
+1. `_run_container` が「UseCase呼び出し + UI反映」のみ
+2. `_show_create_env_dialog` が「ダイアログI/O + UseCase呼び出し」のみ
+3. 構造KPIが全項目0件
 
-### Phase B: 境界リファクタ（最優先）
+### Phase B: Phase 5 Guardrails 実装
 
-1. `MainWindow` から業務判断分岐を除去。
-2. UseCase/Facade 経由呼び出しへ置換。
-3. Port未経由呼び出しを全面排除。
-4. importグラフを再測定し、禁止依存ゼロ化を確認。
-5. `MainWindow` 対象のメソッド責務監査（`_run_container`, `_show_create_env_dialog`）を専用チェックリストで実施。
+目的: ミスマッチ実行をHard Guardで防止。
 
-完了条件:
-- 構造KPIを全達成。
-- 監査での差し戻し理由（UI責務混在/Port未経由）が再発しない。
-- 上記2メソッドの再発防止チェックリストが監査証跡として保存される。
-
-### Phase C: Phase 5要件の実装完了
-
-1. capability mapping（推定/実証の明示）
-2. mismatch時のHard Guard（Run無効化）
-3. 適合環境なし時の強制作成導線
-4. 監査ログへの必須項目記録（ALCOA++項目を含む）
-5. コンテナ実行時の `image_digest` と `git rev-parse HEAD` 取得値を監査ログへ保存
-6. 入力/出力/パラメータ/実行ログ本体のSHA-256算出と保存
+タスク:
+1. capability mapping（推定/実証）表示
+2. required imports差分検知
+3. mismatch時のRun無効化
+4. 適合環境なし時の作成導線
+5. 作成後Dynamic Refresh
+6. 監査ログへ required imports / capability / mismatch / guard状態を記録
 
 完了条件:
-- AC-1〜AC-5, T5-1〜T5-4 を満たす。
-- ALCOA++必須フィールド欠落時にfail-fastする。
+1. AC-1〜AC-5 達成
+2. T5-1〜T5-4 Pass
 
-### Phase D: Phase 6要件の実装完了
+### Phase C: Phase 6 Lifecycle 実装
 
-1. Environment Manager導入
-2. 一括削除2段階確認
+目的: 安全な整理運用を専用UIで実現。
+
+タスク:
+1. Environment Manager ダイアログ実装
+2. 2段階確認による一括削除
 3. 未使用判定（最終利用日時+利用回数+保護フラグ）
 4. dangling/unused imageクリーンアップ
-5. メタデータ編集（内部ID不変）
+5. 表示名/説明/タグ/分類/保護フラグ編集（内部ID不変）
 6. 部分失敗継続と結果分離表示
-7. 監査ログ完全化
-8. Docker再現性実装（以下4要件）
-   - `FROM` をSHA256ダイジェスト固定
-   - EOL OSのAPTをアーカイブリポジトリへ切替
-   - `constraints.txt` によるpip依存解決制約
-   - OpenCV等ビルド対象でマルチステージビルドを適用
+7. 監査ログ完全化（種別/時刻/対象/成否/容量/理由）
 
 完了条件:
-- AC6-1〜AC6-7, T6-1〜T6-6 を満たす。
-- Docker再現性4要件の監査チェックに全合格する。
-- 監査ログスキーマの必須フィールド欠落0件。
+1. AC6-1〜AC6-7 達成
+2. T6-1〜T6-6 Pass
 
-### Phase E: Phase 6.2/6.3 型ゲート導入
+### Phase D: Type Safety（6.2）+ Static Gate（6.3）
 
-1. DTOをA→B→C順でPydantic v2化（strict + fail-fast）
-2. dict互換アダプタで段階移行
-3. mypyゲート導入（Port/UseCase公開API型を必須化）
-4. `type: ignore` 理由必須化・`Any`増加監視
+目的: 実行時/静的型の二重ゲート化。
+
+タスク:
+1. DTOを A→B→C 順でPydantic v2化
+2. strict + fail-fast を強制
+3. dict互換アダプタを境界に配置
+4. mypyをCIゲート化
+5. Any/ignore管理（理由必須、増加監視）
 
 完了条件:
-- AC6.2-1〜AC6.2-5, T6.2-1〜T6.2-5
-- AC6.3-1〜AC6.3-4, T6.3-1〜T6.3-4
+1. AC6.2-1〜AC6.2-5, T6.2-1〜T6.2-5 Pass
+2. AC6.3-1〜AC6.3-4, T6.3-1〜T6.3-4 Pass
 
-## 6. 品質ゲート運用（ループ防止）
+### Phase E: Contract & Regression Hardening（6.4）
 
-ゲートを次の2系統に分離し、両方合格まで次工程へ進めない。
+目的: 将来変更での逆流を防止。
 
-1. 機能ゲート:
+タスク:
+1. Port contract test
+2. DTO/Audit schema contract test
+3. Golden regression（Run/Build/Lifecycle/Audit）
+
+完了条件:
+1. AC6.4-1〜AC6.4-4 達成
+2. T6.4-1〜T6.4-4 Pass
+
+## 6. ゲート運用（進行制御）
+
+### 6.1 機能ゲート
+
 - `pytest tests/` 全件Pass
-- 受け入れ基準（AC）達成
+- フェーズAC達成
 
-2. 構造ゲート:
-- importグラフ検証（禁止依存/循環依存0件）
-- UI責務監査（業務ロジック0件）
-- Port経由率100%
-- 内側層（UseCase/Domain）から外側層（UI/Infrastructure）への直接依存0件
-- Portが `abc.ABC` / `typing.Protocol` で定義済み
-- シグナル/スロット命名規約違反0件
-- 既知再発ポイント監査（`MainWindow._run_container`, `_show_create_env_dialog`）で違反0件
+### 6.2 構造ゲート
 
-差し戻し規約:
-- 構造ゲート失敗時は `REJECT_TO_ARCHITECT`（設計是正）
-- 機能ゲート失敗時は `REJECT_TO_IMPLEMENT`（実装是正）
-- 同一構造違反が2回連続した場合は自動的に `REJECT_TO_ARCHITECT` へ昇格し、実装タスクを停止する。
+- 禁止依存0件
+- 循環依存0件
+- UI責務混在0件
+- Port未経由0件
+- `_run_container` / `_show_create_env_dialog` 再発監査0件
 
-## 6.1 監査プロセス運用（Builder/Validator分離）
+### 6.3 進行ルール
 
-1. Builder（実装側）とValidator（監査側）は思考過程を共有しない。
-2. Validator入力は「要件文書 + 差分（Diff）+ 実測証跡」に限定する。
-3. 監査差し戻しは処方的記述（失敗箇所/違反基準/修正指示）を必須化する。
-4. 監査判定はEMCS観点（構造違反、複雑度、依存違反、影響度）で記録する。
+1. どちらか1つでもFailしたら次フェーズ進行禁止
+2. 構造ゲートFailは実装継続禁止、Architect是正タスクを先行
+3. 成果物未更新（assessment/proposal/traceability）はFail扱い
 
-## 6.2 標準条項トレーサビリティ（監査用）
+## 7. 監査証跡テンプレート（必須）
 
-- 標準1章（監査ガバナンス）: 6章・6.1章で運用規定化
-- 標準2章（Docker再現性）: Phase Dタスク8と完了条件へ反映
-- 標準3章（データ完全性/ALCOA++）: 2.3、Phase C、Phase D、8章対策へ反映
-- 標準4章（UIアーキテクチャ）: 3章、3.1章、Phase A/B、構造ゲートへ反映
+各フェーズ完了時に以下を保存。
 
-## 7. 実装順序（クリティカルパス）
+1. 実測メトリクス
+- 禁止依存件数
+- 循環依存件数
+- UI責務違反件数
 
-1. Phase A（設計固定）
-2. Phase B（境界リファクタ）
-3. Phase C（Validation Guardrails）
-4. Phase D（Lifecycle Management）
-5. Phase E（Type Safety + Static Gate）
+2. テスト証跡
+- `pytest tests/` 結果
+- mypy結果（Phase D以降）
 
-理由:
-- 先に境界を固定しない限り、後続機能は再び `MainWindow` へ逆流して監査ループを再発させるため。
+3. 監査ログ完全性
+- 相対パス検証結果
+- 入出力/パラメータ/ログ本体ハッシュ
+- `image_digest`, `git_commit`
 
-## 8. リスクと対策
+4. 差し戻し判定記録
+- 原因層（設計/実装）
+- 判定区分（TO_ARCHITECT / TO_IMPLEMENT）
+- 処方的修正指示
 
-- リスク1: UI改修時に業務ロジックが再混入
-  - 対策: UI層 lint/レビュー項目に「判断分岐の禁止」を明示
-- リスク2: DTO導入時の既存経路破壊
-  - 対策: 互換アダプタを先行し、段階切替フラグで移行
-- リスク3: 監査ログ項目の欠落
-  - 対策: 監査DTOの必須フィールド化 + 欠落時fail-fast
-- リスク4: Dockerビルドの再現性ドリフト
-  - 対策: ダイジェスト固定 + constraints固定 + APTアーカイブ固定 + マルチステージ強制
-- リスク5: 監査運用が形骸化し差し戻し理由が曖昧化
-  - 対策: Builder/Validator分離と処方的差し戻しテンプレートを必須化
-- リスク6: 「監査PASS」を理由に既知欠陥対応の優先度が低下
-  - 対策: 過去差し戻し箇所を恒久監査項目として固定し、PASS時も継続監視する
+## 8. 主要リスクと対策
 
-## 9. 完了定義（DoD）
+1. リスク: UIへ業務ロジック再混入
+- 対策: `MainWindow` 対象レビュー項目を固定し、違反時は構造Fail
 
-以下をすべて満たしたとき完了とする。
+2. リスク: 要件達成を急ぐあまりPort bypass発生
+- 対策: Port経由率100%をゲート化し、例外禁止
 
-1. 全AC/全必須テスト項目がPass。
-2. 構造KPI・品質KPI・監査KPIが全達成。
-3. 監査で REJECT 理由が再発していない。
-4. 証跡（評価レポート、リファクタ計画、テスト結果、importグラフ結果）が更新済み。
+3. リスク: `pytest` Passをもって進行してしまう
+- 対策: 構造ゲート未達なら進行停止を工程ルール化
+
+4. リスク: 監査ログ欠落
+- 対策: DTO strict + fail-fastで欠落を実行時に停止
+
+## 9. Definition of Done
+
+以下を全て満たしたときのみ完了。
+
+1. 全フェーズのAC/必須テスト合格
+2. 構造KPI・品質KPI・監査KPI 全達成
+3. 既知再発点（`_run_container`, `_show_create_env_dialog`）の違反0件維持
+4. 設計成果物・監査証跡・トレーサビリティが最新化されている
