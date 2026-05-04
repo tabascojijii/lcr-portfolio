@@ -1,54 +1,56 @@
-# Audit Report
+# Audit Report: docs/plan.md
 
-- Audit date: 2026-05-04
-- Auditor scope: `pytest tests/`, `docs/reference_standards.md` 基準照合、`src/` `tests/` `artifacts/` 品質確認、Phase 6.1 受け入れ基準確認
+## 判定
+- 総合判定: **REJECT_TO_ARCHITECT**
+- 理由: `docs/reference_standards.md` を絶対基準として照合した結果、監査・ガバナンス標準（第1章）に対する必須要件の未充足があるため。
 
-## 1. Pytest result
+## 指摘事項（客観根拠付き）
 
-- Command: `pytest tests/`
-- Result: **PASS**
-- Evidence summary:
-  - `collected 64 items`
-  - `64 passed in 1.59s`
+### 1) EMCSモデル準拠の客観メトリクス定義が不足（重大）
+- 基準要求:
+  - 「監査役は主観ではなく、信頼性と影響度に基づいた**客観メトリクス**でNG判定」
+- 計画の現状:
+  - `docs/plan.md` には禁止依存件数やゲート0件条件はあるが、EMCSとしての評価軸（信頼性・影響度）と判定基準の対応表が未定義。
+- 不適合内容:
+  - 監査判定の再現可能性を担保する評価モデルが不足し、監査者依存の判定余地が残る。
+- 修正指示:
+  - `EMCS評価表` を計画に追加し、最低でも以下を明記すること。
+    - メトリクス名（例: SRP違反件数、循環依存件数、UI責務違反件数、監査証跡欠落件数）
+    - 信頼性/影響度スコア定義
+    - スコアしきい値と `PASS/REJECT` ルール
+    - 測定方法（静的解析・テスト・ログ検査）
 
-## 2. Reference standards conformance check (`docs/reference_standards.md`)
+### 2) Builder/Validator分離要件の明文化不足（重大）
+- 基準要求:
+  - 「実装役と思考プロセスを共有せず、**要件とDiffのみ**から敵対的レビューを行うこと」
+- 計画の現状:
+  - 差し戻し先のルーティング（Architect/Implement）はあるが、監査入力境界（参照可能情報）に関する規定がない。
+- 不適合内容:
+  - 監査が実装時の意図や思考ログに汚染されるリスクが残り、独立検証性を満たさない。
+- 修正指示:
+  - 監査プロトコルに以下を必須追加すること。
+    - Auditorが参照可能な入力を `requirements + reference_standards + diff + test/audit evidence` に限定
+    - 実装者メモ・思考過程・口頭説明の参照禁止
+    - 監査記録に「入力境界遵守チェック」を追加
 
-### 2.1 Dependency direction / UI separation
-- Check: `src/lcr/ui` から `lcr.core.domain` への直参照を検索
-- Command: `rg -n "from lcr\.core\.domain|import lcr\.core\.domain" src/lcr/ui`
-- Result: ヒットなし（違反なし）
+### 3) 処方的エラーハンドリング要件の必須項目が未充足（中重大）
+- 基準要求:
+  - REJECT時に「失敗箇所」「違反制約」「具体的修正指示（ヒント）」を含むこと
+- 計画の現状:
+  - `P0-3` に「原因層・差し戻し先・修正完了条件」はあるが、上記3要素の必須化が明記されていない。
+- 不適合内容:
+  - 差し戻し品質のばらつきが生じ、監査ループ再発防止の要件を満たしきれない。
+- 修正指示:
+  - REJECTテンプレート必須項目を次で固定すること。
+    - `failure_location`（file/class/function/line）
+    - `violated_constraint`（基準章・条項ID）
+    - `prescriptive_fix`（実施手順または最小修正案）
+    - 既存の `cause_layer` `reject_target` `done_condition`
 
-### 2.2 Core layer Qt dependency contamination
-- Check: `src/lcr/core` における Qt 文字列出現の確認
-- Command: `rg -n "PyQt|PySide|Qt" src/lcr/core`
-- Result: 検出はコンテナ定義/マッピング等のデータ記述のみで、UseCase/Domain の Qt 依存違反は確認されず
+## 適合している点（参考）
+- Docker再現性（ダイジェスト固定、EOLアーカイブ、constraints、マルチステージ）に整合。
+- 監査証跡（相対パス、ハッシュ4区分、`container_image_digest`、`git_commit_hash`）に整合。
+- UI境界・依存方向・Humble Objectの方向性は基準と整合。
 
-### 2.3 Path portability red flags
-- Check: `src/ tests/ artifacts/` の絶対パス痕跡
-- Command: `rg -n "(C:\\|/Users/|/home/|[A-Za-z]:\\\\)" src tests artifacts`
-- Result: `src/utils/config.py` の docstring 例示 (`/home/user/...`) のみ。運用ログや成果物の絶対パス固定の実装違反は未検出
-
-## 3. Phase 6.1 deliverables and acceptance criteria
-
-### 3.1 Required artifacts existence
-- `artifacts/architecture_decoupling_assessment.md`: 存在確認済み
-- `artifacts/refactoring_proposal.md`: 存在確認済み
-
-### 3.2 Acceptance criteria fit (`docs/requirements.md` Phase 6.1)
-- AC6.1-1: 違反列挙フォーマット（`file path + class/function + violation type + evidence`）記載あり（現状 0件）
-- AC6.1-2: 改善方針・移管先・Port設計の記載あり
-- AC6.1-3: P0/P1/P2 優先度と実施順序の記載あり
-- AC6.1-4: テスト戦略・検証方法の記載あり
-- AC6.1-5: importグラフ結果（UI->Domain直参照 / 逆方向依存 / 循環依存）一覧と件数あり
-- AC6.1-6: 変更影響テスト手順（シナリオ、期待範囲、合否条件）あり
-- AC6.1-7: 数値固定閾値（禁止依存0、循環0、UI業務ロジック0、境界テスト100%）定義あり
-
-## 4. Findings / violations
-
-- **重大指摘なし（0件）**
-- `pytest` 失敗ログ: なし
-- `docs/reference_standards.md` に対する検出違反: なし
-
-## 5. Final judgment
-
-- 判定: **AUDIT_PASS_IMPLEMENT**
+## 再監査の受け入れ条件
+- 上記3指摘を計画本文へ明示反映し、監査実行時に再現可能な判定仕様（誰が見ても同一結論）を提示すること。
