@@ -1,208 +1,199 @@
-# LCR Roadmap（Reference Standards Absolute Baseline）
+# Roadmap（Reference Standards Absolute Baseline）
 
-- 作成日: 2026-05-04
-- 参照: `docs/plan.md`, `docs/reference_standards.md`
-- 基本方針: `docs/reference_standards.md` を絶対基準とし、本ロードマップ内の全タスク・全ゲートは当該基準に従属する。
+- 作成日: 2026-05-05
+- 対象期間: 2026-05-05 〜 2026-05-31
+- 上位基準: `docs/reference_standards.md`（絶対基準）
+- 参照計画: `docs/plan.md`
+- 目的: Phase 5/6/6.1/6.2/6.3/6.4 を、監査・再現性・アーキテクチャ規約に100%整合させて完了させる。
 
-## 0. Absolute Compliance Charter
+## 0. 運用原則（全フェーズ共通）
 
-以下のいずれかに違反した時点で、当該フェーズは即時 `REJECT` とし、次フェーズ進行を禁止する。
+1. 判定基準は常に `docs/reference_standards.md` を最優先する。
+2. 機能完了（pytest Pass）と構造完了（依存/責務準拠）を分離判定する。
+3. 構造違反は `REJECT_TO_ARCHITECT`、実装不足は `REJECT_TO_IMPLEMENT` とする。
+4. Builder/Validator 分離を強制し、差分・証跡・要件のみで監査する。
+5. すべての差し戻しは以下5要素を必須とする。
+- `failure_location`
+- `violated_standard`
+- `evidence`
+- `required_fix`
+- `retest_condition`
 
-1. Docker再現性4要件（digest固定 / EOL archive切替 / constraints適用 / マルチステージ）
-2. Data Integrity要件（相対パス / 入出力+パラメータ+ログ本体ハッシュ / `image_digest` + `git_commit` 記録）
-3. PyQt/PySide設計要件（Humble Object / 依存方向固定 / インターフェース経由 / 命名規約）
-4. 監査ガバナンス要件（Builder/Validator分離 / EMCS客観評価 / 処方的REJECT）
+## 1. マイルストーン
 
-## 1. Roadmap Objectives
+### M0: Structural Freeze and Governance Fix（2026-05-05 〜 2026-05-08）
 
-1. 設計不備を実装で吸収しない工程へ移行する。
-2. UI汚染・境界越え・監査欠落の再発を構造的に不可能化する。
-3. EOLスタックを監査可能かつ再現可能な形で固定する。
+目的: 失敗ループの構造原因を先に除去する。
 
-## 2. Fixed KPIs（Exit Criteria）
-
-### 2.1 Structure KPIs
-
-- `UI -> Domain` 直接依存: 0件
-- Port未経由の境界越え: 0件
-- 逆方向依存（内側 -> 外側）: 0件
-- 循環依存: 0件
-- `MainWindow` の業務ロジック保持: 0件
-- Qtシグナル命名規約違反（過去分詞形以外）: 0件
-- Qtスロット命名規約違反（動詞開始以外）: 0件
-- `CC > 10`: 0件
-- `LOC > 80`: 0件
-
-### 2.2 Quality KPIs
-
-- `pytest tests/` 全件Pass
-- DTO strict/fail-fast違反: 0件
-- `mypy` エラー: 0件
-- 理由なき `type: ignore`: 0件
-
-### 2.3 Audit KPIs
-
-- 相対パス違反: 0件
-- ハッシュ対象欠落（入力/出力/パラメータ/ログ本体）: 0件
-- `image_digest` 記録欠落: 0件
-- `git_commit` 記録欠落: 0件
-- ハッシュ再計算不一致: 0件
-
-### 2.4 Docker/EOL KPIs
-
-- `FROM` タグ使用: 0件（`@sha256:` 必須）
-- EOL APT未切替: 0件
-- `constraints.txt` 未適用ビルド: 0件
-- C/C++単一ステージビルド: 0件
-
-## 3. Phase Plan
-
-### Phase A: Architecture Lock
-
-目的: UI責務分離と依存方向の固定。
-
-実施:
-1. `MainWindow` を Humble Object 化（イベント中継/表示更新のみ）
-2. 実行導線を `RunContainerUseCase` に集約
-3. 環境作成導線を `CreateEnvironmentFlowUseCase` に集約
-4. UIから実装型直参照を除去し、Port経由へ統一
-5. シグナル/スロット命名規約を全体是正
-
-完了条件:
-1. Structure KPIs 全達成
-2. `_run_container` / `_show_create_env_dialog` から業務判断除去
-
-### Phase B: Reproducible Build Lock
-
-目的: EOLビルド再現性を監査前提で固定。
-
-実施:
-1. 全 `Dockerfile` の `FROM` を digest固定
-2. EOL APTソースを `old-releases` / `archive.debian.org` へ統一
-3. `constraints.txt` を必須入力化（未適用はFail）
-4. C/C++依存（例: OpenCV）をマルチステージ化
-
-完了条件:
-1. Docker/EOL KPIs 全達成
-
-### Phase C: Phase 5 Guardrails
-
-目的: ミスマッチ実行を事前遮断。
-
-実施:
-1. capability mapping（推定/実証）可視化
-2. required imports差分検知
-3. mismatch時Run無効化
-4. 適合環境が無い場合の作成導線
-5. 作成後Dynamic Refresh
-6. 監査ログへ判定根拠を記録
-
-完了条件:
-1. AC-1〜AC-5
-2. T5-1〜T5-4 Pass
-
-### Phase D: Phase 6 Lifecycle
-
-目的: 安全で追跡可能な環境整理。
-
-実施:
-1. Environment Manager実装
-2. 2段階確認付き一括削除
-3. 未使用判定（最終利用/回数/保護フラグ）
-4. dangling/unused image cleanup
-5. メタ情報編集（内部ID不変）
-6. 部分失敗継続と結果分離表示
-7. 監査ログ完全記録（対象/時刻/成否/容量/理由）
-
-完了条件:
-1. AC6-1〜AC6-7
-2. T6-1〜T6-6 Pass
-
-### Phase E: Type Safety & Static Gate
-
-目的: 実行時・静的解析の二重ゲート化。
-
-実施:
-1. DTOを段階的にPydantic v2へ移行
-2. strict + fail-fast を強制
-3. 境界にdict互換アダプタ配置
-4. `mypy` をCI必須ゲート化
-5. `Any` / `type: ignore` の理由管理と増加監視
-
-完了条件:
-1. AC6.2-1〜AC6.2-5 / T6.2-1〜T6.2-5
-2. AC6.3-1〜AC6.3-4 / T6.3-1〜T6.3-4
-
-### Phase F: Contract & Regression Hardening
-
-目的: 将来変更時の品質逆流防止。
-
-実施:
-1. Port contract test
-2. DTO/Audit schema contract test
-3. Golden regression（Run/Build/Lifecycle/Audit）
-
-完了条件:
-1. AC6.4-1〜AC6.4-4
-2. T6.4-1〜T6.4-4 Pass
-
-## 4. Governance Gates
-
-### 4.1 Functional Gate
-
-- 該当フェーズのACを満たす
-- 必須テスト（`pytest`, `mypy`, contract, regression）が全Pass
-
-### 4.2 Structural Gate
-
-- Structure KPIs 全達成
-- UI責務混在再発 0件
-- Port bypass 0件
-
-### 4.3 Audit Integrity Gate
-
-- ハッシュ対象4区分を全生成
-- 保存先 `artifacts/audit/hashes/` 固定
-- 命名規約 `<run_id>_<target_kind>_<relative_path_normalized>.sha256`
-- 再計算一致を全件確認
-
-### 4.4 Governance Gate
-
-- Builder/Validator分離チェックが `Yes`
-- 監査入力が「要件仕様 + Diff + テスト結果」のみ
-- REJECT時に処方的指示が記録されている
-
-### 4.5 Stop Rules
-
-1. いずれかのゲートFailで次フェーズ進行禁止
-2. 構造ゲートFail時は実装停止し、Architect是正を先行
-3. Docker/EOL 4要件の1件Failで全実装停止
-4. 監査データ完全性未達で即Fail-fast
-
-## 5. Mandatory Artifacts
-
-各フェーズ完了時に以下を更新・保存する。
-
+成果物:
 1. `artifacts/architecture_decoupling_assessment.md`
 2. `artifacts/refactoring_proposal.md`
 3. `artifacts/traceability_matrix.md`
-4. `artifacts/audit/hashes/*.sha256`
-5. フェーズ別テスト証跡（pytest/mypy/contract/regression）
-6. Docker/EOL検証証跡（digest, APT, constraints, multi-stage）
 
-## 6. RACI（Execution Accountability）
+完了条件:
+1. `UI->Domain 直参照 = 0` にできる設計経路が確定。
+2. `MainWindow._run_container` / `_show_create_env_dialog` の責務移管先が確定。
+3. REJECT 判定テンプレート運用を監査フローへ組み込み済み。
 
-- PM: 本ロードマップ運用、ゲート進行判定、差し戻し経路管理
-- Architect: 境界設計、Port定義、構造違反是正案作成
-- Implementer: フェーズ単位実装、テスト実行、証跡生成
-- Auditor: absolute baseline準拠監査、EMCS評価、処方的REJECT発行
+### M1: Phase 5 Guardrails（2026-05-09 〜 2026-05-14）
 
-## 7. Definition of Done
+目的: ミスマッチ環境実行を防止する。
 
-以下をすべて満たした時のみ完了。
+実装範囲:
+1. capability mapping 表示
+2. required imports 差分検出
+3. mismatch 時の Run 無効化
+4. 適合環境なし時の作成導線
+5. 作成後 Dynamic Refresh
+6. 監査ログ記録（required imports / capability / mismatch / guard）
 
-1. Phase A〜F の完了条件達成
-2. Fixed KPIs（Structure/Quality/Audit/Docker-EOL）全達成
-3. Mandatory Artifacts 最新化
-4. 全フェーズでBuilder/Validator分離 `Yes`
-5. `docs/reference_standards.md` 逸脱 0件
+ゲート:
+1. AC-1〜AC-5 達成
+2. T5-1〜T5-4 Pass
+
+### M2: Phase 6 Lifecycle（2026-05-15 〜 2026-05-20）
+
+目的: 安全な環境整理を専用UIに隔離する。
+
+実装範囲:
+1. Environment Manager ダイアログ
+2. 2段階確認付き一括削除
+3. 未使用判定（最終利用日時・利用回数・保護フラグ）
+4. dangling/unused image cleanup
+5. メタデータ編集（内部ID不変）
+6. 部分失敗継続と結果分離表示
+7. 監査ログ完全化
+
+ゲート:
+1. AC6-1〜AC6-7 達成
+2. T6-1〜T6-6 Pass
+
+### M3: Phase 6.2 Type Safety（2026-05-21 〜 2026-05-24）
+
+目的: DTO 境界で strict / fail-fast を固定する。
+
+実装範囲:
+1. Pydantic v2 DTO を A→B→C 順で導入
+2. strict validation 強制
+3. fail-fast 強制
+4. dict 互換アダプタで段階移行
+
+ゲート:
+1. AC6.2-1〜AC6.2-5 達成
+2. T6.2-1〜T6.2-5 Pass
+
+### M4: Phase 6.3 Static Type Gate（2026-05-25 〜 2026-05-27）
+
+目的: 実行前に型不整合をCIで遮断する。
+
+実装範囲:
+1. `mypy` 設定導入（必要時 `pyright` 補助）
+2. Port / UseCase の型注釈完全化
+3. `Any` / `type: ignore` 管理
+
+ゲート:
+1. AC6.3-1〜AC6.3-4 達成
+2. T6.3-1〜T6.3-4 Pass
+3. mypy エラー 0
+
+### M5: Phase 6.4 Contract and Regression Hardening（2026-05-28 〜 2026-05-31）
+
+目的: 将来変更での逆流を防止する。
+
+実装範囲:
+1. Port contract test
+2. DTO / Audit schema contract test
+3. Golden regression（Run / Build / Lifecycle / Audit）
+
+ゲート:
+1. AC6.4-1〜AC6.4-4 達成
+2. T6.4-1〜T6.4-4 Pass
+
+## 2. Reference Standards トレーサビリティ
+
+### 2.1 監査・ガバナンス標準（第1章）
+
+必須適用:
+1. EMCSベースの客観評価
+2. Builder/Validator 分離
+3. 処方的 REJECT
+
+KPI:
+1. 判定根拠なし REJECT = 0
+2. 差し戻しテンプレート欠落 = 0
+
+### 2.2 EOLコンテナ再現性標準（第2章）
+
+必須適用:
+1. `FROM` digest 固定
+2. EOLアーカイブミラー切替
+3. `constraints.txt` 適用
+4. マルチステージビルド
+
+KPI:
+1. 再現性要件未達 = 0
+
+### 2.3 データ完全性・監査証跡（第3章）
+
+必須適用:
+1. `image_digest` / `git_commit` 実行ログ記録
+2. 相対パス強制（絶対パス fail-fast）
+3. 入出力/パラメータ/ログ本体のハッシュ記録
+
+KPI:
+1. 相対パス違反 = 0
+2. ハッシュ欠落 = 0
+3. 実行証跡欠落 = 0
+
+### 2.4 PyQt/PySide アーキテクチャ標準（第4章）
+
+必須適用:
+1. Humble Object 厳守
+2. 依存方向 `UI -> UseCase -> Domain -> Infrastructure`
+3. Port/Interface 経由の通信
+4. シグナル/スロット命名規約準拠
+
+KPI:
+1. UI業務ロジック残存 = 0
+2. Port未経由 = 0
+3. 命名規約違反 = 0
+
+## 3. フェーズ横断ゲート
+
+### 3.1 機能ゲート
+
+1. `pytest tests/` 全件Pass
+2. 当該Phaseの AC 全達成
+
+### 3.2 構造ゲート
+
+1. `UI->Domain 直参照 = 0`
+2. 逆方向依存 = 0
+3. 循環依存 = 0
+4. Port未経由 = 0
+5. UI層業務ロジック = 0
+6. 監査必須成果物欠落 = 0
+
+### 3.3 進行ルール
+
+1. いずれか1つでもFailなら次フェーズへ進まない。
+2. 構造ゲートFail時は実装停止し、Architect再設計を先行する。
+3. 機能ゲートのみPassは未完了扱いとする。
+
+## 4. リスク管理
+
+1. リスク: 局所修正の再発
+- 対応: 同一構造違反の2連続発生で強制停止し、Architectへ自動移送。
+
+2. リスク: 監査の主観化
+- 対応: `violated_standard` と `evidence` の記載がない判定を無効化。
+
+3. リスク: 再現性欠落
+- 対応: image digest / git commit / hash / 相対パスを CI チェック対象へ固定。
+
+## 5. Definition of Done
+
+1. Phase 5/6/6.1/6.2/6.3/6.4 の AC・テストを全て達成。
+2. 機能ゲート・構造ゲートの両方を連続でPass。
+3. `docs/reference_standards.md` 第1〜4章の必須項目に未充足がない。
+4. `artifacts` 証跡（assessment/proposal/traceability/test evidence）が最新化されている。
