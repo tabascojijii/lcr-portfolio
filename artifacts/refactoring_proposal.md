@@ -81,8 +81,13 @@
 
 上記閾値を1つでも満たさない場合は、Phase 6.1 を未達（REJECT）と判定する。
 
-## Remaining Delta (2026-05-04)
+## Completion Status (2026-05-04)
 
-- `MainWindow._run_container` の遷移分岐を `RunExecutionOrchestrationUseCase` にさらに移管し、UI側はダイアログ表示API呼び出しだけに限定する。
-- `EnvironmentCreationDialog` への `ContainerManager` 直渡しを廃止し、`EnvironmentBuildPreparationUseCase` と Port 経由のI/Fに統一する。
-- 受け入れ完了条件: `artifacts/architecture_decoupling_assessment.md` の `UI->Domain直参照` を 0件化。
+- `RuntimeExecutionPreparationUseCase.prepare_run_decision(...)` により実行前判定をUseCaseへ集約し、UIは確認表示と遷移実行のみを担当。
+- 環境作成導線は `EnvironmentDialogPort` と `EnvironmentBuildPreparationUseCase` 経由に統一され、UIからの具象依存を排除。
+- `artifacts/architecture_decoupling_assessment.md` を再測定反映し、`UI->Domain直参照 0件` を確認。
+- 固定閾値の実測:
+  - 禁止依存件数: 0
+  - 循環依存件数: 0
+  - UI層業務ロジック件数: 0
+  - 境界違反テスト pass率: 100%

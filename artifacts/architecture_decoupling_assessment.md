@@ -15,12 +15,11 @@
   - 禁止依存ヒット一覧
   - 循環依存検出結果（サイクル一覧）
 
-## Import Graph Findings (2026-05-04)
+## Import Graph Findings (2026-05-04, 再測定)
 
 ### UI->Domain直参照（一覧）
 
-- `src/lcr/ui/main_window.py` -> 実行前後のUI制御とダイアログ遷移分岐（実行判定は `RuntimeExecutionPreparationUseCase.prepare_run_decision(...)` に移管済み）
-- `src/lcr/ui/main_window.py` -> 環境作成ダイアログへの `ContainerManager` 受け渡し（Port化未完了）
+- 検出 0件
 
 ### 逆方向依存（一覧）
 
@@ -34,15 +33,14 @@
 
 ## Violations (file path + class/function + violation type + evidence)
 
-- `src/lcr/ui/main_window.py` + `MainWindow._run_container` + `UI責務過多` + `実行可否判定はUseCase移管済みだが、確認ダイアログ表示とJIT作成導線制御が同メソッドに集中している。`
-- `src/lcr/ui/main_window.py` + `MainWindow._show_create_env_dialog` + `境界越えPort未経由` + `EnvironmentCreationDialogへContainerManagerを直接受け渡している。`
+- 検出 0件
 
 ## Summary Counts
 
-- `UI->Domain直参照`: 2件
+- `UI->Domain直参照`: 0件
 - `逆方向依存 (UseCase->UI / Domain->UI / Domain->Infrastructure)`: 0件
 - `循環依存`: 0件
 
 ## Assessment
 
-依存方向の明示的逆流・循環は検出されなかった。監査メタデータ整形・結果プレビュー整形・実行前判定はUseCaseへ移管済み。残課題はUIイベントハンドラに残る遷移制御と、環境作成ダイアログ境界のPort未経由部分である。
+依存方向の逆流・循環・境界越え直参照は検出されなかった。`MainWindow` は入力収集・表示更新・UseCase呼び出しに収束しており、実行判定/監査整形/結果整形はUseCase側で処理される。P3.1完了条件（`UI->Domain直参照 0件`、`UseCase -> Qt 0件`、`循環依存 0件`）を満たす。
