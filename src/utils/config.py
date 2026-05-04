@@ -13,10 +13,26 @@ class LCRConfig:
     
     # Default Docker images for common legacy environments
     DEFAULT_IMAGES = [
-        {"name": "Python 2.7", "image": "python:2.7", "description": "Legacy Python 2.7 environment"},
-        {"name": "Python 3.6", "image": "python:3.6", "description": "Python 3.6 (EOL 2021)"},
-        {"name": "Python 3.8", "image": "python:3.8", "description": "Python 3.8"},
-        {"name": "Ubuntu 16.04", "image": "ubuntu:16.04", "description": "Ubuntu 16.04 LTS (Xenial)"},
+        {
+            "name": "Python 2.7",
+            "image": "python:2.7-slim@sha256:b68d40df862ac07e8955ea0fc0c5454cb4245b6165e79bc8ea2cc69170d9ba62",
+            "description": "Legacy Python 2.7 environment",
+        },
+        {
+            "name": "Python 3.6",
+            "image": "python:3.6-slim-stretch@sha256:15c2b35ce4a026d8d52bd4b8ff13904030c2f4c2809b4368f180390b1a18c284",
+            "description": "Python 3.6 (EOL 2021)",
+        },
+        {
+            "name": "Python 3.8+",
+            "image": "python:3.10-slim@sha256:99c98652c1bc252d9d57337045bba0032c2f2e48c0ccff4ae69c74268fc5f04b",
+            "description": "Digest-pinned Python runtime for modern fallback",
+        },
+        {
+            "name": "Debian Stretch",
+            "image": "debian:stretch-slim@sha256:c5cd3ffceeb25b683bf5111ea89bf8049a177e00fb237235d48076a19cc80097",
+            "description": "Digest-pinned Debian base for legacy Linux workloads",
+        },
     ]
     
     def __init__(self, config_path="lcr_config.json"):
