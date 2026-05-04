@@ -1,134 +1,190 @@
 # Roadmap (PM)
 
-## 0. 目的と前提
-- 本ロードマップは `docs/reference_standards.md` を絶対基準として策定する。
-- `docs/plan.md` の実行順序と達成条件を維持しつつ、監査可能性・再現可能性・疎結合性を同時達成する。
-- いかなる実装判断も、基準逸脱時は機能優先より是正を優先する。
+本ロードマップは `docs/reference_standards.md` を絶対基準として策定し、`docs/plan.md` の実行計画を基準準拠で時系列に再編したものである。基準違反は進行停止（REJECT）とする。
 
-## 1. 絶対遵守基準（reference_standards 固定）
+## 0. Roadmap原則
 
-### 1.1 ガバナンス / 監査
-- 監査は EMCS による客観メトリクスで判定する。
-- Builder/Validator を入力境界で分離し、要件と差分のみで審査する。
-- REJECT は処方的に返す（失敗箇所、違反制約、証拠、修正ヒント、再検証条件、ルーティング先）。
+- 絶対基準: `docs/reference_standards.md`。
+- 実行順序は「構造是正を先、機能追加を後」とし、監査可能性を常時維持する。
+- 各フェーズ完了条件は Functional / Structural / Audit / Governance の4ゲート通過を前提とする。
+- `docs/audit_report.md` がPASSであっても、未実装の構造統制は省略しない。
 
-### 1.2 Docker 再現性
-- `FROM` は SHA256 ダイジェスト固定（タグ禁止）。
-- EOL OS は APT をアーカイブリポジトリへリダイレクトする。
-- pip 解決は `constraints.txt` で探索範囲を固定する。
-- ネイティブビルドはマルチステージビルドを強制する。
+## 1. 基準トレーサビリティ（Reference Standards準拠マップ）
 
-### 1.3 Data Integrity
-- 監査ログへ `container_image_digest` と `git_commit_hash` を必須記録する。
-- パスはプロジェクトルート相対のみ許可し、絶対パスは Fail とする。
-- `all_input_files` / `all_output_files` / `all_parameter_files` / `audit_log_record` を全件ハッシュ対象にする。
+### 1.1 監査・ガバナンス標準（第1章）
 
-### 1.4 UI / 依存方向
-- 依存方向は `UI -> UseCase -> Domain` のみ許可する。
-- `UseCase -> Qt`、`Domain -> Qt`、`Domain -> Infrastructure`、`UI -> Domain` 直参照、`UseCase -> Infrastructure` 具象依存を禁止する。
-- 境界越えは `abc.ABC` / `typing.Protocol` の Port 経由のみ許可する。
-- Humble Object を徹底し、UI の業務判断・I/O・複雑計算・業務フォーマット処理を禁止する。
-- Signal/Slot 命名規約（Signal=過去分詞、Slot=動詞）を機械検証する。
+- EMCSモデルを監査判定の唯一の客観基盤として固定。
+- Builder/Validator分離を監査プロトコルに明文化。
+- REJECTは処方的（失敗箇所、違反制約、修正指示、完了条件）を必須化。
 
-## 2. 実行ロードマップ（順序固定）
+### 1.2 Docker再現性標準（第2章）
 
-### Phase P0: Governance Baseline（着手ゲート）
-1. 監査ログスキーマを固定する。
-2. 依存方向 CI ゲートを導入する（`UseCase -> Qt` 含む禁止依存）。
-3. UI 責務 CI ゲートを導入する（業務判断/I-O/複雑計算/業務フォーマット禁止）。
-4. ハッシュ全件性 CI ゲートを導入する（4区分欠落・絶対パス違反を Fail）。
-5. Docker 再現性 CI ゲートを導入する（digest/APT archive/constraints/multi-stage）。
-6. Builder/Validator の入力境界ゲートを導入する。
-7. REJECT テンプレート必須項目チェックを導入する。
-8. Signal/Slot 命名 CI ゲートを導入する。
-9. 実装開始前の Architect 承認を必須化する。
+- `FROM` ダイジェスト固定、EOLリポジトリのアーカイブ切替、`constraints.txt` 固定、マルチステージビルドを強制。
 
-### Phase P1: Phase 5 実装
-1. Capability Mapping UseCase を実装する（knowledge=推定、execution=実証）。
-2. Mismatch Guard UseCase を実装する（差分1件以上で `Run` 無効）。
-3. Forced Creation Flow を実装する（適合0件時の作成導線と即時反映）。
-4. required imports/capability/mismatch/guard を監査ログへ連携する。
+### 1.3 データ完全性・監査証跡（第3章）
 
-### Phase P2: Phase 6 実装
-1. Environment Manager 専用 UI を実装する。
-2. 2段階確認付き一括削除を実装する（部分失敗継続）。
-3. 未使用抽出ロジックを実装する（最終利用日時+利用回数+保護フラグ）。
-4. dangling/unused image 限定のクリーンアップを実装する。
-5. メタデータ編集を実装する（内部ID不変）。
-6. 削除/編集/クリーンアップの監査ログを実装する。
+- 相対パス強制。
+- ハッシュ4区分（入力/出力/パラメータ/実行ログ）必須。
+- 実行ログに `container_image_digest` と `git_commit_hash` を必須記録。
 
-### Phase P3: Phase 6.1 成果物
-1. `artifacts/architecture_decoupling_assessment.md` を作成・更新する。
-2. `artifacts/refactoring_proposal.md` を作成する。
-3. 依存違反、直参照、循環依存を件数付きで証跡化する。
+### 1.4 UIアーキテクチャ標準（第4章）
 
-### Phase P3.1: REJECT 収束（UI->Domain 0件化）
-1. **アセスメント再測定を先行実施**し、`artifacts/architecture_decoupling_assessment.md` を実コード現状へ同期する。  
-   - `_show_create_env_dialog` / `_open_environment_creation_dialog` の Port 経由実装を再確認し、誤検知を除去する。
-2. **固定対象を明示**し、以下を UI 内業務責務の移管対象として固定する。  
-   - `MainWindow._run_container`
-   - `MainWindow._build_audit_metadata`
-   - `MainWindow._load_results`
-   - `MainWindow._execute_save_and_build`
-   - `MainWindow._to_project_relative_path`
-3. **Step A（優先）**: `_run_container` 系の残留業務判断を `RunExecutionOrchestrationUseCase` へ移管する。  
-   - 特に `_handle_missing_runtime_image` の不足時分岐・遷移判定を UseCase 側へ移す。
-   - `PathPolicyPort` を導入し、相対パス正規化（`_to_project_relative_path` 相当）を UI 外へ移管する。
-4. **Step B**: `_build_audit_metadata` の監査整形責務を `BuildAuditRecordUseCase` へ完全移管する。
-5. **Step B**: `_load_results` のCSV解析/整形責務を `ResultPreviewUseCase` へ完全移管する。
-6. **Step C**: `_execute_save_and_build` の業務制御を `EnvironmentLifecycleUseCase` へ移管する。
-7. UI を「入力収集・表示更新・UseCase 呼び出し」のみへ収束させる。
+- Humble Object徹底（UIから業務判断・外部I/O・複雑計算を排除）。
+- 依存方向を `UI -> UseCase -> Domain` に固定し、内側からQt非依存を保証。
+- 境界越えは `abc.ABC` / `typing.Protocol` 経由のみ許可。
+- Signal/Slot命名規約（Signal:過去分詞、Slot:動詞開始）をCIで検査。
 
-完了条件（P3.1専用）:
-- `UI->Domain直参照` 件数 = 0
-- `UseCase -> Qt` 件数 = 0
-- `循環依存` 件数 = 0
-- `pytest tests/` 全件Pass
-- `artifacts/architecture_decoupling_assessment.md` を更新し、実測0件を証跡化
-- `artifacts/refactoring_proposal.md` の固定閾値（禁止依存0、循環依存0、UI業務ロジック0、境界テスト100%Pass）を追加条件として実測で充足
+## 2. フェーズ計画（順序固定）
 
-## 3. 検証ゲート
+### Phase P0: Architecture Recovery Gate（着手必須）
+
+目的: RC-1〜RC-3を再発不能化する構造統制を先行実装する。
+
+実施項目:
+- 境界仕様確定（責務表・依存表更新、UI責務移管先UseCase/Port定義）。
+- 構造ゲート実装（禁止依存、循環依存、UI責務違反、Signal/Slot命名違反）。
+- 監査ルーティング標準化（原因層に応じた差し戻し先固定）。
+- DoR更新（境界設計承認・ゼロ化経路確定を実装開始条件へ追加）。
+- PASS維持チェックリスト化（基準章1〜4との整合を毎回確認）。
+
+完了条件:
+- 禁止依存0件、循環依存0件、UI責務違反0件、命名違反0件。
+
+### Phase P0.1: EMCS監査モデル固定（実装前必須）
+
+目的: 監査判定の再現性を保証する。
+
+実施項目:
+- EMCS-01〜06を監査仕様として固定。
+- critical項目は1件で即REJECT。
+- 監査記録へ `metric_id` / 実測値 / 証拠パス / 判定理由を必須化。
+
+完了条件:
+- `EMCS_score = 0`。
+- 監査者自由記述依存の判定プロセスが排除されていること。
+
+### Phase P0.2: Builder/Validator分離プロトコル（実装前必須）
+
+目的: 監査入力境界を固定し、サイレント逸脱を防止する。
+
+実施項目:
+- Auditor入力を要件、基準、Diff、テスト証跡、監査証跡に限定。
+- 実装者メモ・思考過程・チャット補足の参照を禁止。
+- 監査記録へ `input_boundary_check` を必須追加。
+
+完了条件:
+- `input_boundary_check: pass` 以外はREJECT。
+
+### Phase P1: Validation Guardrails（Phase 5実装）
+
+目的: 実行前整合性の未充足を遮断する。
+
+実施項目:
+- Capability Mapping UseCase（推定/実証の識別表示）。
+- Mismatch判定UseCase（不足1件以上でRun無効）。
+- 非適合時の環境作成導線（不足import候補初期投入）。
+- 作成後Dynamic Refresh（再起動不要）。
+- 監査証跡の記録項目追加。
+
+完了条件:
+- R5-1/R5-2/R5-3 充足。
+
+### Phase P2: Lifecycle Management（Phase 6実装）
+
+目的: 環境ライフサイクル運用を安全・監査可能にする。
+
+実施項目:
+- Environment Manager専用UI。
+- 一括削除2段階確認。
+- 部分失敗継続処理。
+- 未使用判定（最終利用日時+利用回数+保護フラグ）。
+- cleanup対象限定（dangling/unused imageのみ）。
+- メタ編集機能（内部ID不変）。
+- 操作監査ログ拡張。
+
+完了条件:
+- R6-1〜R6-6 充足。
+
+### Phase P3: Decoupling成果物（Phase 6.1）
+
+目的: 構造是正の結果を証拠付きで可視化する。
+
+成果物:
+- `artifacts/architecture_decoupling_assessment.md`
+- `artifacts/refactoring_proposal.md`
+
+完了条件:
+- `UI->Domain` 直参照0、逆方向依存0、循環依存0を実測提示。
+
+### Phase P4: Pydantic段階導入（Phase 6.2）
+
+目的: 境界データの型安全とfail-fastを標準化する。
+
+実施項目:
+- 監査メタデータDTO。
+- Runtime判定DTO。
+- 環境作成/更新DTO。
+- strict検証 + 互換アダプタ（dict経路）。
+
+完了条件:
+- Phase 6.2 AC 充足（T6.2-1〜T6.2-5 PASS）。
+
+## 3. 横断ゲート（全フェーズ共通）
 
 ### 3.1 Functional Gate
-- `pytest tests/` 全件 Pass。
-- T5-1〜T5-4、T6-1〜T6-6 の受け入れテストを全件 Pass。
+
+- `pytest tests/` 全件PASS。
+- 必須テスト: T5-1〜T5-4, T6-1〜T6-6, T6.2-1〜T6.2-5。
 
 ### 3.2 Structural Gate
-- 禁止依存 0件（`UseCase -> Qt` 含む）。
-- UI 禁止行為 0件。
-- Port 未経由境界越え 0件。
-- 循環依存 0件。
-- Signal/Slot 命名違反 0件。
+
+- `UI->Domain` 直接依存0。
+- `UseCase->Qt` 依存0。
+- Port未経由境界越え0。
+- 循環依存0。
+- UI責務違反0。
+- Signal/Slot命名違反0。
 
 ### 3.3 Audit Gate
-- ハッシュ4区分欠落 0件。
-- 相対パス違反 0件。
-- `container_image_digest` 欠落 0件。
-- `git_commit_hash` 欠落 0件。
-- REJECT テンプレート必須項目欠落 0件。
 
-### 3.4 EMCS Objective Metrics
-- M1: 依存方向違反件数 = 0
-- M2: UI SRP 違反件数 = 0
-- M3: 複雑度超過（CC > 10）件数 = 0
-- M4: 監査証跡欠落件数 = 0
-- M5: Docker再現性違反件数 = 0
-- M6: Signal/Slot命名規約違反件数 = 0
+- 相対パス違反0。
+- ハッシュ4区分欠落0。
+- `container_image_digest` 欠落0。
+- `git_commit_hash` 欠落0。
 
-## 4. ループ防止プロトコル
-- 設計不備は `REJECT_TO_ARCHITECT` に固定する。
-- 実装不備は `REJECT_TO_IMPLEMENT` に固定する。
-- `docs/plan.md` と監査基準に差分が残る限り実装着手を禁止する。
-- PASS 判定時でも RC-1〜RC-3 の非回帰確認を毎回実施する。
-- 非回帰未充足が1件でもあれば総合判定に関係なく `REJECT_TO_ARCHITECT` とする。
+### 3.4 Governance Gate
 
-## 5. 完了条件（Definition of Done）
-- Phase 5 / Phase 6 / Phase 6.1 の受け入れ基準を充足。
-- Hard Constraints 違反 0件。
-- `pytest tests/` 全件 Pass。
-- EMCS（M1〜M6）全項目が閾値内。
-- 監査証跡（hash4区分、digest、git hash、相対パス）が全件充足。
-- Builder/Validator 分離の入力境界違反 0件。
+- REJECTテンプレート必須項目欠落0。
+- 差し戻し先誤判定0。
+- `input_boundary_check` fail 0。
 
-## 6. 作業上の禁止事項
-- 本作業では `git commit` を含む Git 更新系コマンドを実行しない。
+## 4. マイルストーン
+
+- M1: P0/P0.1/P0.2完了（構造・監査統制が実装前に有効化済み）。
+- M2: P1完了（Validation Guardrails運用開始）。
+- M3: P2完了（Lifecycle運用機能本番相当）。
+- M4: P3完了（Decoupling証拠提出）。
+- M5: P4完了（型安全統制の段階導入完了）。
+- M6: 4ゲート全通過 + `EMCS_score = 0` を提示しDoD達成。
+
+## 5. リスクと停止条件
+
+- 構造違反1件でも進行停止（機能合格のみでは進めない）。
+- 同一違反が2回連続で再発した場合、実装修正を停止し設計レビューへ強制遷移。
+- 監査PASSでも、P0未完了・4ゲート未計測・証跡欠落のいずれかがあれば停止。
+
+## 6. Definition of Done
+
+- Phase 5 / 6 / 6.1 / 6.2 の受け入れ基準を満たす。
+- Functional / Structural / Audit / Governance の4ゲートを全通過。
+- 実測で以下を提示可能であること:
+  - 禁止依存0
+  - 循環依存0
+  - UI責務違反0
+  - 監査欠落0
+  - `EMCS_score = 0`
+- 成果物に証拠パスを付与し追跡可能であること。
+
+## 7. 明示的禁止事項
+
+- 本作業および関連実行で `git commit` を含むGit更新系コマンドを実行しない。
