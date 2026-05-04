@@ -20,12 +20,17 @@
 - 成果物:
   - 依存方向図、責務表、Port一覧（`artifacts/refactoring_proposal.md`）
   - 違反一覧と是正方針（`artifacts/architecture_decoupling_assessment.md`）
+  - 標準条項トレーサビリティマトリクス（KPI ↔ `docs/reference_standards.md`、監査可能形式）
   - `MainWindow._run_container` / `_show_create_env_dialog` の責務分離完了
+  - 既知再発2メソッド（`_run_container`, `_show_create_env_dialog`）の専用監査チェックリスト証跡
 - 完了条件:
   - UI->Domain 直参照 0
   - Port未経由 0
   - 循環依存 0
   - MainWindow業務ロジック 0
+  - 標準条項トレーサビリティマトリクス作成完了（監査可能）
+  - 既知再発2メソッドの専用監査チェックリスト保存完了
+  - Architect承認済み（未承認時は Phase C 以降へ遷移不可）
 
 ### M2: Validation Guardrails 完了（Phase C）
 
@@ -91,6 +96,13 @@
 - 構造違反: `REJECT_TO_ARCHITECT`
 - 機能違反: `REJECT_TO_IMPLEMENT`
 - 同一構造違反の連続発生: Architect是正完了まで後続実装停止
+- フェーズ遷移停止条件: Architect承認がない場合、Phase C/D/E への遷移を禁止
+
+### 3.3 監査判定記録（EMCS必須）
+
+- Validatorは全判定をEMCS観点で記録する。
+- 必須記録項目: 構造違反、複雑度、依存違反、影響度
+- 判定ログはDiff根拠と対応づけ、処方的差し戻し指示とセットで保存する。
 
 ## 4. 監査証跡要件（ALCOA++）
 
