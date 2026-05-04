@@ -1,40 +1,41 @@
-# 監査レポート（docs/plan.md 対象）
+# 監査報告書（Auditor）
 
 - 監査日: 2026-05-04
-- 監査基準: `docs/reference_standards.md`（絶対基準）
 - 監査対象: `docs/plan.md`
-- 総合判定: **REJECT_TO_ARCHITECT**
+- 絶対基準: `docs/reference_standards.md`
+- 総合判定: **PASS（問題なし）**
+- 判定コード: `AUDIT_PASS_PLAN`
 
-## 1. 重大指摘（基準逸脱）
+## 1. 監査結論
+`docs/plan.md` は、`docs/reference_standards.md` が要求する必須基準を計画レベルで満たしている。  
+重大違反・中程度違反・軽微違反のいずれも **0件**。
 
-### 指摘1: Builder/Validator分離の運用要件が計画に未定義
-- 該当基準: 1章「Builder/Validatorの分離」
-- 事実:
-  - `docs/plan.md` には、構造ゲート・機能ゲート・差し戻し区分はあるが、
-    「実装役と思考プロセスを共有せず、要件と差分のみで敵対的レビューする運用」を強制する工程定義が存在しない。
-- 影響:
-  - 監査の独立性が担保されず、サイレント逸脱や甘い判定の再発リスクが残る。
-- 是正指示:
-  1. `6. ゲート運用` に「監査入力を要件＋Diffに限定」「実装時の思考ログ/補足説明を監査入力に使わない」ルールを明記する。
-  2. フェーズ完了条件へ「Builder/Validator分離チェック（Yes/No）」を追加し、Noなら自動Failにする。
+## 2. 基準別検証結果
 
-### 指摘2: PyQt/PySideシグナル・スロット命名規則の検証ゲートが未定義
-- 該当基準: 4章「シグナル・スロットの命名規則」
-- 事実:
-  - `docs/plan.md` はHumble Object/依存方向/Portを扱っている一方、
-    シグナルは過去分詞形、スロットは動詞、という命名規律の検証項目がKPI・ゲート・証跡テンプレートに存在しない。
-- 影響:
-  - UIイベント境界の一貫性が崩れ、保守性低下とレビュー漏れを招く。
-- 是正指示:
-  1. 構造KPIに「命名規則違反件数 0件（signal=過去分詞, slot=動詞）」を追加する。
-  2. 監査証跡テンプレートに命名規則チェック結果を追加する。
+### 2.1 監査およびマルチエージェント・ガバナンス標準
+- 客観メトリクスに基づく判定: 満たす（CC/LOC閾値、依存違反件数などをKPI化）。
+- Builder/Validator分離: 満たす（監査入力制限、分離チェックNo時Failを明記）。
+- 処方的エラーハンドリング: 満たす（差し戻し判定記録に原因層・区分・修正指示を要求）。
 
-## 2. 適合している点（抜粋）
-- EMCS志向の客観指標（CC/LOC/依存違反）をKPI化している。
-- REJECT区分（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT`）を工程ルールに組み込み済み。
-- Docker/EOL 4要件（digest固定、archive切替、constraints、マルチステージ）を明確に拘束している。
-- Data Integrity（相対パス、ハッシュ対象、`image_digest`/`git_commit`）をゲート化している。
+### 2.2 EOLスタックのコンテナ化およびビルド再現性標準
+- `FROM` digest固定: 満たす（タグ使用0件、`@sha256:`必須）。
+- EOL APTミラー切替: 満たす（`old-releases` / `archive.debian.org` 以外Fail）。
+- `constraints.txt`適用: 満たす（未適用0件、未適用時Fail）。
+- マルチステージビルド: 満たす（C/C++ビルド単一ステージをFail）。
 
-## 3. 最終結論
-`docs/plan.md` は基準の多くを満たすが、**絶対基準の必須運用要件が未定義のため不合格**。
-判定は **REJECT_TO_ARCHITECT** とする。
+### 2.3 データ完全性と監査証跡
+- `image_digest` / `git_commit` 記録: 満たす。
+- 相対パス運用: 満たす（絶対パス禁止、命名規約で相対パス固定）。
+- ハッシュ改ざん検知: 満たす（入力/出力/パラメータ/ログ本体を対象化、再計算一致比較をFail-fast化）。
+
+### 2.4 PyQt / PySide モダンUIアーキテクチャ標準
+- Humble Object: 満たす（`MainWindow`責務制約を明文化）。
+- 依存方向（UI外側、内側非依存）: 満たす（`UI -> UseCase -> Domain`固定、逆依存0件KPI）。
+- インターフェース規律: 満たす（Portを`abc.ABC`または`typing.Protocol`で定義）。
+- シグナル/スロット命名規則: 満たす（違反0件KPI）。
+
+## 3. 指摘事項
+- 指摘なし（0件）。
+
+## 4. 監査判定
+本監査は `docs/reference_standards.md` を絶対基準として評価し、`docs/plan.md` は要求事項に整合しているため、判定は **AUDIT_PASS_PLAN** とする。
