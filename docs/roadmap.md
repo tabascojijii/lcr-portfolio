@@ -63,12 +63,21 @@
 3. 依存違反、直参照、循環依存を件数付きで証跡化する。
 
 ### Phase P3.1: REJECT 収束（UI->Domain 0件化）
-1. `_run_container` を `RunExecutionOrchestrationUseCase` へ移管する。
-2. 相対パス正規化を `PathPolicyPort` 経由へ移管する。
-3. `_build_audit_metadata` を `BuildAuditRecordUseCase` へ移管する。
-4. `_load_results` を `ResultPreviewUseCase` へ移管する。
-5. `_execute_save_and_build` を `EnvironmentLifecycleUseCase` へ移管する。
+1. **アセスメント再測定を先行実施**し、`artifacts/architecture_decoupling_assessment.md` を実コード現状へ同期する。  
+   - `_show_create_env_dialog` / `_open_environment_creation_dialog` の Port 経由実装を再確認し、誤検知を除去する。
+2. `_run_container` 系の残留業務判断を `RunExecutionOrchestrationUseCase` へ移管する。  
+   - 特に `_handle_missing_runtime_image` の不足時分岐・遷移判定を UseCase 側へ移す。
+3. `_build_audit_metadata` の監査整形責務を `BuildAuditRecordUseCase` へ完全移管する。
+4. `_load_results` のCSV解析/整形責務を `ResultPreviewUseCase` へ完全移管する。
+5. `_execute_save_and_build` の業務制御を `EnvironmentLifecycleUseCase` へ移管する。
 6. UI を「入力収集・表示更新・UseCase 呼び出し」のみへ収束させる。
+
+完了条件（P3.1専用）:
+- `UI->Domain直参照` 件数 = 0
+- `逆方向依存` 件数 = 0
+- `循環依存` 件数 = 0
+- `pytest tests/` 全件Pass
+- `artifacts/refactoring_proposal.md` の固定閾値（禁止依存0、循環依存0、UI業務ロジック0、境界テスト100%Pass）を実測で充足
 
 ## 3. 検証ゲート
 
