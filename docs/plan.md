@@ -30,6 +30,8 @@
 - Port未経由の境界越え: 0件
 - 逆方向依存（内側→外側）: 0件
 - 循環依存: 0件
+- 関数サイクロマティック複雑度（CC）閾値超過（`CC > 10`）: 0件
+- 巨大関数閾値超過（`LOC > 80`）: 0件
 - `MainWindow._run_container` の業務ロジック: 0件
 - `MainWindow._show_create_env_dialog` の候補生成/環境作成制御: 0件
 
@@ -45,7 +47,15 @@
 - 相対パス違反: 0件
 - ハッシュ対象欠落: 0件
 - 実行ログへの `image_digest` / `git_commit` 記録欠落: 0件
+- Docker/EOL再現性4要件違反: 0件
 - Phase 5/6 監査必須項目欠落: 0件
+
+## 3.4 Docker/EOL再現性KPI（reference準拠）
+
+- `FROM` タグ使用: 0件（`@sha256:` digest必須）
+- EOL APTミラー未切替: 0件（`old-releases` / `archive.debian.org` 以外をFail）
+- `constraints.txt` 未適用ビルド: 0件
+- C/C++ビルドの非マルチステージ構成: 0件
 
 ## 4. 先行設計成果物（実装着手条件）
 
@@ -81,6 +91,23 @@
 1. `_run_container` が「UseCase呼び出し + UI反映」のみ
 2. `_show_create_env_dialog` が「ダイアログI/O + UseCase呼び出し」のみ
 3. 構造KPIが全項目0件
+4. CC/巨大関数の閾値超過が0件
+
+### Phase A.5: Reproducible Build Lock（監査重大指摘の是正）
+
+目的: EOLスタック再現性を計画段階で拘束し、実装後の監査差し戻しを防止。
+
+タスク:
+1. `Dockerfile` の `FROM` を digest固定（`@sha256:`）へ統一し、タグ指定を禁止
+2. EOL向けAPTソースを archive/old-releases へ強制切替
+3. `constraints.txt` をビルド必須入力に固定し、未適用時Failにする
+4. OpenCV等のC/C++ビルドをマルチステージへ固定し、runtimeにbuild toolを残さない
+
+完了条件:
+1. digest未固定 `FROM` 0件
+2. EOL APT未切替 0件
+3. `constraints.txt` 未適用 0件
+4. 単一ステージでのC/C++ビルド 0件
 
 ### Phase B: Phase 5 Guardrails 実装
 
@@ -156,6 +183,8 @@
 - 循環依存0件
 - UI責務混在0件
 - Port未経由0件
+- `CC > 10` 0件
+- `LOC > 80` 0件
 - `_run_container` / `_show_create_env_dialog` 再発監査0件
 
 ### 6.3 進行ルール
@@ -163,6 +192,26 @@
 1. どちらか1つでもFailしたら次フェーズ進行禁止
 2. 構造ゲートFailは実装継続禁止、Architect是正タスクを先行
 3. 成果物未更新（assessment/proposal/traceability）はFail扱い
+4. Docker/EOL再現性4要件のいずれか1件でもFailなら全実装フェーズ停止
+5. ハッシュ完全性（対象・保存・再計算比較）未達は監査Fail
+
+### 6.4 監査データ完全性ゲート（Data Integrity固定）
+
+ハッシュ対象の正規リスト（欠落時Fail）:
+1. 入力データ（実行対象ファイル群）
+2. 出力データ（成果物ファイル群）
+3. 実行パラメータ（設定JSON/YAML/CLI引数相当）
+4. 監査ログ本体ファイル
+
+保存先・命名規約:
+1. 保存先は `artifacts/audit/hashes/` に固定
+2. 命名は `<run_id>_<target_kind>_<relative_path_normalized>.sha256`
+3. すべてプロジェクトルート相対パスで記録（絶対パス禁止）
+
+検証手順（再計算比較）:
+1. 実行完了後に各対象のSHA-256を再計算
+2. 保存済み `.sha256` と一致比較
+3. 不一致または未生成が1件でもあればFail-fastで監査Fail
 
 ## 7. 監査証跡テンプレート（必須）
 
@@ -181,8 +230,15 @@
 - 相対パス検証結果
 - 入出力/パラメータ/ログ本体ハッシュ
 - `image_digest`, `git_commit`
+- ハッシュ再計算比較結果（一致/不一致）
 
-4. 差し戻し判定記録
+4. Docker/EOL再現性証跡
+- `FROM @sha256` 検証結果
+- EOL APT切替検証結果
+- `constraints.txt` 適用検証結果
+- マルチステージ検証結果
+
+5. 差し戻し判定記録
 - 原因層（設計/実装）
 - 判定区分（TO_ARCHITECT / TO_IMPLEMENT）
 - 処方的修正指示
@@ -200,6 +256,12 @@
 
 4. リスク: 監査ログ欠落
 - 対策: DTO strict + fail-fastで欠落を実行時に停止
+
+5. リスク: EOL環境ビルドの再現不能化
+- 対策: digest固定・archive切替・constraints・マルチステージの4要件を実装前ゲート化
+
+6. リスク: 構造健全性の主観判定化
+- 対策: CC/LOC閾値を固定し、超過時は自動で `REJECT_TO_ARCHITECT`
 
 ## 9. Definition of Done
 
