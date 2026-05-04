@@ -20,9 +20,11 @@
 - 成果物:
   - 依存方向図、責務表、Port一覧（`artifacts/refactoring_proposal.md`）
   - 違反一覧と是正方針（`artifacts/architecture_decoupling_assessment.md`）
+  - 変更影響テスト仕様（UI変更時/Domain変更時、監査可能形式）
   - 標準条項トレーサビリティマトリクス（KPI ↔ `docs/reference_standards.md`、監査可能形式）
   - 標準条項トレーサビリティマトリクス保存先: `artifacts/standards_traceability_matrix.md`
   - `MainWindow._run_container` / `_show_create_env_dialog` の責務分離完了
+  - `_run_container`（必要に応じて `_show_create_env_dialog` を含む）移管前後の責務差分表
   - 既知再発2メソッド（`_run_container`, `_show_create_env_dialog`）の専用監査チェックリスト証跡
 - 完了条件:
   - UI->Domain 直参照 0
@@ -34,9 +36,11 @@
   - `MainWindow._show_create_env_dialog` は Port/UseCase非経由で環境生成ロジックへ到達しない
   - 「不足import→候補生成→作成→再評価」の制御フローは1つのUseCase境界で完結する
   - Dynamic Refresh（再起動不要反映）が実装されている
+  - 変更影響テスト仕様（UI変更時/Domain変更時）が監査可能な形式で保存済み
   - 標準条項トレーサビリティマトリクス作成完了（`artifacts/standards_traceability_matrix.md`、監査可能）
   - 標準条項トレーサビリティマトリクス更新タイミングは M1完了時および各Phase遷移判定前
   - Phase遷移ゲートで KPI/標準条項対応を照合し、欠落があれば `REJECT_TO_PM`
+  - 移管前後の責務差分表が監査証跡として保存済み
   - 既知再発2メソッドの専用監査チェックリスト保存完了
   - Architect承認済み（未承認時は Phase C 以降へ遷移不可）
 
