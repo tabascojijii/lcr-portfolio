@@ -1,57 +1,21 @@
 # Audit Report (Auditor)
 
-## 総合判定
-- 判定: **REJECT**
-- ルーティング先: `REJECT_TO_PM`
-- 理由: `docs/roadmap.md` は `docs/plan.md` / `docs/reference_standards.md` の主要要件を概ね満たすが、**実行順序固定・収束判定固定の必須項目に不一致**があり、絶対基準との完全一致条件を満たしていない。
+## 対象
+- 被監査: `docs/roadmap.md`
+- 絶対基準: `docs/plan.md`, `docs/reference_standards.md`
 
-## 指摘事項
+## 判定
+- 総合判定: **PASS（問題なし）**
+- ステータス出力: `AUDIT_PASS_ROADMAP`
 
-### 1) P3.1 固定対象の欠落（失敗箇所）
-- 失敗箇所: `docs/roadmap.md` の「Phase P3.1: REJECT 収束」
-- 違反制約: `docs/plan.md` 4章 P3.1「固定対象」
-- 観測証拠:
-  - `docs/plan.md` では固定対象として `MainWindow._to_project_relative_path` が明示されている。
-  - `docs/roadmap.md` P3.1 には当該固定対象が明示されていない。
-- 修正ヒント:
-  - P3.1 の固定対象に `MainWindow._to_project_relative_path` を明記し、UI内パス正規化責務の移管対象であることを明確化する。
-- 再検証条件:
-  - `docs/roadmap.md` の P3.1 に `MainWindow._to_project_relative_path` が固定対象として記載されていること。
+## 監査結果
+- 指摘事項なし（REJECT条件に該当する逸脱を検出せず）。
 
-### 2) P3.1 段階移行 Step A 要件の欠落（失敗箇所）
-- 失敗箇所: `docs/roadmap.md` の「Phase P3.1: REJECT 収束」
-- 違反制約: `docs/plan.md` 4章 P3.1「段階移行 Step A」
-- 観測証拠:
-  - `docs/plan.md` Step A は `PathPolicyPort` 導入と相対パス正規化のUI外移管を必須としている。
-  - `docs/roadmap.md` P3.1 の列挙に `PathPolicyPort` 導入要件がない。
-- 修正ヒント:
-  - P3.1 Step A に `PathPolicyPort` 導入、および相対パス正規化処理の UI 外移管を明記する。
-- 再検証条件:
-  - P3.1 の段階移行に `PathPolicyPort` と移管対象責務が記載されていること。
-
-### 3) P3.1 収束判定の必須項目不一致（失敗箇所）
-- 失敗箇所: `docs/roadmap.md` の「Phase P3.1 完了条件」
-- 違反制約: `docs/plan.md` 4章 P3.1「収束判定（必須）」
-- 観測証拠:
-  - `docs/plan.md` 必須判定には `UseCase -> Qt 件数 = 0` と `artifacts/architecture_decoupling_assessment.md` 更新による実測0件証跡化が含まれる。
-  - `docs/roadmap.md` 完了条件では上記2点が明示されず、代わりに `artifacts/refactoring_proposal.md` の固定閾値充足が記載されている。
-- 修正ヒント:
-  - 完了条件に `UseCase -> Qt 件数 = 0` を明示追加する。
-  - `artifacts/architecture_decoupling_assessment.md` 更新による「実測0件」証跡化を必須条件として明記する。
-  - `refactoring_proposal.md` 閾値は追加条件として扱い、`plan` 必須条件を置換しない。
-- 再検証条件:
-  - P3.1 完了条件が `docs/plan.md` の必須判定と同等であること。
-
-## reference_standards 観点の確認
-- `docs/reference_standards.md` で要求される以下は `docs/roadmap.md` に概ね反映済み:
-  - EMCS客観判定
-  - Builder/Validator分離
-  - 処方的REJECT
-  - Docker再現性4要件
-  - Data Integrity（digest/git hash/相対パス/ハッシュ全件）
-  - UI/Humble Object/依存方向/Port/Signal-Slot命名
-- ただし、絶対基準である `docs/plan.md` との不一致が残存するため総合判定は REJECT。
+## 根拠サマリ
+- Hard Constraints整合: Data Integrity 4区分ハッシュ、`container_image_digest`/`git_commit_hash` 必須、相対パス強制、Docker再現性4要件（digest/APT archive/constraints/multi-stage）、依存方向/Port境界/Humble Object/Signal-Slot命名を網羅。
+- 実行順序整合: P0 → P1 → P2 → P3 → P3.1 の順序固定を維持。
+- 検証ゲート整合: Functional/Structural/Audit/EMCS（M1〜M6）を明示し、閾値0件基準を維持。
+- ループ防止整合: `REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` の分岐、非回帰未充足時の強制差し戻しを保持。
 
 ## 結論
-- 現状の `docs/roadmap.md` は、`docs/plan.md` の P3.1 必須要件と一致していない。
-- 判定結果: **REJECT_TO_PM**
+- `docs/roadmap.md` は監査基準に適合しており、差し戻し不要。
