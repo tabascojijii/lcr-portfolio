@@ -1,40 +1,59 @@
-# Audit Report (Auditor)
+# 監査レポート
 
-## 監査手順と結果
+- 監査対象: `docs/plan.md`
+- 絶対基準: `docs/reference_standards.md`
+- 監査日: 2026-05-04
+- 総合判定: **REJECT_TO_ARCHITECT**
 
-### 1. pytest 実行結果
-- 実行コマンド: `pytest tests/`
-- 結果: **PASS**
-- サマリ: `66 passed in 3.03s`
-- エラーログ: なし
+## 指摘事項（重大度順）
 
-### 2. `docs/reference_standards.md` に基づく品質検証（`src/`・`tests/`・`artifacts/`）
-- 依存方向/循環依存/境界違反の評価証跡が `artifacts/architecture_decoupling_assessment.md` に明記され、
-  - `UI->Domain直参照: 0件`
-  - `逆方向依存: 0件`
-  - `循環依存: 0件`
-  と記録されていることを確認。
-- UI責務分離・UseCase集約・Port経由の改善方針と段階移行が `artifacts/refactoring_proposal.md` に記載されていることを確認。
-- `tests/` は全件Passで、Phase 6.1関連テスト（例: `test_phase61_decoupling_use_case.py`, `test_ui_usecase_separation.py`, `test_signal_slot_naming_use_case.py`）を含み、規約逸脱を示す失敗は検出されず。
-- `artifacts/` の監査関連成果物は存在し、欠落なし。
+1. **[重大] Docker再現性標準の必須要件が計画に未定義**
+- 失敗箇所: `docs/plan.md` 全体（コンテナ実装要件の具体化不足）
+- 違反基準: 2章「EOLスタックのコンテナ化およびビルド再現性標準」
+- 客観根拠:
+  - `FROM` のSHA256ダイジェスト固定要件が未記載。
+  - EOL OS向けAPTリポジトリのアーカイブ切替要件（`old-releases`/`archive.debian.org`）が未記載。
+  - `constraints.txt` によるpip依存解決制約が未記載。
+  - OpenCV等を前提とするマルチステージビルド強制が未記載。
+- 是正指示:
+  - Phase AまたはC/Dに「Docker再現性実装タスク」を明示追加し、上記4点を完了条件（AC/T）に格上げすること。
 
-### 3. 必須成果物の存在確認
-- `artifacts/architecture_decoupling_assessment.md`: **存在**
-- `artifacts/refactoring_proposal.md`: **存在**
+2. **[重大] 監査証跡（ALCOA++）の必須ログ要件が不足**
+- 失敗箇所: `docs/plan.md` 2.3, 4.1, Phase C/D
+- 違反基準: 3章「データ完全性と監査証跡」
+- 客観根拠:
+  - 監査ログ必須項目として「コンテナイメージダイジェスト」「`git rev-parse HEAD` で得るコミットハッシュ」の記録要件が未定義。
+  - 「全入出力データ・パラメータファイル・実行ログ自体へのSHA-256適用」が未定義。
+  - 相対パス規約はKPIで言及されるが、適用範囲と検証方法が未定義。
+- 是正指示:
+  - 監査ログスキーマを計画に明記し、必須フィールドとして `image_digest`, `git_commit`, `input_hashes`, `output_hashes`, `param_hash`, `log_hash`, `relative_path_check` を追加。
+  - 欠落時fail-fast条件をACに組み込むこと。
 
-### 4. `requirements.md` Phase 6.1 受け入れ基準適合確認
-- AC6.1-1: 違反列挙形式（file/class/type/evidence）を満たす記載あり（結果は0件）。
-- AC6.1-2: 各違反種別に対する改善方針（移管先・Port設計）定義あり。
-- AC6.1-3: P0/P1/P2 優先度と実施順序あり。
-- AC6.1-4: 改善後検証方法（テスト戦略・判定指標）定義あり。
-- AC6.1-5: importグラフ結果として `UI->Domain直参照` / `逆方向依存` / `循環依存` の一覧と件数あり。
-- AC6.1-6: 変更影響テスト手順（シナリオ、期待影響範囲、合否条件）あり。
-- AC6.1-7: 数値合否指標（禁止依存0、循環依存0、UI業務ロジック0、境界テスト100%）固定値あり。
+3. **[中～重大] UIアーキテクチャ規約の一部が計画に欠落**
+- 失敗箇所: `docs/plan.md` 3章, 4章, Phase B/E
+- 違反基準: 4章「PyQt / PySide モダンUIアーキテクチャ標準」
+- 客観根拠:
+  - Humble Object、依存方向は明記済みだが、`abc.ABC` / `typing.Protocol` によるインターフェース規律が計画に明記されていない。
+  - シグナル（過去分詞）/スロット（動詞）命名規則の監査項目が未定義。
+- 是正指示:
+  - Port/Facade/View境界に適用する抽象インターフェース方針をPhase A成果物へ追加。
+  - 命名規則を静的チェックまたはレビューゲート項目として明文化すること。
 
-## 指摘事項
-- 重大指摘: なし
-- 基準違反: なし
-- pytest失敗: なし
+4. **[中] 監査ガバナンス標準の運用定義が不十分**
+- 失敗箇所: `docs/plan.md` 6章
+- 違反基準: 1章「監査およびマルチエージェント・ガバナンス標準」
+- 客観根拠:
+  - Builder/Validator分離（差分ベースの敵対的レビュー）運用が計画本文に明示されていない。
+  - EMCSモデルに相当する評価指標体系の対応表がない（KPIはあるが基準トレーサビリティ不足）。
+- 是正指示:
+  - 監査プロセスに「入力情報制約（要件+diffのみ）」と「役割分離」を追記。
+  - KPIと標準条項の対応マトリクスを追加し、判定根拠をトレース可能にすること。
 
-## 最終判定
-- **AUDIT_PASS_IMPLEMENT**
+## 判定理由（結論）
+`docs/plan.md` はUI疎結合や構造ゲートの設計は強いが、絶対基準である `docs/reference_standards.md` の **2章・3章・4章・1章の必須要件を網羅的に満たしていない**。したがって本監査は **REJECT_TO_ARCHITECT** とする。
+
+## 再提出時の最低受入条件
+- Docker再現性4要件（ダイジェスト固定、アーカイブAPT、constraints、マルチステージ）を計画へ明記。
+- 監査証跡の必須ハッシュ/コミット/イメージダイジェスト項目をAC付きで明記。
+- `ABC/Protocol` 方針とシグナル/スロット命名規則を監査可能なゲートに追加。
+- Builder/Validator分離と標準条項トレーサビリティを計画へ追記。
