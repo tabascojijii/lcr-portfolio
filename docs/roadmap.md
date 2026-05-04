@@ -34,6 +34,8 @@
 1. `UI->Domain 直参照 = 0` にできる設計経路が確定。
 2. `MainWindow._run_container` / `_show_create_env_dialog` の責務移管先が確定。
 3. REJECT 判定テンプレート運用を監査フローへ組み込み済み。
+4. `artifacts/architecture_decoupling_assessment.md` / `artifacts/refactoring_proposal.md` / `artifacts/traceability_matrix.md` の3成果物が揃うまで M1 以降の実装着手を禁止する。
+5. 上記3成果物のいずれか未充足時は即 `REJECT_TO_ARCHITECT` とする。
 
 ### M1: Phase 5 Guardrails（2026-05-09 〜 2026-05-14）
 
@@ -68,7 +70,25 @@
 1. AC6-1〜AC6-7 達成
 2. T6-1〜T6-6 Pass
 
-### M3: Phase 6.2 Type Safety（2026-05-21 〜 2026-05-24）
+### M3: Phase 6.1 Decoupling Completion（2026-05-21 〜 2026-05-22）
+
+目的: Phase 5/6 の機能をクリーンアーキテクチャ境界へ収束させ、以降の型・契約強化の前提を固定する。
+
+実装範囲:
+1. `MainWindow._run_container` の業務判断・実行制御を UseCase 側へ完全移管
+2. `_show_create_env_dialog` の候補生成・作成制御を UseCase 側へ完全移管
+3. UI から Domain/Infrastructure 実装型への直接参照を除去し Port/Interface 経由へ統一
+4. 変更影響テスト（UI変更時/Domain変更時）を実施し境界退行を検知可能化
+
+ゲート:
+1. AC6.1-1〜AC6.1-4 達成
+2. T6.1-1〜T6.1-4 Pass
+
+依存関係:
+1. 前提: M2 完了
+2. 後続: M4（Phase 6.2）開始条件
+
+### M4: Phase 6.2 Type Safety（2026-05-23 〜 2026-05-25）
 
 目的: DTO 境界で strict / fail-fast を固定する。
 
@@ -82,7 +102,7 @@
 1. AC6.2-1〜AC6.2-5 達成
 2. T6.2-1〜T6.2-5 Pass
 
-### M4: Phase 6.3 Static Type Gate（2026-05-25 〜 2026-05-27）
+### M5: Phase 6.3 Static Type Gate（2026-05-26 〜 2026-05-28）
 
 目的: 実行前に型不整合をCIで遮断する。
 
@@ -96,7 +116,7 @@
 2. T6.3-1〜T6.3-4 Pass
 3. mypy エラー 0
 
-### M5: Phase 6.4 Contract and Regression Hardening（2026-05-28 〜 2026-05-31）
+### M6: Phase 6.4 Contract and Regression Hardening（2026-05-29 〜 2026-05-31）
 
 目的: 将来変更での逆流を防止する。
 
@@ -173,12 +193,14 @@ KPI:
 4. Port未経由 = 0
 5. UI層業務ロジック = 0
 6. 監査必須成果物欠落 = 0
+7. M0 の3成果物が未充足の場合は `REJECT_TO_ARCHITECT` とし、M1 以降着手禁止
 
 ### 3.3 進行ルール
 
 1. いずれか1つでもFailなら次フェーズへ進まない。
 2. 構造ゲートFail時は実装停止し、Architect再設計を先行する。
 3. 機能ゲートのみPassは未完了扱いとする。
+4. M0 成果物ゲート未充足時は即 `REJECT_TO_ARCHITECT` とし、M1 以降へ進行しない。
 
 ## 4. リスク管理
 
