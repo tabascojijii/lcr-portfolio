@@ -1,52 +1,50 @@
-# Audit Report
+# Audit Report (2026-05-04)
 
-Date: 2026-05-04
-Auditor: Codex
+## 1. pytest 実行結果
+- 実行コマンド: `pytest tests/`
+- 結果: **64 passed / 0 failed / 0 error**
+- 要件 `pytest tests/` 全件Pass: **適合**
 
-## 1. Pytest Result
+## 2. 参照基準 `docs/reference_standards.md` に基づく検証
 
-Command: `pytest tests/`
+### 2.1 `src/` の検証
+- **違反1**
+  - file: `src/lcr/ui/main_window.py`
+  - function/class: `MainWindow._run_container`
+  - 違反種別: UI責務混在（Humble Object 原則違反リスク）
+  - 根拠: 実行前確認ダイアログ分岐・JIT作成導線制御がUIメソッドに残存し、UseCaseへの責務移譲が未完了。
+- **違反2**
+  - file: `src/lcr/ui/main_window.py`
+  - function/class: `MainWindow._show_create_env_dialog`
+  - 違反種別: Port未使用（境界バイパス）
+  - 根拠: `EnvironmentCreationDialog` へ `ContainerManager` を直接受け渡し。
 
-Result summary:
-- Collected: 64
-- Passed: 64
-- Failed: 0
-- Errors: 0
-- Final: `64 passed in 2.17s`
+### 2.2 `tests/` の検証
+- 自動テスト群は存在し、`pytest tests/` は全件Pass。
+- ただし Phase 6.1 の数値合否指標（禁止依存0件等）達成を裏付ける状態としては、`src/` 側違反が残るため未達。
 
-## 2. Standards-Based Quality Verification (`docs/reference_standards.md`)
+### 2.3 `artifacts/` の検証
+- `artifacts/architecture_decoupling_assessment.md`: **存在**
+- `artifacts/refactoring_proposal.md`: **存在**
 
-### Scope checked
-- `src/`
-- `tests/`
-- `artifacts/`
-- Phase 6.1 acceptance criteria in `docs/requirements.md` (project root `requirements.md` was not present).
+## 3. `requirements.md` Phase 6.1 受け入れ基準適合性
 
-### Findings
-- `pytest tests/` full pass requirement is satisfied.
-- Required artifacts exist:
-  - `artifacts/architecture_decoupling_assessment.md`
-  - `artifacts/refactoring_proposal.md`
-- However, Phase 6.1 numeric acceptance criteria are not satisfied based on the submitted artifacts.
+### 3.1 適合
+- AC6.1-1: 主要違反を `file path + 関数/クラス + 違反種別 + 根拠` で列挙: **適合**
+- AC6.1-2: 改善方針（移管先レイヤ/IF方針）: **適合**
+- AC6.1-3: P0/P1/P2 優先度と実施順序: **適合**
+- AC6.1-4: 検証方法（テスト/指標）: **適合**
+- AC6.1-5: importグラフ結果（一覧と件数）: **適合**
+- AC6.1-6: 変更影響テスト手順: **適合**
 
-## 3. Phase 6.1 Compliance Check (docs/requirements.md)
+### 3.2 不適合
+- **AC6.1-7: 合否指標の数値固定を実測で満たすこと**
+  - 基準: 禁止依存0件、循環依存0件、UI層業務ロジック0件、境界テスト100% Pass
+  - 実測/記載:
+    - UI->Domain直参照: **2件**（0件基準を未達）
+  - 判定: **不適合**
 
-### AC6.1-7 violation (fixed numeric indicators)
-Requirement (AC6.1-7): numeric pass/fail indicators must be fixed and satisfied (e.g., prohibited dependency 0, cyclic dependency 0, UI business logic 0, boundary tests 100% pass).
-
-Evidence of violation:
-- `artifacts/architecture_decoupling_assessment.md` reports:
-  - `UI->Domain直参照`: **2件**
-- `artifacts/refactoring_proposal.md` reports remaining delta:
-  - `UI->Domain直参照` needs to be reduced to 0 as completion condition.
-
-Judgment:
-- Current measured value contradicts threshold `UI層業務ロジック件数: 0件` / decoupling completion target.
-- Therefore Phase 6.1 acceptance is **not met**.
-
-## 4. Final Decision
-
-- Test gate: PASS
-- Standards / Phase 6.1 gate: FAIL
-- Overall audit decision: **REJECT**
-- Status file value to write: `REJECT_TO_IMPLEMENT`
+## 4. 総合判定
+- pytest: Pass
+- ただし `reference_standards` 違反（UI責務混在/Port未使用）および Phase 6.1 AC6.1-7 未達あり。
+- **監査判定: REJECT_TO_IMPLEMENT**
