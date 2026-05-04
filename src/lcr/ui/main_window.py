@@ -22,16 +22,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtCore import Qt, Slot, QUrl
 
-from lcr.core.container.use_cases import (
-    EnvironmentBuildPreparationUseCase,
-    EnvironmentDraftUseCase,
-    RuntimeExecutionPreparationUseCase,
-)
-from lcr.core.history.use_cases import SaveExecutionHistoryUseCase
-from lcr.core.detector.use_cases import CodeAnalysisUseCase
-from lcr.core.audit.use_cases import CollectAuditMetadataUseCase, PrepareAuditMetadataUseCase
-from lcr.core.results.use_cases import LoadResultArtifactsUseCase
-from lcr.utils.path_helper import get_log_path
 from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 from lcr.ui.workers import ContainerWorker
 from lcr.ui.ports import AnalyzerPort, AuditMetadataPort, ContainerManagerPort, HistoryManagerPort
@@ -52,9 +42,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Legacy Code Reviver")
         self.resize(1200, 800)
 
-        deps = {}
-        if not (analyzer and container_manager and history_manager and audit_metadata_service):
-            deps = build_main_window_dependencies()
+        deps = build_main_window_dependencies()
 
         # backend components
         self.analyzer = analyzer or deps["analyzer"]
@@ -62,19 +50,15 @@ class MainWindow(QMainWindow):
         if not self.container_manager:
             raise RuntimeError("Failed to initialize ContainerManager")
         self.history_manager = history_manager or deps["history_manager"]
-        self.runtime_use_case = RuntimeExecutionPreparationUseCase()
-        self.environment_draft_use_case = EnvironmentDraftUseCase(self.analyzer, self.container_manager)
-        self.environment_build_preparation_use_case = EnvironmentBuildPreparationUseCase(self.container_manager)
-        self.save_history_use_case = SaveExecutionHistoryUseCase(self.history_manager)
         self.audit_metadata_service = audit_metadata_service or deps["audit_metadata_service"]
-        self.code_analysis_use_case = CodeAnalysisUseCase(self.analyzer, self.container_manager)
-        self.collect_audit_metadata_use_case = CollectAuditMetadataUseCase(
-            self.history_manager, self.audit_metadata_service
-        )
-        self.prepare_audit_metadata_use_case = PrepareAuditMetadataUseCase(
-            self.collect_audit_metadata_use_case, get_log_path
-        )
-        self.load_result_artifacts_use_case = LoadResultArtifactsUseCase()
+        self.runtime_use_case = deps["runtime_use_case"]
+        self.environment_draft_use_case = deps["environment_draft_use_case"]
+        self.environment_build_preparation_use_case = deps["environment_build_preparation_use_case"]
+        self.save_history_use_case = deps["save_history_use_case"]
+        self.code_analysis_use_case = deps["code_analysis_use_case"]
+        self.collect_audit_metadata_use_case = deps["collect_audit_metadata_use_case"]
+        self.prepare_audit_metadata_use_case = deps["prepare_audit_metadata_use_case"]
+        self.load_result_artifacts_use_case = deps["load_result_artifacts_use_case"]
         self.worker = None
         self.current_output_dir = None
         self.selection_mode = 'Auto'
