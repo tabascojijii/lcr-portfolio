@@ -1,56 +1,38 @@
-# Audit Report: docs/plan.md
+# Audit Report
 
-## 判定
-- 総合判定: **REJECT_TO_ARCHITECT**
-- 理由: `docs/reference_standards.md` を絶対基準として照合した結果、監査・ガバナンス標準（第1章）に対する必須要件の未充足があるため。
+## Verdict
+- REJECT_TO_ARCHITECT
 
-## 指摘事項（客観根拠付き）
+## Scope
+- Baseline: `docs/reference_standards.md`（絶対基準）
+- Target: `docs/plan.md`
 
-### 1) EMCSモデル準拠の客観メトリクス定義が不足（重大）
-- 基準要求:
-  - 「監査役は主観ではなく、信頼性と影響度に基づいた**客観メトリクス**でNG判定」
-- 計画の現状:
-  - `docs/plan.md` には禁止依存件数やゲート0件条件はあるが、EMCSとしての評価軸（信頼性・影響度）と判定基準の対応表が未定義。
-- 不適合内容:
-  - 監査判定の再現可能性を担保する評価モデルが不足し、監査者依存の判定余地が残る。
-- 修正指示:
-  - `EMCS評価表` を計画に追加し、最低でも以下を明記すること。
-    - メトリクス名（例: SRP違反件数、循環依存件数、UI責務違反件数、監査証跡欠落件数）
-    - 信頼性/影響度スコア定義
-    - スコアしきい値と `PASS/REJECT` ルール
-    - 測定方法（静的解析・テスト・ログ検査）
+## Findings (Objective, Prescriptive)
 
-### 2) Builder/Validator分離要件の明文化不足（重大）
-- 基準要求:
-  - 「実装役と思考プロセスを共有せず、**要件とDiffのみ**から敵対的レビューを行うこと」
-- 計画の現状:
-  - 差し戻し先のルーティング（Architect/Implement）はあるが、監査入力境界（参照可能情報）に関する規定がない。
-- 不適合内容:
-  - 監査が実装時の意図や思考ログに汚染されるリスクが残り、独立検証性を満たさない。
-- 修正指示:
-  - 監査プロトコルに以下を必須追加すること。
-    - Auditorが参照可能な入力を `requirements + reference_standards + diff + test/audit evidence` に限定
-    - 実装者メモ・思考過程・口頭説明の参照禁止
-    - 監査記録に「入力境界遵守チェック」を追加
+### 1. PyQt/PySide命名規約の計画欠落（シグナル・スロット）
+- failure_location: `docs/plan.md`（全体。該当規約の実装方針・検証ゲートが未定義）
+- violated_constraint: `docs/reference_standards.md` 第4章「PyQt / PySide モダンUIアーキテクチャ標準」内「シグナル・スロットの命名規則」
+- evidence:
+  - 基準では、シグナルは過去分詞形（例: `dataChanged`）、スロットは動詞（例: `update_display`）を要求。
+  - `docs/plan.md` には当該命名規約の強制方針、検査方法、ゲート条件（違反0件等）が記載されていない。
+- impact:
+  - 基準4章の必須規約を満たす保証が計画上成立していないため、実装後の監査で一貫性不備が再発するリスクが高い。
+- prescriptive_fix:
+  1. `docs/plan.md` に「Signal/Slot Naming Gate」を追加する。
+  2. ルールを明文化する（signal: past participle、slot: verb）。
+  3. 静的検査または命名lint手順を定義し、CIに組み込む。
+  4. Verification Gatesに「命名規約違反0件」を追加する。
+  5. REJECT Templateの `violated_constraint` で第4章命名規約を参照可能にする。
+- cause_layer: design
+- reject_target: REJECT_TO_ARCHITECT
+- done_condition:
+  - `docs/plan.md` に命名規約の実装方針・検査方法・ゲート条件が追加され、客観的に違反0件を判定可能な状態であること。
 
-### 3) 処方的エラーハンドリング要件の必須項目が未充足（中重大）
-- 基準要求:
-  - REJECT時に「失敗箇所」「違反制約」「具体的修正指示（ヒント）」を含むこと
-- 計画の現状:
-  - `P0-3` に「原因層・差し戻し先・修正完了条件」はあるが、上記3要素の必須化が明記されていない。
-- 不適合内容:
-  - 差し戻し品質のばらつきが生じ、監査ループ再発防止の要件を満たしきれない。
-- 修正指示:
-  - REJECTテンプレート必須項目を次で固定すること。
-    - `failure_location`（file/class/function/line）
-    - `violated_constraint`（基準章・条項ID）
-    - `prescriptive_fix`（実施手順または最小修正案）
-    - 既存の `cause_layer` `reject_target` `done_condition`
+## Pass/Fail Summary by Standard
+- 第1章（監査/ガバナンス）: 概ね適合
+- 第2章（Docker再現性）: 適合
+- 第3章（データ完全性/監査証跡）: 適合
+- 第4章（PyQt/PySide）: **不適合（命名規約統制の欠落）**
 
-## 適合している点（参考）
-- Docker再現性（ダイジェスト固定、EOLアーカイブ、constraints、マルチステージ）に整合。
-- 監査証跡（相対パス、ハッシュ4区分、`container_image_digest`、`git_commit_hash`）に整合。
-- UI境界・依存方向・Humble Objectの方向性は基準と整合。
-
-## 再監査の受け入れ条件
-- 上記3指摘を計画本文へ明示反映し、監査実行時に再現可能な判定仕様（誰が見ても同一結論）を提示すること。
+## Final Decision
+- 単一でも絶対基準違反があるため、総合判定は **REJECT_TO_ARCHITECT**。
