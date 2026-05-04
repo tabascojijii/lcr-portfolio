@@ -234,3 +234,33 @@ def test_prepare_run_preflight_skips_draft_when_image_exists():
 
     assert result.image_missing is False
     assert result.missing_image_build_draft is None
+
+
+def test_build_execution_log_lines_formats_runtime_summary():
+    use_case = RuntimeExecutionPreparationUseCase()
+    plan = use_case.prepare_execution_plan(
+        analyzer=_AnalyzerStub(),
+        container_manager=_ContainerManagerStub(),
+        history_manager=_HistoryManagerStub(),
+        code_text="print('x')",
+        script_path="script.py",
+        data_dir=None,
+        output_dir="results/run-1",
+        selected_rule={"id": "env-1", "name": "Env 1", "version": "2.7", "image": "env-1"},
+    )
+
+    lines = use_case.build_execution_log_lines(plan)
+
+    assert lines[0] == "Output Directory (Host): results/run-1"
+    assert "Selected Runtime: Env 1" in lines
+    assert "Image Tag: env-1" in lines
+
+
+def test_build_history_selection_reason_handles_manual_and_auto_modes():
+    use_case = RuntimeExecutionPreparationUseCase()
+
+    manual = use_case.build_history_selection_reason("Manual", {"image": "env-1"})
+    auto = use_case.build_history_selection_reason("Auto", None)
+
+    assert manual == "Manual: env-1"
+    assert auto == "Auto: Detected"

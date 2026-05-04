@@ -685,7 +685,6 @@ class MainWindow(QMainWindow):
 
             execution_plan = preflight.execution_plan
             selected_rule = execution_plan.selected_rule
-            reason_text = execution_plan.reason_text
             config = execution_plan.config
             
             # --- JIT Image Check ---
@@ -742,12 +741,8 @@ class MainWindow(QMainWindow):
             self.open_res_btn.setEnabled(False)
             self._clear_results_view()
             
-            output_dir_rel = execution_plan.output_dir_rel
-            self.console_log.append(f"Output Directory (Host): {output_dir_rel}")
-            self.console_log.append(f"\n[Environment Decision Engine]")
-            self.console_log.append(f"Selected Runtime: {execution_plan.runtime_name}")
-            self.console_log.append(f"Reason: {reason_text}")
-            self.console_log.append(f"Image Tag: {config['image']}")
+            for line in self.runtime_use_case.build_execution_log_lines(execution_plan):
+                self.console_log.append(line)
             self._last_run_context = execution_plan.run_context
             
             self.worker = ContainerWorker(
@@ -798,17 +793,11 @@ class MainWindow(QMainWindow):
         # Save History
         try:
             if self.current_output_dir:
-                # Determine detailed reason
-                reason = "Unknown"
-                if self.selection_mode == 'Manual':
-                    # Get selected tag
-                    idx = self.runtime_combo.currentIndex()
-                    rule = self.runtime_combo.itemData(idx, Qt.UserRole)
-                    tag = rule['image'] if rule else "unknown"
-                    reason = f"Manual: {tag}"
-                else:
-                    # Auto reason (would be nice to capture from resolve_runtime log, but for now simple)
-                    reason = "Auto: Detected"
+                idx = self.runtime_combo.currentIndex()
+                rule = self.runtime_combo.itemData(idx, Qt.UserRole) if idx >= 0 else None
+                reason = self.runtime_use_case.build_history_selection_reason(
+                    self.selection_mode, rule
+                )
                 self.save_history_use_case.save(
                     script_path=self.script_path_edit.text(),
                     runtime_name=self.runtime_combo.currentText(),

@@ -369,3 +369,25 @@ class RuntimeExecutionPreparationUseCase:
             image_missing=image_missing,
             missing_image_build_draft=build_draft,
         )
+
+    def build_execution_log_lines(self, execution_plan: RuntimeExecutionPlan) -> List[str]:
+        """Return presentation-ready execution summary lines."""
+        config = execution_plan.config
+        return [
+            f"Output Directory (Host): {execution_plan.output_dir_rel}",
+            "\n[Environment Decision Engine]",
+            f"Selected Runtime: {execution_plan.runtime_name}",
+            f"Reason: {execution_plan.reason_text}",
+            f"Image Tag: {config['image']}",
+        ]
+
+    def build_history_selection_reason(
+        self,
+        selection_mode: str,
+        selected_rule: Optional[Dict[str, Any]],
+    ) -> str:
+        """Build a stable history reason string from selection context."""
+        if selection_mode == "Manual":
+            image_tag = (selected_rule or {}).get("image", "unknown")
+            return f"Manual: {image_tag}"
+        return "Auto: Detected"
