@@ -4,6 +4,7 @@
 - 本ロードマップは `docs/reference_standards.md` を絶対基準として、`docs/plan.md` の実装順序と検証条件を実行可能な計画へ落とし込む。
 - 最優先は再発防止（RC-1〜RC-4）であり、機能追加はガバナンス固定後にのみ実施する。
 - 本書の判定基準は「要件充足」ではなく「基準逸脱ゼロ」である。
+- `docs/audit_report.md`（監査日: 2026-05-04）の結果を反映し、現時点の監査指摘は0件として運用する。
 
 ## 1. Absolute Standards (Non-Negotiable)
 以下は全フェーズで常時適用し、1件でも違反があれば即REJECTとする。
@@ -120,7 +121,13 @@ Exit Criteria:
 - `docs/plan.md` と監査基準の差分が解消されるまで実装着手禁止。
 - PASS時でもRC-1〜RC-3の非回帰確認を毎回実施し、未充足が1件でもあれば `REJECT_TO_ARCHITECT`。
 
-## 5. Definition of Done
+## 5. Audit Reflection (2026-05-04)
+- 参照監査: `docs/audit_report.md`
+- 監査判定: PASS
+- 指摘事項: なし
+- 運用ルール: 指摘0件は免除条件ではなく、Section 1〜4 の制約とゲートを継続適用する。
+
+## 6. Definition of Done
 - Phase 5 / 6 / 6.1 の受け入れ基準を満たす。
 - Hard Constraints 違反 0件。
 - `pytest tests/` 全件Pass。
@@ -128,5 +135,5 @@ Exit Criteria:
 - 監査証跡（hash4区分、digest、git hash、相対パス）完全充足。
 - Builder/Validator分離の入力境界違反 0件。
 
-## 6. Explicit Prohibition
+## 7. Explicit Prohibition
 - 本作業では `git commit` を実行しない。
