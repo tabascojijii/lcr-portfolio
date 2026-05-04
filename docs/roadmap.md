@@ -11,7 +11,7 @@
 1. 判定基準は常に `docs/reference_standards.md` を最優先する。
 2. 機能完了（pytest Pass）と構造完了（依存/責務準拠）を分離判定する。
 3. 構造違反は `REJECT_TO_ARCHITECT`、実装不足は `REJECT_TO_IMPLEMENT` とする。
-4. Builder/Validator 分離を強制し、差分・証跡・要件のみで監査する。
+4. Builder/Validator 分離を強制し、要件文書・差分(Diff)・テスト結果・監査証跡のみで監査する。
 5. すべての差し戻しは以下5要素を必須とする。
 - `failure_location`
 - `violated_standard`
@@ -172,6 +172,7 @@ KPI:
 2. 依存方向 `UI -> UseCase -> Domain -> Infrastructure`
 3. Port/Interface 経由の通信
 4. シグナル/スロット命名規約準拠
+5. シグナル/スロット命名規約を lint もしくは静的チェックに組み込み、CIで自動検出する
 
 KPI:
 1. UI業務ロジック残存 = 0
