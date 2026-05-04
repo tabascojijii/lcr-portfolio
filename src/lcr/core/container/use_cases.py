@@ -48,6 +48,14 @@ class RuntimeExecutionPlan:
 
 
 @dataclass
+class RuntimePreflightResult:
+    compatibility: ManualCompatibilityCheckResult
+    execution_plan: RuntimeExecutionPlan
+    image_missing: bool
+    missing_image_build_draft: Optional[MissingImageBuildDraft]
+
+
+@dataclass
 class BuildExecutionPlan:
     tag: str
     build_args: List[str]
@@ -315,4 +323,49 @@ class RuntimeExecutionPreparationUseCase:
             },
             output_dir_rel=history_manager.to_relative_path(output_dir_abs),
             runtime_name=prepared["selected_rule"].get("name", image_name),
+        )
+
+    def prepare_run_preflight(
+        self,
+        analyzer,
+        container_manager,
+        history_manager,
+        code_text: str,
+        script_path: str,
+        data_dir: Optional[str],
+        output_dir: Optional[str],
+        selected_rule: Optional[Dict[str, Any]],
+        selection_mode: str,
+    ) -> RuntimePreflightResult:
+        compatibility = self.prepare_manual_compatibility_check(
+            analyzer,
+            container_manager,
+            code_text,
+            selected_rule,
+            selection_mode,
+        )
+        execution_plan = self.prepare_execution_plan(
+            analyzer,
+            container_manager,
+            history_manager,
+            code_text,
+            script_path,
+            data_dir=data_dir,
+            output_dir=output_dir,
+            selected_rule=selected_rule,
+        )
+        image_missing = not self.image_exists(execution_plan.config["image"])
+        build_draft = None
+        if image_missing:
+            build_draft = self.prepare_missing_image_build_draft(
+                analyzer,
+                container_manager,
+                code_text,
+                execution_plan.selected_rule,
+            )
+        return RuntimePreflightResult(
+            compatibility=compatibility,
+            execution_plan=execution_plan,
+            image_missing=image_missing,
+            missing_image_build_draft=build_draft,
         )

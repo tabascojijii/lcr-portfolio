@@ -57,6 +57,9 @@ def test_prepare_guard_matches_imports_case_insensitively():
 class _AnalyzerStub:
     class _Probe:
         version_hint = "2.7"
+        imports = ["cv2"]
+        keywords = ["image"]
+        validation_year = None
 
     def analyze(self, _code_text):
         return self._Probe()
@@ -68,6 +71,14 @@ class _AnalyzerStub:
 class _ContainerManagerStub:
     def __init__(self, definition=None):
         self._definition = definition
+        self._runtime_rule = {
+            "id": "env-1",
+            "name": "Env 1",
+            "version": "2.7",
+            "libs": ["cv2"],
+            "image": "env-1",
+            "triggers": ["cv2"],
+        }
 
     def is_version_compatible(self, code_ver, rule_ver):
         return code_ver == rule_ver
@@ -77,6 +88,33 @@ class _ContainerManagerStub:
 
     def synthesize_definition_config(self, _analysis, base_rule_id):
         return {"id": base_rule_id, "tag": base_rule_id, "base_image": "python:2.7"}
+
+    def resolve_runtime(self, _search_terms, _version_hint):
+        return self._runtime_rule
+
+    def prepare_run_config(
+        self,
+        _analysis,
+        _script_path,
+        data_dir=None,
+        output_dir=None,
+        override_image_rule=None,
+    ):
+        image = (override_image_rule or self._runtime_rule)["image"]
+        host_dir = output_dir or "results/run-1"
+        return {
+            "image": image,
+            "host_work_dir": host_dir,
+            "script_name": "script.py",
+        }
+
+    def get_docker_run_args(self, _config):
+        return ["docker", "run", "env-1"]
+
+
+class _HistoryManagerStub:
+    def to_relative_path(self, value):
+        return value
 
 
 def test_prepare_manual_compatibility_check_returns_confirmation_when_mismatch():
@@ -148,3 +186,51 @@ def test_prepare_missing_image_build_draft_synthesizes_when_definition_missing()
     assert result.initial_config["id"] == "env-2"
     assert result.initial_config["tag"] == "env-2"
     assert result.recommendation_reason.startswith("Synthesized from code analysis")
+
+
+def test_prepare_run_preflight_builds_draft_when_image_missing():
+    use_case = RuntimeExecutionPreparationUseCase()
+    analyzer = _AnalyzerStub()
+    manager = _ContainerManagerStub(definition={"base_image": "python:3.10"})
+    history = _HistoryManagerStub()
+    use_case.image_exists = lambda _name: False
+
+    result = use_case.prepare_run_preflight(
+        analyzer=analyzer,
+        container_manager=manager,
+        history_manager=history,
+        code_text="print('x')",
+        script_path="script.py",
+        data_dir=None,
+        output_dir="results/run-1",
+        selected_rule={"id": "env-1", "version": "2.7", "image": "env-1"},
+        selection_mode="Manual",
+    )
+
+    assert result.image_missing is True
+    assert result.missing_image_build_draft is not None
+    assert result.missing_image_build_draft.env_id == "env-1"
+    assert result.execution_plan.config["image"] == "env-1"
+
+
+def test_prepare_run_preflight_skips_draft_when_image_exists():
+    use_case = RuntimeExecutionPreparationUseCase()
+    analyzer = _AnalyzerStub()
+    manager = _ContainerManagerStub(definition={"base_image": "python:3.10"})
+    history = _HistoryManagerStub()
+    use_case.image_exists = lambda _name: True
+
+    result = use_case.prepare_run_preflight(
+        analyzer=analyzer,
+        container_manager=manager,
+        history_manager=history,
+        code_text="print('x')",
+        script_path="script.py",
+        data_dir=None,
+        output_dir="results/run-1",
+        selected_rule={"id": "env-1", "version": "2.7", "image": "env-1"},
+        selection_mode="Manual",
+    )
+
+    assert result.image_missing is False
+    assert result.missing_image_build_draft is None

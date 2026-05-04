@@ -659,27 +659,7 @@ class MainWindow(QMainWindow):
             else:
                 selected_rule = None
 
-            compatibility = self.runtime_use_case.prepare_manual_compatibility_check(
-                self.analyzer,
-                self.container_manager,
-                current_content,
-                selected_rule,
-                self.selection_mode,
-            )
-            if compatibility.requires_confirmation:
-                res = QMessageBox.warning(
-                    self,
-                    "Compatibility Warning",
-                    compatibility.message,
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
-                )
-                if res == QMessageBox.No:
-                    self._reset_buttons()
-                    self.runtime_combo.setEnabled(True)
-                    return
-
-            execution_plan = self.runtime_use_case.prepare_execution_plan(
+            preflight = self.runtime_use_case.prepare_run_preflight(
                 self.analyzer,
                 self.container_manager,
                 self.history_manager,
@@ -688,7 +668,22 @@ class MainWindow(QMainWindow):
                 data_dir=data_dir,
                 output_dir=output_dir,
                 selected_rule=selected_rule,
+                selection_mode=self.selection_mode,
             )
+            if preflight.compatibility.requires_confirmation:
+                res = QMessageBox.warning(
+                    self,
+                    "Compatibility Warning",
+                    preflight.compatibility.message,
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if res == QMessageBox.No:
+                    self._reset_buttons()
+                    self.runtime_combo.setEnabled(True)
+                    return
+
+            execution_plan = preflight.execution_plan
             selected_rule = execution_plan.selected_rule
             reason_text = execution_plan.reason_text
             config = execution_plan.config
@@ -700,7 +695,7 @@ class MainWindow(QMainWindow):
             # Note: prepare_run_config doesn't return existence, so we check here manually or via helper
             # For robustness, we'll try a lightweight subprocess check
             # Check if image exists
-            if not self.runtime_use_case.image_exists(image_name):
+            if preflight.image_missing:
                 # Image missing! Prompt JIT Build
                 print(f"[Info] Image {image_name} not found. Build is required.")
                 ans = QMessageBox.question(
@@ -714,12 +709,10 @@ class MainWindow(QMainWindow):
                 
                 
                 if ans == QMessageBox.Yes:
-                    build_draft = self.runtime_use_case.prepare_missing_image_build_draft(
-                        self.analyzer,
-                        self.container_manager,
-                        current_content,
-                        selected_rule,
-                    )
+                    build_draft = preflight.missing_image_build_draft
+                    if not build_draft:
+                        self._reset_buttons()
+                        return
                     env_id = build_draft.env_id
                     dialog = EnvironmentCreationDialog(
                         parent=self,
