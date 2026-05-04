@@ -1,34 +1,56 @@
-# Audit Report: docs/roadmap.md
+# Audit Report
 
-## 監査対象
-- 基準: `docs/plan.md`（絶対基準）
-- 基準: `docs/reference_standards.md`（絶対基準）
-- 被監査: `docs/roadmap.md`
+## 1. 実行結果
+- 実行コマンド: `pytest tests/`
+- 結果: **PASS (61 passed, 0 failed)**
+- 実行日時: 2026-05-04
 
-## 判定
-- 総合判定: **PASS**
-- 判定理由: `docs/roadmap.md` は、`docs/plan.md` および `docs/reference_standards.md` の必須制約・実行順序・検証ゲート・監査運用分離要件を欠落なく満たしている。
+### pytest ログ要約
+- `collected 61 items`
+- `61 passed in 1.59s`
 
-## 検証結果
-1. Hard Constraints 整合
-- RC-1（Data Integrity）: 4区分ハッシュ、`container_image_digest`、`git_commit_hash`、相対パス強制、絶対パスfail-fastを確認。
-- RC-2（Dependency Boundary）: 許可依存方向、禁止依存5種、Port（`abc.ABC`/`typing.Protocol`）経由強制を確認。
-- RC-3（Humble Object）: UI禁止行為とUI許可行為の境界定義を確認。
-- RC-4（Signal/Slot Naming）: 命名規約とCI/Lint機械検証要件を確認。
+## 2. 基準照合（docs/reference_standards.md）
 
-2. Docker再現性整合
-- `FROM` digest固定、EOL APT archive redirect、`constraints.txt`、multi-stage要件を確認。
+### 2.1 参照基準
+- UIはHumble Objectとして業務ロジックを持たないこと。
+- 依存方向は `UI -> UseCase -> Domain -> Infrastructure` を順守すること。
+- 逸脱がある場合は REJECT 判定とすること。
 
-3. 監査ガバナンス整合
-- Builder/Validator分離、Auditor入力境界（要件+Diffのみ）、REJECT必須記載項目（失敗箇所/違反制約/証拠/修正ヒント/再検証条件/ルーティング先）を確認。
+### 2.2 検証対象
+- `src/`
+- `tests/`
+- `artifacts/`
 
-4. 実行順序・検証ゲート整合
-- P0→P1→P2→P3 の mandatory 順序を確認。
-- Functional/Structural/Audit/EMCS（M1〜M6）の各ゲート要件を確認。
-- Loop Prevention（`REJECT_TO_ARCHITECT`/`REJECT_TO_IMPLEMENT`、差分解消まで実装着手禁止、PASS時の非回帰確認）を確認。
+### 2.3 指摘事項（違反）
+1. **UI責務混在 / 依存方向規約違反（重大）**
+   - 根拠: `artifacts/architecture_decoupling_assessment.md`
+   - 記載違反件数: `UI->Domain直参照 6件`
+   - 代表箇所:
+     - `src/lcr/ui/main_window.py` `MainWindow._run_container`
+     - `src/lcr/ui/main_window.py` `MainWindow._build_audit_metadata`
+     - `src/lcr/ui/main_window.py` `MainWindow._load_results`
+     - `src/lcr/ui/main_window.py` `MainWindow._execute_save_and_build`
+     - `src/lcr/ui/main_window.py` `MainWindow._to_project_relative_path`
+   - 違反基準:
+     - Humble Object 原則違反（UI層で業務判断/整形/オーケストレーション）
+     - `UI -> UseCase -> Domain` 分離方針への不適合
 
-## 指摘事項
-- なし。
+## 3. Phase 6.1 成果物・受け入れ基準確認
 
-## 結論
-- `docs/roadmap.md` は絶対基準に適合。差し戻し不要。
+### 3.1 成果物存在確認
+- `artifacts/architecture_decoupling_assessment.md`: 存在
+- `artifacts/refactoring_proposal.md`: 存在
+
+### 3.2 受け入れ基準適合性（docs/requirements.md / Phase 6.1）
+- AC6.1-1: 満たす（違反一覧の形式あり）
+- AC6.1-2: 満たす（改善方針あり）
+- AC6.1-3: 満たす（P0/P1/P2あり）
+- AC6.1-4: 満たす（検証方法あり）
+- AC6.1-5: 満たす（一覧と件数あり）
+- AC6.1-6: 満たす（変更影響テスト手順あり）
+- AC6.1-7: **未達**
+  - 要件: 禁止依存0件 / 循環依存0件 / UI層業務ロジック0件 / 境界テスト100% Pass
+  - 実測: `UI->Domain直参照 6件`（0件要件を満たさない）
+
+## 4. 最終判定
+- テストはPASSだが、基準違反および AC6.1-7 未達があるため **REJECT_TO_IMPLEMENT**。
