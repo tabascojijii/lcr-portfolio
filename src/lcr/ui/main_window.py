@@ -924,53 +924,31 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Missing Path", f"Directory not found:\n{abs_path}")
 
     def _execute_save_and_build(self, config):
-        """Save config and trigger build."""
+        """Save config and trigger build via use-case plan."""
         try:
-            available_runtimes = self.environment_build_preparation_use_case.list_available_runtimes()
-            plan = self.environment_build_preparation_use_case.prepare_execution_plan(
-                config,
-                available_runtimes,
-            )
+            plan = self._prepare_build_execution_plan(config)
             name = plan.tag
             self.console_log.append(f"[Synthesizer] Definition saved for tag: {name}")
-            
-            # 2. Reload Manager
+
             self.environment_build_preparation_use_case.reload_runtime_definitions()
             self._populate_runtime_combo()
-            
-            # 3. Select New Env
-            # Find the new rule
-            self.runtime_combo.blockSignals(True)
-            index = self.runtime_combo.findText(f"{name} ({name})") # Name format in manager logic: stem (tag)
-            # Actually name logic in manager: f"{json_file.stem} ({data.get('tag')})"
-            # Our file stem is safe_name.
-            # Best effort find:
-            if index == -1:
-                 # Try finding by data tag
-                 for i in range(self.runtime_combo.count()):
-                     r = self.runtime_combo.itemData(i, Qt.UserRole)
-                     if r['image'] == plan.selected_runtime_image:
-                         index = i
-                         break
-            
-            if index >= 0:
-                self.runtime_combo.setCurrentIndex(index)
-                self.selection_mode = 'Manual'
-                # Update display
-                self._update_runtime_display(self.runtime_combo.itemData(index, Qt.UserRole), is_manual=True)
-            self.runtime_combo.blockSignals(False)
-            
-            # 4. Trigger Build
-            build_args = plan.build_args
-            
+
+            self._select_runtime_by_image_tag({"tag": plan.selected_runtime_image})
             self.console_log.append(f"[Build] Starting build for {name}...")
-            self.tabs.setCurrentIndex(0) # Show Console
-            
-            self._start_worker(build_args, f"Build: {name}")
-            
+            self.tabs.setCurrentIndex(0)
+            self._start_worker(plan.build_args, f"Build: {name}")
+
         except Exception as e:
             QMessageBox.critical(self, "Build Error", f"Failed to initiate build: {e}")
             self.console_log.append(f"[Build Error] {e}")
+
+    def _prepare_build_execution_plan(self, config):
+        """Create a build execution plan from current config via use case."""
+        available_runtimes = self.environment_build_preparation_use_case.list_available_runtimes()
+        return self.environment_build_preparation_use_case.prepare_execution_plan(
+            config,
+            available_runtimes,
+        )
 
     def _start_worker(self, args, script_name):
         """Common worker starter."""
