@@ -58,6 +58,7 @@ class CollectAuditMetadataUseCase:
             "reason",
             "image_digest",
             "container_image_digest",
+            "git_commit",
             "git_commit_hash",
             "script_path_rel",
             "script_sha256",
@@ -113,6 +114,7 @@ class PrepareAuditMetadataUseCase:
         metadata = self.execute(last_run_context, output_dir, exit_code)
         return metadata, [
             f"[Audit] image_digest: {metadata.get('image_digest', '')}",
+            f"[Audit] git_commit: {metadata.get('git_commit', '')}",
             f"[Audit] git_commit_hash: {metadata.get('git_commit_hash', '')}",
             f"[Audit] script_path_rel: {metadata.get('script_path_rel', '')}",
             f"[Audit] script_sha256: {metadata.get('script_sha256', '')}",

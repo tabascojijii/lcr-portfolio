@@ -36,6 +36,7 @@ class AuditMetadataService:
         output_hashes = self._hash_path_pairs(output_files or [], output_files_rel or [])
         param_sha256 = self._sha256_json(param_payload or {})
         image_digest = self._resolve_image_digest(image_name)
+        git_commit_hash = self._resolve_git_commit_hash()
         metadata: Dict = {
             "operation_type": operation_type,
             "timestamp": timestamp,
@@ -46,7 +47,8 @@ class AuditMetadataService:
             # Required provenance
             "image_digest": image_digest,
             "container_image_digest": image_digest,
-            "git_commit_hash": self._resolve_git_commit_hash(),
+            "git_commit": git_commit_hash,
+            "git_commit_hash": git_commit_hash,
             "script_path_rel": relative_script_path,
             "script_sha256": self._sha256_file(script_path),
             "param_hash": param_sha256,

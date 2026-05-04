@@ -45,6 +45,7 @@ def test_collect_returns_expected_metadata(tmp_path, monkeypatch):
     )
 
     assert metadata["image_digest"] == "repo/image@sha256:abc"
+    assert metadata["git_commit"] == "deadbeef"
     assert metadata["git_commit_hash"] == "deadbeef"
     assert metadata["script_path_rel"] == "rel/script.py"
     assert metadata["script_sha256"] == expected_sha
@@ -73,6 +74,7 @@ def test_collect_falls_back_when_image_or_git_unavailable(tmp_path, monkeypatch)
     metadata = service.collect("missing-image", str(script), str(Path("script.py")))
 
     assert metadata["image_digest"] == "unavailable:missing-image"
+    assert metadata["git_commit"] == "unavailable"
     assert metadata["git_commit_hash"] == "unavailable"
     assert metadata["input_hashes"] == {}
     assert metadata["output_hashes"] == {}

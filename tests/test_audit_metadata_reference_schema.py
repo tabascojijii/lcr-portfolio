@@ -34,6 +34,7 @@ def test_collect_includes_reference_schema_fields(tmp_path, monkeypatch):
     )
 
     assert metadata["required_imports"] == ["cv2", "numpy"]
+    assert metadata["git_commit"] == "deadbeef"
     assert metadata["environment_capability"] == {"python": "3.10", "imports": ["numpy"]}
     assert metadata["mismatch_result"] == {"missing": ["cv2"]}
     assert metadata["guard_state"] == "blocked"

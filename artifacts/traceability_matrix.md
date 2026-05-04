@@ -1,7 +1,7 @@
 # Standards Traceability Matrix
 
 - Baseline: `docs/reference_standards.md`
-- Updated: 2026-05-04
+- Updated: 2026-05-05
 - Update timing rule: at M1 completion and before each phase transition gate.
 
 | Standard Section | KPI | Evidence Artifact | Verification Method | Gate Timing |
@@ -16,4 +16,4 @@
 
 ## Gate Decision Note
 
-Any KPI above threshold or missing evidence artifact is treated as `REJECT_TO_PM` at phase transition.
+Any KPI above threshold or missing evidence artifact is treated as `REJECT_TO_ARCHITECT` at phase transition.
