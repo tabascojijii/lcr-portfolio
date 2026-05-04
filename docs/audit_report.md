@@ -1,49 +1,61 @@
 # Audit Report
 
-## 1. Pytest結果
-- 実行コマンド: `pytest tests/`
-- 結果: **PASS**
-- サマリ: `59 passed in 1.84s`
+## 1) Test Execution Result (`pytest tests/`)
 
-## 2. 参照基準 (`docs/reference_standards.md`) 照合
+- Command: `pytest tests/`
+- Result: **PASS**
+- Summary: `59 passed in 1.88s`
 
-### 2.1 違反事項
-1. `src/lcr/ui/main_window.py:609` (`MainWindow._run_container`)
-- 違反基準: **4. PyQt/PySide モダンUIアーキテクチャ標準**
-- 違反内容: UI層が `prepare_execution` 後の実行制御、イメージ存在判定、再ビルド分岐、`container_manager.get_docker_run_args(...)` 呼び出しを直接保持。
-- 根拠: Humble Object 原則（UIは表示更新中心）と依存方向規律に反し、業務判断・外部I/OオーケストレーションがUIへ混在。
+## 2) Reference Standards Conformance Check (`docs/reference_standards.md`)
 
-2. `src/lcr/ui/main_window.py:924` (`MainWindow._build_audit_metadata`)
-- 違反基準: **4. PyQt/PySide モダンUIアーキテクチャ標準**
-- 違反内容: UI層が監査メタデータの構築/出力責務を保持。
-- 根拠: 監査整形責務はUseCase/Domain側へ分離すべき。
+### Scope checked
+- `src/`
+- `tests/`
+- `artifacts/`
 
-3. `src/lcr/ui/main_window.py:1043` (`MainWindow._execute_save_and_build`)
-- 違反基準: **4. PyQt/PySide モダンUIアーキテクチャ標準**
-- 違反内容: 環境定義保存後の再読込、選択更新、ビルド起動の業務オーケストレーションをUIが実装。
-- 根拠: UI責務混在（業務制御の過多）。
+### Findings
 
-### 2.2 判定
-- `tests/` は全件Passだが、`src/` は上記のUI責務混在により基準未達。
-- `artifacts/` の評価文書は存在するが、下記Phase 6.1受け入れ基準で不足あり。
+1. **UI責務混在が残存（基準4違反）**
+- Evidence: `artifacts/architecture_decoupling_assessment.md` に `src/lcr/ui/main_window.py` の `UI->Domain直参照` が6件列挙されている。
+- Violated standard: `docs/reference_standards.md` セクション4
+  - Humble Object パターン（UIに業務判断・フォーマット処理・実行オーケストレーションを持たせない）
+  - 依存方向規律（UIはUseCase経由に統制）
+- Impact: UI変更時の影響範囲が広く、テスト容易性と保守性を低下させる。
+- Prescriptive fix:
+  - `main_window.py` の実行構成決定・監査整形・結果整形・作成導線判定を UseCase へ移管する。
+  - UIは入力収集/表示更新のみへ限定する。
 
-## 3. Phase 6.1 受け入れ基準適合性 (`docs/requirements.md`)
+2. **Phase 6.1 AC未達（成果物の必須情報不足）**
+- Evidence source:
+  - `artifacts/architecture_decoupling_assessment.md`
+  - `artifacts/refactoring_proposal.md`
+- Requirement reference: `docs/requirements.md` Phase 6.1
+- Violations:
+  - **AC6.1-5 未達（部分）**: importグラフの「一覧と件数」はあるが、**抽出手順**（どのコマンド/ツールで取得したか）が明記されていない。
+  - **AC6.1-6 未達**: 変更影響テストの**実施手順（変更シナリオ、期待影響範囲、合否条件）**が明記されていない。
+  - **AC6.1-7 未達（部分）**: 合否指標の数値固定は一部示されるが、**境界テスト100% Pass 等の固定指標セットと実測値・判定**が明示されていない。
+- Impact: 改善計画の検証可能性・再現性が不足し、監査ゲートとして不十分。
+- Prescriptive fix:
+  - `architecture_decoupling_assessment.md` に importグラフ抽出コマンド、対象範囲、除外規則、実行日時、結果サマリを追記。
+  - 「UI変更時」「Domain変更時」の2シナリオ以上で、期待影響範囲と合否条件を数値付きで定義。
+  - 禁止依存0件、循環依存0件、UI層業務ロジック0件、境界テストPass率等を固定閾値として記載し、実測値と最終判定を併記。
 
-### 3.1 成果物の存在
-- `artifacts/architecture_decoupling_assessment.md`: 存在確認済み
-- `artifacts/refactoring_proposal.md`: 存在確認済み
+## 3) Required Artifact Presence Check
 
-### 3.2 AC適合確認
-- AC6.1-1: 適合（違反を `file path + 関数/クラス + 違反種別 + 根拠` 形式で列挙）
-- AC6.1-2: 概ね適合（移管先/Port方針あり）
-- AC6.1-3: 適合（P0/P1/P2の優先度・順序あり）
-- AC6.1-4: 適合（テスト戦略の記載あり）
-- AC6.1-5: 適合（`UI->Domain直参照` / `逆方向依存` / `循環依存` の一覧・件数あり）
-- AC6.1-6: **不適合**（変更影響テストの実施手順: 変更シナリオ・期待影響範囲・合否条件が明記不足）
-- AC6.1-7: **不適合**（合否指標の数値固定値が未定義。例: 禁止依存0件、UI層業務ロジック0件等の閾値未記載）
+- `artifacts/architecture_decoupling_assessment.md`: **Exists**
+- `artifacts/refactoring_proposal.md`: **Exists**
 
-## 4. 最終判定
-- 判定: **REJECT_TO_IMPLEMENT**
-- 理由:
-  - `docs/reference_standards.md` に対する `src/` のUI責務混在違反を確認。
-  - Phase 6.1 受け入れ基準 AC6.1-6 / AC6.1-7 未充足を確認。
+## 4) Phase 6.1 Acceptance Decision
+
+- AC6.1-1: PASS
+- AC6.1-2: PASS
+- AC6.1-3: PASS
+- AC6.1-4: PASS
+- AC6.1-5: **FAIL (手順記載不足)**
+- AC6.1-6: **FAIL (変更影響テスト手順不足)**
+- AC6.1-7: **FAIL (固定指標の実測・判定不足)**
+
+## 5) Final Audit Verdict
+
+- **REJECT_TO_IMPLEMENT**
+- Reason: `pytest` はPassだが、Reference Standards違反（UI責務混在）と Phase 6.1 受け入れ基準未達（AC6.1-5/6/7）があるため。
