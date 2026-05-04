@@ -181,7 +181,8 @@
 - Phase 5 / Phase 6 / Phase 6.1 の受け入れ基準を満たす。
 - Section 1〜2 の Hard Constraints 違反が0件。
 - `pytest tests/` 全件Pass。
-- EMCS（M1〜M5）全て閾値内。
+- EMCS（M1〜M6）全て閾値内。
+- Signal/Slot命名規約違反0件（Signal=過去分詞、Slot=動詞）。
 - 監査証跡（hash4区分、digest、git hash、相対パス）が全件充足。
 - Builder/Validator分離の入力境界違反0件。
 
