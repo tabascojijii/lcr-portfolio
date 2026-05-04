@@ -35,6 +35,10 @@
 
 ### 2.2 Humble Object
 - UIで禁止: 業務判断、永続化、Docker操作、外部I/O、複雑計算、業務意味を持つ整形。
+- Qt命名規約（reference standards 第4章）を強制する。
+  - Signal: 過去分詞形（例: `dataChanged`, `executionFinished`）
+  - Slot: 動詞開始のlower_snake_case（例: `update_display`, `refresh_capabilities`）
+  - UIイベント接続時に、命名規約外のSignal/Slotは新規追加禁止。
 
 ### 2.3 監査不変条件
 - すべて相対パス（絶対パス検出時はfail-fast）。
@@ -62,6 +66,12 @@
 2. ゲート実装
 - 禁止依存検査（`UI->Domain`、`UseCase->Qt`、逆依存、循環）をCI化。
 - UI責務違反検査をCI化。
+- Signal/Slot命名検査をCI化（違反0件を必須）。
+  - 最低実装: `src/lcr/ui/**/*.py` を対象に、`Signal(...)` 定義名と `@Slot` / 接続先メソッド名を静的走査。
+  - 判定規則:
+    - Signal名: lowerCamelCase かつ過去分詞終端（`...ed` / `...en` を基本ルールとし、例外語彙は許可リスト管理）
+    - Slot名: lower_snake_case かつ動詞語彙で開始（例外は監査承認付きで許可）
+  - 検査結果を `artifacts/signal_slot_naming_report.md` に出力し、CIで保存。
 - 監査必須項目欠落検査をCI化。
 3. 監査ルーティング標準化
 - REJECTテンプレートに「失敗箇所」「違反制約」「具体修正指示」「原因層」「差し戻し先」「修正完了条件」を必須追加。
@@ -147,6 +157,8 @@
 - Port未経由境界越え0。
 - 循環依存0。
 - UI責務違反0。
+- Signal命名規約違反0（過去分詞形）。
+- Slot命名規約違反0（動詞開始）。
 
 ### 5.3 Audit Gate
 - 相対パス違反0。
@@ -171,14 +183,15 @@
 - EMCS評価表に基づく全メトリクス 0件（`EMCS_score = 0`）を提示できる。
 - 成果物（assessment/proposal）に証拠付きで追跡可能。
 
-## 9. REJECT Template（必須）
+## 8. REJECT Template（必須）
 - `failure_location`（file/class/function/line）
 - `violated_constraint`（基準章・条項ID）
+- 命名規約違反時は `docs/reference_standards.md` 第4章「シグナル・スロットの命名規則」を必ず参照する。
 - `prescriptive_fix`（実施手順または最小修正案）
 - `cause_layer`（design / implementation）
 - `reject_target`（REJECT_TO_ARCHITECT / REJECT_TO_IMPLEMENT）
 - `done_condition`（再監査でPASSとなる客観条件）
 - `input_boundary_check`（pass/fail）
 
-## 8. Explicit Prohibition
+## 9. Explicit Prohibition
 - 本タスクでは `git commit` を実行しない。
