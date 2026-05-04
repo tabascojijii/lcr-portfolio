@@ -1,35 +1,19 @@
-# Audit Report
+# Audit Report (Auditor)
 
 ## 監査対象
-- 基準: `docs/reference_standards.md`（絶対基準）
-- 被監査計画: `docs/plan.md`
+- 基準: `docs/plan.md` / `docs/reference_standards.md`
+- 被監査: `docs/roadmap.md`
 
 ## 総合判定
-- 判定: **PASS（問題なし）**
-- 監査ステータス: `AUDIT_PASS_PLAN`
+- 判定: PASS
+- ステータス: `AUDIT_PASS_ROADMAP`
 
-## 検証結果（基準適合性）
-1. 監査/ガバナンス標準
-- EMCSに基づく客観メトリクス（M1〜M6）が定義されており適合。
-- Builder/Validator分離が明記され、Auditor入力境界（requirements/diff）が規定されており適合。
-- REJECT時の処方的要件（失敗箇所・違反制約・証拠・修正ヒント等）が明記されており適合。
-
-2. Docker再現性標準
-- `FROM` の digest固定、EOLリポジトリのarchive切替、`constraints.txt`、マルチステージビルドが必須化されており適合。
-
-3. データ完全性/監査証跡標準
-- `container_image_digest` と `git_commit_hash` の記録義務が明記され適合。
-- 相対パス強制と絶対パスFailが明記され適合。
-- ハッシュ対象（入力/出力/パラメータ/監査ログ）の全件必須化が明記され適合。
-
-4. PyQt/PySideアーキテクチャ標準
-- Humble Objectの適用（UI責務制限）が明記され適合。
-- 依存方向（UI外側、Domain/UseCaseのQt非依存）が明記され適合。
-- `abc.ABC` / `typing.Protocol` による境界通信が明記され適合。
-- Signal/Slot命名規約（Signal=過去分詞、Slot=動詞）の必須化とCI検証が明記され適合。
+## 検証結果
+- `docs/plan.md` の Hard Constraints（RC-1〜RC-4）に対応する要件が `docs/roadmap.md` に明示されていることを確認。
+- `docs/reference_standards.md` の絶対基準（EMCS、Builder/Validator分離、処方的REJECT、Docker再現性、Data Integrity、UI/依存方向、Port境界、Signal/Slot命名）を `docs/roadmap.md` が保持していることを確認。
+- 実行順序（P0→P1→P2→P3→P3.1）と検証ゲート（Functional/Structural/Audit/EMCS）が `docs/plan.md` と整合していることを確認。
+- ループ防止プロトコル（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` の固定、差分残存時の実装禁止、RC-1〜RC-3非回帰強制）が維持されていることを確認。
+- 禁止事項（Git更新系コマンド不実行）方針が維持されていることを確認。
 
 ## 指摘事項
 - なし。
-
-## 監査結論
-- `docs/plan.md` は `docs/reference_standards.md` の必須要件を満たしており、基準逸脱は検出されない。
