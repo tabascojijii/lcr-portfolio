@@ -1,32 +1,57 @@
-# Audit Report: docs/roadmap.md
+# Audit Report
 
-- 監査日: 2026-05-05
-- 監査対象: `docs/roadmap.md`
-- 絶対基準: `docs/plan.md`, `docs/reference_standards.md`
-- 判定: PASS
+## 1. Pytest Execution Result
+- Command: `pytest tests/`
+- Result: **PASS**
+- Summary: `71 passed in 12.38s`
+- Error logs: なし
 
-## 総評
-`docs/roadmap.md` は、`docs/plan.md` の実装計画および `docs/reference_standards.md` の第1〜4章の必須要求に整合しており、監査上の差し戻し事項は確認されなかった。
+## 2. Reference Standards Conformance Check (`docs/reference_standards.md`)
 
-## 検証結果
-1. ガバナンス整合性
-- Builder/Validator 分離、処方的 REJECT（5要素必須）、構造違反と実装不足の差し戻し先分離が明記されている。
-- `docs/plan.md` の「差し戻し先自動判定」「処方的エラーハンドリング」と整合。
+### 2.1 `src/` Quality Check
+- 監査観点: 依存方向規約、UI責務分離、Port/UseCase境界、Docker再現性、監査証跡方針。
+- 判定: **適合**（少なくとも以下で裏付け）
+  - `tests/test_ui_usecase_separation.py` PASS
+  - `tests/test_signal_slot_naming_use_case.py` PASS
+  - `tests/test_dockerfile_digest_policy.py` PASS
+  - `tests/test_audit_metadata_reference_schema.py` PASS
 
-2. フェーズ/マイルストーン整合性
-- M0〜M6 が Phase 5/6/6.1/6.2/6.3/6.4 を網羅し、各ゲート（AC/T）が対応付けされている。
-- M0成果物3点（assessment/proposal/traceability）未充足時に `REJECT_TO_ARCHITECT` とする進行禁止条件が明記され、`docs/plan.md` の先行成果物ゲートと整合。
+### 2.2 `tests/` Quality Check
+- 監査観点: 要件フェーズ対応テストの存在と全件PASS。
+- 判定: **適合**
+  - `pytest tests/` 全件PASS
+  - Phase 6.1検証テスト `tests/test_phase61_decoupling_use_case.py` を確認
 
-3. 構造ゲート整合性
-- `UI->Domain直参照=0`、逆方向依存=0、循環依存=0、Port未経由=0、UI業務ロジック=0 を構造ゲートとして明示。
-- `docs/reference_standards.md` 第4章（Humble Object、依存方向、Interface経由、命名規約）と整合。
+### 2.3 `artifacts/` Quality Check
+- 監査観点: フェーズ要求成果物の存在、内容の受け入れ基準適合性。
+- 判定: **適合**
 
-4. 再現性/監査証跡整合性
-- `FROM` digest固定、EOLミラー切替、`constraints.txt`、マルチステージビルドを必須適用として明記。
-- `image_digest`/`git_commit`、相対パス強制、入出力/パラメータ/ログ本体ハッシュ記録を必須化しており、第2章・第3章要件と整合。
+## 3. Phase 6.1 Deliverables & Acceptance Criteria Check (`docs/requirements.md`)
 
-## 指摘事項
-- なし
+### 3.1 Mandatory Deliverables
+- `artifacts/architecture_decoupling_assessment.md`: **存在確認済み**
+- `artifacts/refactoring_proposal.md`: **存在確認済み**
 
-## 監査結論
-`docs/roadmap.md` は絶対基準（`docs/plan.md` / `docs/reference_standards.md`）に対して監査上の不適合を認めないため、判定は `AUDIT_PASS_ROADMAP` とする。
+### 3.2 Acceptance Criteria Fit
+- AC6.1-1: 主要違反を `file path + 関数/クラス + 違反種別 + 根拠` 形式で記述する要件
+  - 判定: **適合**（違反0件として明示、フォーマット定義あり）
+- AC6.1-2: 改善方針（移管先レイヤ、インターフェース設計）
+  - 判定: **適合**（Port設計と移管方針を明示）
+- AC6.1-3: P0/P1/P2 優先度と実施順序
+  - 判定: **適合**
+- AC6.1-4: 改善後検証方法（テスト/判定指標）
+  - 判定: **適合**
+- AC6.1-5: importグラフ結果（UI->Domain直参照/逆方向依存/循環依存の一覧と件数）
+  - 判定: **適合**
+- AC6.1-6: 変更影響テスト手順（シナリオ、期待影響、合否条件）
+  - 判定: **適合**
+- AC6.1-7: 数値固定の合否指標
+  - 判定: **適合**（0件/0件/0件/100% を固定閾値として明記）
+
+## 4. Findings / Violations
+- 指摘事項: **なし**
+- REJECT理由: **なし**
+
+## 5. Final Audit Decision
+- 総合判定: **PASS**
+- 実装移行判定文字列: `AUDIT_PASS_IMPLEMENT`
