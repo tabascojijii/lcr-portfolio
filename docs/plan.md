@@ -183,7 +183,35 @@
 - `constraints.txt` 適用
 - マルチステージビルド
 
-## 8. 定量KPI（完了判定）
+## 8. 監査ガバナンス運用（Builder/Validator 分離 + 処方的差し戻し）
+
+### 8.1 Builder/Validator 分離（必須）
+
+1. 監査（Validator）は、実装（Builder）と独立した判定主体として運用する。
+2. 監査入力は `要件文書` `差分(Diff)` `テスト結果` `監査証跡` のみとし、実装者の意図説明・思考過程は判定根拠に使用しない。
+3. 判定は `docs/reference_standards.md` と `docs/requirements.md` への適合性のみで実施する。
+4. この分離要件に違反した監査結果は無効とし、再監査を必須化する。
+
+### 8.2 処方的エラーハンドリング（差し戻しテンプレート必須）
+
+`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` のいずれでも、差し戻しメッセージは以下5項目を必須とする。
+
+1. `failure_location`: 失敗箇所（`file path + class/function`）
+2. `violated_standard`: 違反した基準/要件ID（例: `reference_standards 1章` / `AC6.1-5`）
+3. `evidence`: 客観的証拠（実測値・ログ・差分断片）
+4. `required_fix`: 必須修正内容（移管先レイヤ、必要なPort、削除すべき直参照など）
+5. `retest_condition`: 再検証条件（実行コマンド、期待結果、合格閾値）
+
+上記5項目の欠落が1つでもある差し戻しは不受理とし、監査側へ修正差し戻しする。
+
+## 9. UI命名規約（PyQt/PySide）
+
+1. シグナル名は過去分詞形を使用する（例: `dataChanged`, `executionFinished`）。
+2. スロット名は動詞開始の操作名を使用する（例: `update_display`, `start_cleanup`）。
+3. 新規/変更コードはレビュー時に命名規約チェックを必須化し、違反は `REJECT_TO_IMPLEMENT` とする。
+4. 命名規約は lint または静的チェック対象に含め、CIで検出可能な状態に維持する。
+
+## 10. 定量KPI（完了判定）
 
 1. 構造KPI
 - 禁止依存系（直参照/逆依存/循環/Port未経由）: すべて 0件
@@ -199,7 +227,7 @@
 - ハッシュ欠落 0件
 - 監査必須項目欠落 0件
 
-## 9. Definition of Done
+## 11. Definition of Done
 
 以下を全て満たした場合のみ完了とする。
 
