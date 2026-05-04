@@ -597,20 +597,38 @@ class MainWindow(QMainWindow):
     @Slot()
     def _run_container(self):
         """Prepare and run Docker container."""
+        request = self._prepare_run_request()
+        if request is None:
+            return
+
+        self._lock_run_ui(request["script_path"])
+        self.tabs.setCurrentIndex(0)
+        self.console_log.append("Preparing container environment...")
+
+        try:
+            run_decision = self._prepare_run_decision(request)
+            if not self._handle_run_preflight(run_decision):
+                self._reset_buttons()
+                self.runtime_combo.setEnabled(True)
+                return
+
+            self._start_run_worker(run_decision.execution_plan)
+        except Exception as e:
+            self.console_log.append(f"\n[Setup Error] {e}")
+            self._reset_buttons()
+
+    def _prepare_run_request(self):
+        """Collect and validate UI inputs required for run preparation."""
         script_path = self.script_path_edit.text()
         if not script_path:
             QMessageBox.warning(self, "Warning", "Please select a script first.")
-            return
-            
+            return None
+
         try:
-            # New Validation Method
             self.environment_build_preparation_use_case.validate_runtime_environment()
         except Exception as e:
-            # JIT: If validating environment logic fails (e.g. docker down), stop.
-            # But here we want to catch "Image Missing" in prepare_run_config later?
-            # validate_environment only checks Docker Daemon.
             QMessageBox.critical(self, "Docker Error", str(e))
-            return
+            return None
 
         try:
             current_content = self.code_editor.toPlainText()
@@ -620,89 +638,76 @@ class MainWindow(QMainWindow):
             self.console_log.append(f"[Auto-Save] Synchronized editor content to {Path(script_path).name}")
         except Exception as e:
             QMessageBox.critical(self, "Save Error", f"Failed to auto-save script: {e}")
-            return
-        
-        data_dir = self.data_dir_edit.text() or None
-        output_dir = self.output_dir_edit.text() or None
-        
+            return None
+
+        return {
+            "script_path": script_path,
+            "current_content": current_content,
+            "data_dir": self.data_dir_edit.text() or None,
+            "output_dir": self.output_dir_edit.text() or None,
+            "selected_rule": self._selected_runtime_rule(),
+        }
+
+    def _lock_run_ui(self, script_path: str) -> None:
+        """Lock controls while run preparation/execution is in progress."""
         self.run_btn.setText("Running...")
         self.run_btn.setEnabled(False)
         self.analyze_btn.setEnabled(False)
-        self.create_env_btn.setEnabled(False) # Lock New button
+        self.create_env_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.runtime_combo.setEnabled(False) # Lock selection
-
-        script_name = Path(script_path).name
-        self.status_label.setText(f"Executing: {script_name}...")
+        self.runtime_combo.setEnabled(False)
+        self.status_label.setText(f"Executing: {Path(script_path).name}...")
         self.status_label.setStyleSheet("font-weight: bold; color: #1976D2;")
 
-        # Switch to Console Tab
-        self.tabs.setCurrentIndex(0)
-        
-        self.console_log.append("Preparing container environment...")
-        
-        try:
-            idx = self.runtime_combo.currentIndex()
-            if idx >= 0:
-                selected_rule = self.runtime_combo.itemData(idx, Qt.UserRole)
-            else:
-                selected_rule = None
+    def _selected_runtime_rule(self):
+        """Return currently selected runtime rule from the combo."""
+        idx = self.runtime_combo.currentIndex()
+        if idx < 0:
+            return None
+        return self.runtime_combo.itemData(idx, Qt.UserRole)
 
-            run_decision = self.runtime_use_case.prepare_run_decision(
-                current_content,
-                script_path,
-                data_dir=data_dir,
-                output_dir=output_dir,
-                selected_rule=selected_rule,
-                selection_mode=self.selection_mode,
-            )
-            if not self._confirm_runtime_compatibility(run_decision):
-                self._reset_buttons()
-                self.runtime_combo.setEnabled(True)
-                return
+    def _prepare_run_decision(self, request):
+        """Resolve runtime execution decision via application use case."""
+        return self.runtime_use_case.prepare_run_decision(
+            request["current_content"],
+            request["script_path"],
+            data_dir=request["data_dir"],
+            output_dir=request["output_dir"],
+            selected_rule=request["selected_rule"],
+            selection_mode=self.selection_mode,
+        )
 
-            execution_plan = run_decision.execution_plan
-            selected_rule = execution_plan.selected_rule
-            config = execution_plan.config
-            
-            # --- JIT Image Check ---
-            # Try to verify if image exists using 'docker image inspect'
-            image_name = config['image']
-            
-            # Note: prepare_run_config doesn't return existence, so we check here manually or via helper
-            # For robustness, we'll try a lightweight subprocess check
-            # Check if image exists
-            if run_decision.requires_image_build:
-                self._handle_missing_runtime_image(run_decision, image_name)
-                self._reset_buttons()
-                return
+    def _handle_run_preflight(self, run_decision) -> bool:
+        """Handle UI confirmations required by run preflight result."""
+        if not self._confirm_runtime_compatibility(run_decision):
+            return False
+        if run_decision.requires_image_build:
+            image_name = run_decision.execution_plan.config["image"]
+            self._handle_missing_runtime_image(run_decision, image_name)
+            return False
+        return True
 
+    def _start_run_worker(self, execution_plan) -> None:
+        """Finalize UI state and start run worker for an execution plan."""
+        config = execution_plan.config
+        self.current_output_dir = config["host_work_dir"]
+        self.res_timestamp_label.setText(f"Run Timestamp (Latest): {Path(self.current_output_dir).name}")
+        self.open_res_btn.setEnabled(False)
+        self._clear_results_view()
 
-            # Store output dir for result loading
-            self.current_output_dir = config['host_work_dir']
-            self.res_timestamp_label.setText(f"Run Timestamp (Latest): {Path(self.current_output_dir).name}")
-            self.open_res_btn.setEnabled(False)
-            self._clear_results_view()
-            
-            for line in self.runtime_use_case.build_execution_log_lines(execution_plan):
-                self.console_log.append(line)
-            self._last_run_context = execution_plan.run_context
-            
-            self.worker = ContainerWorker(
-                docker_args=execution_plan.docker_args,
-                script_name=config['script_name']
-            )
-            
-            self.worker.log_updated.connect(self._on_worker_output)
-            self.worker.error_occurred.connect(self._on_worker_error)
-            self.worker.executionFinished.connect(self._on_worker_finished)
-            self.worker.finished.connect(self._ensure_ui_reset)  # Backup cleanup
-            
-            self.worker.start()
-            
-        except Exception as e:
-            self.console_log.append(f"\n[Setup Error] {e}")
-            self._reset_buttons()
+        for line in self.runtime_use_case.build_execution_log_lines(execution_plan):
+            self.console_log.append(line)
+        self._last_run_context = execution_plan.run_context
+
+        self.worker = ContainerWorker(
+            docker_args=execution_plan.docker_args,
+            script_name=config["script_name"]
+        )
+        self.worker.log_updated.connect(self._on_worker_output)
+        self.worker.error_occurred.connect(self._on_worker_error)
+        self.worker.executionFinished.connect(self._on_worker_finished)
+        self.worker.finished.connect(self._ensure_ui_reset)
+        self.worker.start()
 
     def _confirm_runtime_compatibility(self, run_decision) -> bool:
         """Ask compatibility confirmation when manual runtime is potentially incompatible."""
