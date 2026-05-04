@@ -1,33 +1,27 @@
 # Audit Report
 
-## Verdict
-- 判定: **REJECT**
-- ルーティング先: `REJECT_TO_ARCHITECT`
+## 判定
+REJECT
 
-## Findings (High Severity)
-1. **PyQt/PySideのシグナル・スロット命名規則が計画に未定義**
-- 失敗箇所: `docs/plan.md` 全体（該当規約の記載なし）
-- 違反制約: `docs/reference_standards.md` セクション4「シグナル・スロットの命名規則」
-  - シグナルは過去分詞形（例: `dataChanged`）
-  - スロットは動作を示す動詞（例: `update_display`）
+## 指摘事項
+
+1. DoDがEMCS必須項目を欠落させており、基準の強制力を満たしていない
+- 失敗箇所: `docs/plan.md` Section 7 "Definition of Done"
+- 違反制約: `docs/reference_standards.md` 4章（Signal/Slot命名規約は必須）および 1章（客観メトリクスによる厳格評価）
 - 観測証拠:
-  - `docs/plan.md` には依存方向、Humble Object、Port経由、Docker再現性、監査証跡等の規定はあるが、シグナル/スロット命名規則に関する明示要件・ゲート・検証項目が存在しない。
+  - `docs/plan.md` Section 5.4 で EMCS は `M1〜M6` を定義し、`M6` は「Signal/Slot命名規約違反件数 = 0」
+  - しかし Section 7 は「EMCS（M1〜M5）全て閾値内」と記載し、`M6` をDoDから除外
+- 問題の性質:
+  - 計画内で必須メトリクスの適用範囲が不一致となっており、Signal/Slot規約違反が存在してもDoDを満たせる解釈余地が生じる。
+  - 絶対基準で必須の規約を最終受入条件から外す設計は、監査可能性・再現可能性の担保を弱める。
 - 修正ヒント:
-  - `docs/plan.md` の Hard Constraints または Structural Gate に、命名規約を必須制約として追加する。
-  - CI/静的検査/レビュー観点として「シグナル=過去分詞、スロット=動詞」を検証項目化する。
-  - テストまたはlintルールで規約逸脱をFailにする。
+  - Section 7 の記述を `EMCS（M1〜M6）全て閾値内` に修正する。
+  - 併せて Section 7 に `Signal/Slot命名規約違反0件` を明示的に再掲し、DoD単体で完結するようにする。
 - 再検証条件:
-  - 計画文書上で命名規約が明文化され、検証可能なゲート（CI・lint・レビュー基準）が追加されていること。
-  - 追加後、`docs/reference_standards.md` セクション4との完全一致を再監査で確認できること。
+  - `docs/plan.md` 修正後、Section 5.4（EMCS定義）と Section 7（DoD）のメトリクス範囲が完全一致していること。
+  - Signal/Slot規約が「必須」から「推奨」へ緩和されていないこと。
+- ルーティング先:
+  - `REJECT_TO_ARCHITECT`
 
-## Compliance Notes
-- 以下は準拠を確認:
-  - Docker再現性4要件（digest固定、APT archive、constraints、multi-stage）
-  - Data Integrity（hash4区分、相対パス、container digest、git hash）
-  - 依存方向・Port経由・Humble Object
-  - Builder/Validator分離、処方的REJECT要件
-  - EMCS指標の明示
-
-## Final Decision Basis
-- `docs/reference_standards.md` は「絶対的技術基準」であり、1項目でも未充足なら許容不可。
-- 上記欠落により、現行 `docs/plan.md` は **REJECT_TO_ARCHITECT** 相当。
+## 総括
+上記不整合は計画レベルの受入基準定義不備であり、実装段階に進める前にArchitect側で修正が必要。
