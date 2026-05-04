@@ -15,16 +15,12 @@
   - 禁止依存ヒット一覧
   - 循環依存検出結果（サイクル一覧）
 
-## Import Graph Findings (一覧)
+## Import Graph Findings (2026-05-04)
 
 ### UI->Domain直参照（一覧）
 
-- `src/lcr/ui/main_window.py` -> `container_manager.prepare_run_config(...)`
-- `src/lcr/ui/main_window.py` -> `container_manager.get_docker_run_args(...)`
-- `src/lcr/ui/main_window.py` -> `container_manager.reload_definitions(...)`
-- `src/lcr/ui/main_window.py` -> 監査メタ構築ロジック（ファイル探索・整形）
-- `src/lcr/ui/main_window.py` -> 結果CSVの解析/整形ロジック
-- `src/lcr/ui/main_window.py` -> 相対パス正規化ロジック
+- `src/lcr/ui/main_window.py` -> 実行前後のUI制御とダイアログ遷移分岐（実行判定は `RuntimeExecutionPreparationUseCase.prepare_run_decision(...)` に移管済み）
+- `src/lcr/ui/main_window.py` -> 環境作成ダイアログへの `ContainerManager` 受け渡し（Port化未完了）
 
 ### 逆方向依存（一覧）
 
@@ -38,19 +34,15 @@
 
 ## Violations (file path + class/function + violation type + evidence)
 
-- `src/lcr/ui/main_window.py` + `MainWindow._run_container` + `UI->Domain直参照` + `UIが `container_manager.prepare_run_config(...)` / `container_manager.get_docker_run_args(...)` を直接呼び、実行構成決定を担っている。`
-- `src/lcr/ui/main_window.py` + `MainWindow._run_container` + `UI->Domain直参照` + `UIが image 未存在時の再ビルド分岐・作成導線遷移判断を保持している。`
-- `src/lcr/ui/main_window.py` + `MainWindow._build_audit_metadata` + `UI->Domain直参照` + `監査対象ファイル収集と監査項目整形をUI層で実施している。`
-- `src/lcr/ui/main_window.py` + `MainWindow._load_results` + `UI->Domain直参照` + `CSV先頭行解析・プレビュー整形など業務フォーマット処理をUI層で実施している。`
-- `src/lcr/ui/main_window.py` + `MainWindow._execute_save_and_build` + `UI->Domain直参照` + `環境定義保存後の再読込・選択更新・ビルド起動制御をUIが保持している。`
-- `src/lcr/ui/main_window.py` + `MainWindow._to_project_relative_path` + `UI->Domain直参照` + `監査要件の相対パス正規化規則がUIユーティリティとして配置されている。`
+- `src/lcr/ui/main_window.py` + `MainWindow._run_container` + `UI責務過多` + `実行可否判定はUseCase移管済みだが、確認ダイアログ表示とJIT作成導線制御が同メソッドに集中している。`
+- `src/lcr/ui/main_window.py` + `MainWindow._show_create_env_dialog` + `境界越えPort未経由` + `EnvironmentCreationDialogへContainerManagerを直接受け渡している。`
 
 ## Summary Counts
 
-- `UI->Domain直参照`: 6件
+- `UI->Domain直参照`: 2件
 - `逆方向依存 (UseCase->UI / Domain->UI / Domain->Infrastructure)`: 0件
 - `循環依存`: 0件
 
 ## Assessment
 
-依存方向の明示的逆流・循環は検出されなかった。一方でUI層に業務判断・監査整形・実行オーケストレーションが集中しており、Humble Object規約違反が継続している。
+依存方向の明示的逆流・循環は検出されなかった。監査メタデータ整形・結果プレビュー整形・実行前判定はUseCaseへ移管済み。残課題はUIイベントハンドラに残る遷移制御と、環境作成ダイアログ境界のPort未経由部分である。

@@ -20,6 +20,8 @@
   - capability mapping
   - mismatch guard
   - forced creation flow
+- 実装状況 (2026-05-04):
+  - `RuntimeExecutionPreparationUseCase.prepare_run_decision(...)` を追加し、UIは `requires_compatibility_confirmation` / `requires_image_build` フラグで表示制御のみを行う構成に変更。
 - UIは `can_run` と `requires_creation` の結果のみを受け取り、ボタン状態と遷移だけを担当。
 - テスト戦略:
   - T5-1 mismatch時 Run無効
@@ -78,3 +80,9 @@
 - 境界違反テスト pass率: **100%**
 
 上記閾値を1つでも満たさない場合は、Phase 6.1 を未達（REJECT）と判定する。
+
+## Remaining Delta (2026-05-04)
+
+- `MainWindow._run_container` の遷移分岐を `RunExecutionOrchestrationUseCase` にさらに移管し、UI側はダイアログ表示API呼び出しだけに限定する。
+- `EnvironmentCreationDialog` への `ContainerManager` 直渡しを廃止し、`EnvironmentBuildPreparationUseCase` と Port 経由のI/Fに統一する。
+- 受け入れ完了条件: `artifacts/architecture_decoupling_assessment.md` の `UI->Domain直参照` を 0件化。

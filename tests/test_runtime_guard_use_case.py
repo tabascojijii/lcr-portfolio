@@ -269,3 +269,28 @@ def test_build_history_selection_reason_handles_manual_and_auto_modes():
 
     assert manual == "Manual: env-1"
     assert auto == "Auto: Detected"
+
+
+def test_prepare_run_decision_exposes_ui_control_flags():
+    use_case = RuntimeExecutionPreparationUseCase()
+    analyzer = _AnalyzerStub()
+    manager = _ContainerManagerStub(definition={"base_image": "python:3.10"})
+    history = _HistoryManagerStub()
+    use_case.image_exists = lambda _name: False
+
+    decision = use_case.prepare_run_decision(
+        analyzer=analyzer,
+        container_manager=manager,
+        history_manager=history,
+        code_text="print('x')",
+        script_path="script.py",
+        data_dir=None,
+        output_dir="results/run-1",
+        selected_rule={"id": "env-1", "version": "3.10", "image": "env-1"},
+        selection_mode="Manual",
+    )
+
+    assert decision.requires_compatibility_confirmation is True
+    assert decision.requires_image_build is True
+    assert decision.missing_image_build_draft is not None
+    assert decision.execution_plan.config["image"] == "env-1"

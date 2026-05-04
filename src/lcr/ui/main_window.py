@@ -645,7 +645,7 @@ class MainWindow(QMainWindow):
             else:
                 selected_rule = None
 
-            preflight = self.runtime_use_case.prepare_run_preflight(
+            run_decision = self.runtime_use_case.prepare_run_decision(
                 self.analyzer,
                 self.container_manager,
                 self.history_manager,
@@ -656,11 +656,11 @@ class MainWindow(QMainWindow):
                 selected_rule=selected_rule,
                 selection_mode=self.selection_mode,
             )
-            if preflight.compatibility.requires_confirmation:
+            if run_decision.requires_compatibility_confirmation:
                 res = QMessageBox.warning(
                     self,
                     "Compatibility Warning",
-                    preflight.compatibility.message,
+                    run_decision.compatibility.message,
                     QMessageBox.Yes | QMessageBox.No,
                     QMessageBox.No
                 )
@@ -669,7 +669,7 @@ class MainWindow(QMainWindow):
                     self.runtime_combo.setEnabled(True)
                     return
 
-            execution_plan = preflight.execution_plan
+            execution_plan = run_decision.execution_plan
             selected_rule = execution_plan.selected_rule
             config = execution_plan.config
             
@@ -680,7 +680,7 @@ class MainWindow(QMainWindow):
             # Note: prepare_run_config doesn't return existence, so we check here manually or via helper
             # For robustness, we'll try a lightweight subprocess check
             # Check if image exists
-            if preflight.image_missing:
+            if run_decision.requires_image_build:
                 # Image missing! Prompt JIT Build
                 print(f"[Info] Image {image_name} not found. Build is required.")
                 ans = QMessageBox.question(
@@ -694,7 +694,7 @@ class MainWindow(QMainWindow):
                 
                 
                 if ans == QMessageBox.Yes:
-                    build_draft = preflight.missing_image_build_draft
+                    build_draft = run_decision.missing_image_build_draft
                     if not build_draft:
                         self._reset_buttons()
                         return

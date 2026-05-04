@@ -57,6 +57,15 @@ class RuntimePreflightResult:
 
 
 @dataclass
+class RuntimeRunDecision:
+    compatibility: ManualCompatibilityCheckResult
+    execution_plan: RuntimeExecutionPlan
+    requires_compatibility_confirmation: bool
+    requires_image_build: bool
+    missing_image_build_draft: Optional[MissingImageBuildDraft]
+
+
+@dataclass
 class BuildExecutionPlan:
     tag: str
     build_args: List[str]
@@ -386,6 +395,37 @@ class RuntimeExecutionPreparationUseCase:
             execution_plan=execution_plan,
             image_missing=image_missing,
             missing_image_build_draft=build_draft,
+        )
+
+    def prepare_run_decision(
+        self,
+        analyzer,
+        container_manager,
+        history_manager,
+        code_text: str,
+        script_path: str,
+        data_dir: Optional[str],
+        output_dir: Optional[str],
+        selected_rule: Optional[Dict[str, Any]],
+        selection_mode: str,
+    ) -> RuntimeRunDecision:
+        preflight = self.prepare_run_preflight(
+            analyzer=analyzer,
+            container_manager=container_manager,
+            history_manager=history_manager,
+            code_text=code_text,
+            script_path=script_path,
+            data_dir=data_dir,
+            output_dir=output_dir,
+            selected_rule=selected_rule,
+            selection_mode=selection_mode,
+        )
+        return RuntimeRunDecision(
+            compatibility=preflight.compatibility,
+            execution_plan=preflight.execution_plan,
+            requires_compatibility_confirmation=preflight.compatibility.requires_confirmation,
+            requires_image_build=preflight.image_missing,
+            missing_image_build_draft=preflight.missing_image_build_draft,
         )
 
     def build_execution_log_lines(self, execution_plan: RuntimeExecutionPlan) -> List[str]:
