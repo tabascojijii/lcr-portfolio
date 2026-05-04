@@ -43,12 +43,15 @@
 実施項目:
 - 境界仕様確定（責務表・依存表更新、UI責務移管先UseCase/Port定義）。
 - 構造ゲート実装（禁止依存、循環依存、UI責務違反、Signal/Slot命名違反）。
+- Signal/Slot命名検査の最低実装を固定（対象: `src/lcr/ui/**/*.py` の静的走査）。
+- Signal/Slot命名検査結果を `artifacts/signal_slot_naming_report.md` に出力し、CI成果物として保存。
 - 監査ルーティング標準化（原因層に応じた差し戻し先固定）。
 - DoR更新（境界設計承認・ゼロ化経路確定を実装開始条件へ追加）。
 - PASS維持チェックリスト化（基準章1〜4との整合を毎回確認）。
 
 完了条件:
 - 禁止依存0件、循環依存0件、UI責務違反0件、命名違反0件。
+- `artifacts/signal_slot_naming_report.md` が生成され、CIで保存済みであること。
 
 ### Phase P0.1: EMCS監査モデル固定（実装前必須）
 
@@ -112,6 +115,14 @@
 成果物:
 - `artifacts/architecture_decoupling_assessment.md`
 - `artifacts/refactoring_proposal.md`
+
+成果物の必須記載項目:
+- `artifacts/architecture_decoupling_assessment.md`:
+  - 違反列挙を `file path + class/function + violation type + evidence` 形式で記載すること。
+  - `UI->Domain` 直参照 / 逆方向依存 / 循環依存の一覧と件数を実測で記載すること。
+- `artifacts/refactoring_proposal.md`:
+  - P0/P1/P2順の段階移行計画を記載すること。
+  - Port設計、責務移管先、後方互換方針、テスト戦略、リスク対策を必須記載すること。
 
 完了条件:
 - `UI->Domain` 直参照0、逆方向依存0、循環依存0を実測提示。
