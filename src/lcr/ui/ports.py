@@ -50,3 +50,15 @@ class HistoryManagerPort(Protocol):
     def load_history(self) -> List[Dict[str, Any]]: ...
     def get_absolute_path(self, relative_path: str) -> str: ...
     def to_relative_path(self, path_str: str) -> str: ...
+
+
+class EnvironmentDialogPort(Protocol):
+    def open_creation_dialog(
+        self,
+        *,
+        parent: Any,
+        base_images: List[Dict[str, Any]],
+        initial_config: Dict[str, Any],
+        recommended_base_id: str,
+        recommendation_reason: str,
+    ) -> Optional[Dict[str, Any]]: ...

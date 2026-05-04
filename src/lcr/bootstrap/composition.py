@@ -11,6 +11,7 @@ from lcr.core.detector.use_cases import CodeAnalysisUseCase
 from lcr.core.history.manager import HistoryManager
 from lcr.core.history.use_cases import SaveExecutionHistoryUseCase
 from lcr.core.results.use_cases import LoadResultArtifactsUseCase
+from lcr.ui.dialog_adapters import QtEnvironmentDialogAdapter
 from lcr.utils.path_helper import get_log_path
 
 
@@ -22,6 +23,7 @@ def build_main_window_dependencies():
     collect_audit_metadata_use_case = CollectAuditMetadataUseCase(
         history_manager, audit_metadata_service
     )
+    environment_build_preparation_use_case = EnvironmentBuildPreparationUseCase(container_manager)
     return {
         "analyzer": analyzer,
         "container_manager": container_manager,
@@ -33,7 +35,7 @@ def build_main_window_dependencies():
             history_manager=history_manager,
         ),
         "environment_draft_use_case": EnvironmentDraftUseCase(analyzer, container_manager),
-        "environment_build_preparation_use_case": EnvironmentBuildPreparationUseCase(container_manager),
+        "environment_build_preparation_use_case": environment_build_preparation_use_case,
         "save_history_use_case": SaveExecutionHistoryUseCase(history_manager),
         "code_analysis_use_case": CodeAnalysisUseCase(analyzer, container_manager),
         "collect_audit_metadata_use_case": collect_audit_metadata_use_case,
@@ -41,4 +43,5 @@ def build_main_window_dependencies():
             collect_audit_metadata_use_case, get_log_path
         ),
         "load_result_artifacts_use_case": LoadResultArtifactsUseCase(),
+        "environment_dialog_port": QtEnvironmentDialogAdapter(environment_build_preparation_use_case),
     }

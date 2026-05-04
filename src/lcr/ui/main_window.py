@@ -22,9 +22,14 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices
 from PySide6.QtCore import Qt, Slot, QUrl
 
-from lcr.ui.create_env_dialog import EnvironmentCreationDialog
 from lcr.ui.workers import ContainerWorker
-from lcr.ui.ports import AnalyzerPort, AuditMetadataPort, ContainerManagerPort, HistoryManagerPort
+from lcr.ui.ports import (
+    AnalyzerPort,
+    AuditMetadataPort,
+    ContainerManagerPort,
+    EnvironmentDialogPort,
+    HistoryManagerPort,
+)
 from lcr.bootstrap.composition import build_main_window_dependencies
 
 
@@ -37,6 +42,7 @@ class MainWindow(QMainWindow):
         container_manager: Optional[ContainerManagerPort] = None,
         history_manager: Optional[HistoryManagerPort] = None,
         audit_metadata_service: Optional[AuditMetadataPort] = None,
+        environment_dialog_port: Optional[EnvironmentDialogPort] = None,
     ):
         super().__init__()
         self.setWindowTitle("Legacy Code Reviver")
@@ -59,6 +65,7 @@ class MainWindow(QMainWindow):
         self.collect_audit_metadata_use_case = deps["collect_audit_metadata_use_case"]
         self.prepare_audit_metadata_use_case = deps["prepare_audit_metadata_use_case"]
         self.load_result_artifacts_use_case = deps["load_result_artifacts_use_case"]
+        self.environment_dialog_port = environment_dialog_port or deps["environment_dialog_port"]
         self.worker = None
         self.current_output_dir = None
         self.selection_mode = 'Auto'
@@ -475,7 +482,10 @@ class MainWindow(QMainWindow):
         request = self._prepare_run_request()
         if request is None:
             return
+        self._prepare_container_run(request)
 
+    def _prepare_container_run(self, request) -> None:
+        """Execute preflight and start worker when run conditions are met."""
         self._lock_run_ui(request["script_path"])
         self.tabs.setCurrentIndex(0)
         self.console_log.append("Preparing container environment...")
@@ -636,18 +646,17 @@ class MainWindow(QMainWindow):
         success_prefix: str,
     ) -> None:
         """Open environment creation dialog and apply created runtime to current selection."""
-        dialog = EnvironmentCreationDialog(
+        result_config = self.environment_dialog_port.open_creation_dialog(
             parent=self,
             base_images=base_images,
             initial_config=initial_config,
             recommended_base_id=recommended_base_id,
             recommendation_reason=recommendation_reason,
-            build_use_case=self.environment_build_preparation_use_case,
         )
-        if dialog.exec():
+        if result_config:
             self.environment_build_preparation_use_case.reload_runtime_definitions()
             self._refresh_env_list()
-            new_tag = self._select_runtime_by_image_tag(dialog.result_config)
+            new_tag = self._select_runtime_by_image_tag(result_config)
             if new_tag:
                 self.console_log.append(f"[Environment] '{new_tag}' is ready to use.")
                 QMessageBox.information(self, success_title, f"{success_prefix} '{new_tag}' is ready to use.")
