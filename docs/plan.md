@@ -40,6 +40,12 @@
   - 表示更新
   - UseCase呼び出し
 
+### 1.4 RC-4: Signal/Slot Naming 固定
+- PyQt/PySide の命名規約を必須化し、逸脱は Fail とする。
+  - シグナル名: 過去分詞形（例: `dataChanged`）
+  - スロット名: 動作を示す動詞（例: `update_display`）
+- 命名規約はレビュー観点ではなく機械検証対象とし、CI/Lintで検出する。
+
 ## 2. Architecture and Reproducibility Rules
 
 ### 2.1 Docker 再現性
@@ -103,6 +109,7 @@
 5. Docker再現性CIゲート追加（digest/APT archive/constraints/multi-stage）
 6. 監査入力境界ゲート追加（Builder/Validator分離）
 7. 監査テンプレート必須項目チェック追加（欠落時 Fail）
+8. Signal/Slot命名CIゲート追加（Signal=過去分詞、Slot=動詞）
 
 ### P1: Phase 5 実装
 1. Capability Mapping UseCase 実装
@@ -147,6 +154,7 @@
 - UI禁止行為0件（業務判断/I-O/複雑計算/業務フォーマット）
 - Port未経由境界越え0件
 - 循環依存0件
+- Signal/Slot命名規約違反0件（Signal=過去分詞、Slot=動詞）
 
 ### 5.3 Audit Gate
 - ハッシュ4区分欠落0件
@@ -161,6 +169,7 @@
 - M3: 複雑度超過（CC > 10）件数 = 0
 - M4: 監査証跡欠落件数 = 0
 - M5: Docker再現性違反件数 = 0
+- M6: Signal/Slot命名規約違反件数 = 0
 
 ## 6. Loop Prevention Protocol
 - 設計不備を検出した場合は `REJECT_TO_ARCHITECT` に固定し、実装工程へ送らない。
