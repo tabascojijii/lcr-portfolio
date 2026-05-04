@@ -65,19 +65,27 @@
 ### Phase P3.1: REJECT 収束（UI->Domain 0件化）
 1. **アセスメント再測定を先行実施**し、`artifacts/architecture_decoupling_assessment.md` を実コード現状へ同期する。  
    - `_show_create_env_dialog` / `_open_environment_creation_dialog` の Port 経由実装を再確認し、誤検知を除去する。
-2. `_run_container` 系の残留業務判断を `RunExecutionOrchestrationUseCase` へ移管する。  
+2. **固定対象を明示**し、以下を UI 内業務責務の移管対象として固定する。  
+   - `MainWindow._run_container`
+   - `MainWindow._build_audit_metadata`
+   - `MainWindow._load_results`
+   - `MainWindow._execute_save_and_build`
+   - `MainWindow._to_project_relative_path`
+3. **Step A（優先）**: `_run_container` 系の残留業務判断を `RunExecutionOrchestrationUseCase` へ移管する。  
    - 特に `_handle_missing_runtime_image` の不足時分岐・遷移判定を UseCase 側へ移す。
-3. `_build_audit_metadata` の監査整形責務を `BuildAuditRecordUseCase` へ完全移管する。
-4. `_load_results` のCSV解析/整形責務を `ResultPreviewUseCase` へ完全移管する。
-5. `_execute_save_and_build` の業務制御を `EnvironmentLifecycleUseCase` へ移管する。
-6. UI を「入力収集・表示更新・UseCase 呼び出し」のみへ収束させる。
+   - `PathPolicyPort` を導入し、相対パス正規化（`_to_project_relative_path` 相当）を UI 外へ移管する。
+4. **Step B**: `_build_audit_metadata` の監査整形責務を `BuildAuditRecordUseCase` へ完全移管する。
+5. **Step B**: `_load_results` のCSV解析/整形責務を `ResultPreviewUseCase` へ完全移管する。
+6. **Step C**: `_execute_save_and_build` の業務制御を `EnvironmentLifecycleUseCase` へ移管する。
+7. UI を「入力収集・表示更新・UseCase 呼び出し」のみへ収束させる。
 
 完了条件（P3.1専用）:
 - `UI->Domain直参照` 件数 = 0
-- `逆方向依存` 件数 = 0
+- `UseCase -> Qt` 件数 = 0
 - `循環依存` 件数 = 0
 - `pytest tests/` 全件Pass
-- `artifacts/refactoring_proposal.md` の固定閾値（禁止依存0、循環依存0、UI業務ロジック0、境界テスト100%Pass）を実測で充足
+- `artifacts/architecture_decoupling_assessment.md` を更新し、実測0件を証跡化
+- `artifacts/refactoring_proposal.md` の固定閾値（禁止依存0、循環依存0、UI業務ロジック0、境界テスト100%Pass）を追加条件として実測で充足
 
 ## 3. 検証ゲート
 
