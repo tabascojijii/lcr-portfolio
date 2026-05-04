@@ -26,6 +26,7 @@ from lcr.ui.workers import ContainerWorker
 from lcr.ui.ports import (
     AnalyzerPort,
     AuditMetadataPort,
+    ContainerExecutionGatewayFactoryPort,
     ContainerManagerPort,
     EnvironmentDialogPort,
     HistoryManagerPort,
@@ -43,6 +44,7 @@ class MainWindow(QMainWindow):
         history_manager: Optional[HistoryManagerPort] = None,
         audit_metadata_service: Optional[AuditMetadataPort] = None,
         environment_dialog_port: Optional[EnvironmentDialogPort] = None,
+        container_execution_gateway_factory: Optional[ContainerExecutionGatewayFactoryPort] = None,
     ):
         super().__init__()
         self.setWindowTitle("Legacy Code Reviver")
@@ -66,6 +68,9 @@ class MainWindow(QMainWindow):
         self.prepare_audit_metadata_use_case = deps["prepare_audit_metadata_use_case"]
         self.load_result_artifacts_use_case = deps["load_result_artifacts_use_case"]
         self.environment_dialog_port = environment_dialog_port or deps["environment_dialog_port"]
+        self.container_execution_gateway_factory = (
+            container_execution_gateway_factory or deps["container_execution_gateway_factory"]
+        )
         self.worker = None
         self.current_output_dir = None
         self.selection_mode = 'Auto'
@@ -586,7 +591,8 @@ class MainWindow(QMainWindow):
 
         self.worker = ContainerWorker(
             docker_args=execution_plan.docker_args,
-            script_name=config["script_name"]
+            script_name=config["script_name"],
+            execution_gateway_factory=self.container_execution_gateway_factory,
         )
         self.worker.log_updated.connect(self._on_worker_output)
         self.worker.error_occurred.connect(self._on_worker_error)
@@ -960,7 +966,8 @@ class MainWindow(QMainWindow):
         
         self.worker = ContainerWorker(
             docker_args=args,
-            script_name=script_name
+            script_name=script_name,
+            execution_gateway_factory=self.container_execution_gateway_factory,
         )
         self.worker.log_updated.connect(self._on_worker_output)
         self.worker.error_occurred.connect(self._on_worker_error)

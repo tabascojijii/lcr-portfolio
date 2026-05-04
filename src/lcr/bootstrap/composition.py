@@ -1,6 +1,7 @@
 from lcr.core.audit import AuditMetadataService
 from lcr.core.audit.use_cases import CollectAuditMetadataUseCase, PrepareAuditMetadataUseCase
 from lcr.core.container.manager import ContainerManager
+from lcr.core.container.worker import ContainerExecutionService
 from lcr.core.container.use_cases import (
     EnvironmentBuildPreparationUseCase,
     EnvironmentDraftUseCase,
@@ -44,4 +45,10 @@ def build_main_window_dependencies():
         ),
         "load_result_artifacts_use_case": LoadResultArtifactsUseCase(),
         "environment_dialog_port": QtEnvironmentDialogAdapter(environment_build_preparation_use_case),
+        "container_execution_gateway_factory": (
+            lambda *, docker_args, script_name: ContainerExecutionService(
+                docker_args=docker_args,
+                script_name=script_name,
+            )
+        ),
     }

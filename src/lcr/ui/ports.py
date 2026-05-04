@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Callable, Dict, List, Optional, Protocol
 
 
 class ContainerManagerPort(Protocol):
@@ -62,3 +62,21 @@ class EnvironmentDialogPort(Protocol):
         recommended_base_id: str,
         recommendation_reason: str,
     ) -> Optional[Dict[str, Any]]: ...
+
+
+class ContainerExecutionGatewayPort(Protocol):
+    def execute(
+        self,
+        on_log: Callable[[str], None],
+        on_error: Callable[[str], None],
+    ) -> int: ...
+    def stop(self) -> None: ...
+
+
+class ContainerExecutionGatewayFactoryPort(Protocol):
+    def __call__(
+        self,
+        *,
+        docker_args: List[str],
+        script_name: str,
+    ) -> ContainerExecutionGatewayPort: ...

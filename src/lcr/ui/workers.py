@@ -12,7 +12,7 @@ import os
 import signal
 from typing import Optional, List
 from PySide6.QtCore import QThread, Signal
-from lcr.core.container.worker import ContainerExecutionService
+from lcr.ui.ports import ContainerExecutionGatewayFactoryPort
 
 class BuildWorker(QThread):
     """
@@ -125,9 +125,17 @@ class ContainerWorker(QThread):
     error_occurred = Signal(str)
     executionFinished = Signal(int)
 
-    def __init__(self, docker_args: List[str], script_name: str = "script", parent=None):
+    def __init__(
+        self,
+        docker_args: List[str],
+        script_name: str = "script",
+        execution_gateway_factory: Optional[ContainerExecutionGatewayFactoryPort] = None,
+        parent=None,
+    ):
         super().__init__(parent)
-        self._service = ContainerExecutionService(docker_args=docker_args, script_name=script_name)
+        if execution_gateway_factory is None:
+            raise ValueError("execution_gateway_factory is required")
+        self._service = execution_gateway_factory(docker_args=docker_args, script_name=script_name)
 
     def run(self):
         exit_code = self._service.execute(self.log_updated.emit, self.error_occurred.emit)
