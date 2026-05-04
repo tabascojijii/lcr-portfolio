@@ -13,7 +13,6 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QTextCursor, QColor
 
 from lcr.ui.workers import BuildWorker
-from lcr.ui.ports import ContainerManagerPort
 
 class EnvironmentCreationDialog(QDialog):
     """
@@ -22,15 +21,22 @@ class EnvironmentCreationDialog(QDialog):
     and customize installed packages.
     """
     
-    def __init__(self, parent=None, manager: ContainerManagerPort = None, base_images: List[Dict[str, Any]] = [], initial_config: Dict = {},
+    def __init__(self, parent=None, manager: Any = None, base_images: List[Dict[str, Any]] = [], initial_config: Dict = {},
                  recommended_base_id: Optional[str] = None, recommendation_reason: Optional[str] = None, build_use_case: Any = None):
         super().__init__(parent)
+        # Backward-compatible positional argument handling:
+        # legacy call signature passed `manager` as 2nd arg and `base_images` as 3rd.
+        if manager is not None and not isinstance(base_images, list) and isinstance(initial_config, list):
+            base_images, initial_config, recommended_base_id, recommendation_reason, build_use_case = (
+                initial_config,
+                recommended_base_id if isinstance(recommended_base_id, dict) else {},
+                recommendation_reason,
+                build_use_case,
+                None,
+            )
         self.setWindowTitle("Create New Runtime Environment")
         self.resize(700, 850)
         
-        self.container_manager = manager
-        if self.container_manager is None:
-            print("[Error] ContainerManager was not passed to EnvironmentCreationDialog!")
         self.base_images = base_images
         self.initial_config = initial_config
         self.recommended_base_id = recommended_base_id
@@ -391,7 +397,7 @@ class EnvironmentCreationDialog(QDialog):
             return
 
         if prepared is None:
-            QMessageBox.critical(self, "Error", "Container Manager not initialized.")
+            QMessageBox.critical(self, "Error", "Build use case is not initialized.")
             return
 
         if prepared.has_opencv_pip_warning:
@@ -418,8 +424,8 @@ class EnvironmentCreationDialog(QDialog):
 
     def _start_build(self, prepared):
         """Initialize build process with Worker."""
-        if not self.container_manager:
-             QMessageBox.critical(self, "Error", "Container Manager not initialized.")
+        if not self.build_use_case:
+             QMessageBox.critical(self, "Error", "Build use case is not initialized.")
              return
 
         tag = prepared.tag
@@ -481,8 +487,8 @@ class EnvironmentCreationDialog(QDialog):
             self.log_console.append(f"\n[Builder] Build Success! (Tag: {tag})")
             
             # Commit Transaction
-            if self.container_manager:
-                self.container_manager.commit_definition(tag)
+            if self.build_use_case:
+                self.build_use_case.commit_definition(tag)
             
             QMessageBox.information(self, "Build Complete", f"Environment '{tag}' created successfully.")
             
@@ -494,9 +500,9 @@ class EnvironmentCreationDialog(QDialog):
             self.log_console.append(f"\n[Builder] Build Failed (Exit Code: {exit_code})")
             
             # Rollback
-            if self.container_manager and exit_code != -1: # -1 is manual cancel, handled in reject
+            if self.build_use_case and exit_code != -1: # -1 is manual cancel, handled in reject
                  # For actual failures, we rollback definition to prevent broken usage
-                 self.container_manager.rollback_definition(tag)
+                 self.build_use_case.rollback_definition(tag)
                  self.log_console.append(f"[Transaction] Definition rolled back.")
             
             # Keep Dialog Open, Enable Interaction
@@ -528,8 +534,8 @@ class EnvironmentCreationDialog(QDialog):
                 self.worker.wait() # Wait for thread to finish cleanup
                 
                 # Rollback
-                if self.container_manager and self.current_def_id:
-                     self.container_manager.rollback_definition(self.current_def_id)
+                if self.build_use_case and self.current_def_id:
+                     self.build_use_case.rollback_definition(self.current_def_id)
                 
                 super().reject()
         else:

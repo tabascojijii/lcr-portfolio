@@ -448,7 +448,6 @@ class MainWindow(QMainWindow):
         # 4. Show Dialog
         dialog = EnvironmentCreationDialog(
             parent=self,
-            manager=self.container_manager,
             base_images=draft.base_images,
             initial_config=draft.initial_config,
             recommended_base_id=rec_id,
@@ -540,7 +539,6 @@ class MainWindow(QMainWindow):
         
         dialog = EnvironmentCreationDialog(
             parent=self,
-            manager=self.container_manager,
             base_images=self.environment_build_preparation_use_case.list_available_runtimes(),
             initial_config=existing_config,
             recommended_base_id=rec_id,
@@ -658,18 +656,10 @@ class MainWindow(QMainWindow):
                 selected_rule=selected_rule,
                 selection_mode=self.selection_mode,
             )
-            if run_decision.requires_compatibility_confirmation:
-                res = QMessageBox.warning(
-                    self,
-                    "Compatibility Warning",
-                    run_decision.compatibility.message,
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
-                )
-                if res == QMessageBox.No:
-                    self._reset_buttons()
-                    self.runtime_combo.setEnabled(True)
-                    return
+            if not self._confirm_runtime_compatibility(run_decision):
+                self._reset_buttons()
+                self.runtime_combo.setEnabled(True)
+                return
 
             execution_plan = run_decision.execution_plan
             selected_rule = execution_plan.selected_rule
@@ -683,45 +673,9 @@ class MainWindow(QMainWindow):
             # For robustness, we'll try a lightweight subprocess check
             # Check if image exists
             if run_decision.requires_image_build:
-                # Image missing! Prompt JIT Build
-                print(f"[Info] Image {image_name} not found. Build is required.")
-                ans = QMessageBox.question(
-                    self,
-                    "Environment Missing",
-                    f"The required runtime image '{image_name}' is not built yet.\n\n"
-                    "Would you like to synthesize and build it now?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes
-                )
-                
-                
-                if ans == QMessageBox.Yes:
-                    build_draft = run_decision.missing_image_build_draft
-                    if not build_draft:
-                        self._reset_buttons()
-                        return
-                    env_id = build_draft.env_id
-                    dialog = EnvironmentCreationDialog(
-                        parent=self,
-                        manager=self.container_manager,
-                        base_images=build_draft.base_images,
-                        initial_config=build_draft.initial_config,
-                        recommended_base_id=env_id,
-                        recommendation_reason=build_draft.recommendation_reason,
-                        build_use_case=self.environment_build_preparation_use_case,
-                    )
-                    
-                    # Handle dialog result
-                    if dialog.exec():
-                        self.environment_build_preparation_use_case.reload_runtime_definitions()
-                        self._refresh_env_list()
-                        QMessageBox.information(self, "Build Complete", f"Environment '{env_id}' is ready to use.")
-                    
-                    self._reset_buttons()
-                    return  # Exit run flow, build flow completed
-                else:
-                    self._reset_buttons()
-                    return
+                self._handle_missing_runtime_image(run_decision, image_name)
+                self._reset_buttons()
+                return
 
 
             # Store output dir for result loading
@@ -749,6 +703,51 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.console_log.append(f"\n[Setup Error] {e}")
             self._reset_buttons()
+
+    def _confirm_runtime_compatibility(self, run_decision) -> bool:
+        """Ask compatibility confirmation when manual runtime is potentially incompatible."""
+        if not run_decision.requires_compatibility_confirmation:
+            return True
+        res = QMessageBox.warning(
+            self,
+            "Compatibility Warning",
+            run_decision.compatibility.message,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        return res == QMessageBox.Yes
+
+    def _handle_missing_runtime_image(self, run_decision, image_name: str) -> None:
+        """Handle JIT runtime build flow when the selected image is missing."""
+        print(f"[Info] Image {image_name} not found. Build is required.")
+        ans = QMessageBox.question(
+            self,
+            "Environment Missing",
+            f"The required runtime image '{image_name}' is not built yet.\n\n"
+            "Would you like to synthesize and build it now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if ans != QMessageBox.Yes:
+            return
+
+        build_draft = run_decision.missing_image_build_draft
+        if not build_draft:
+            return
+
+        env_id = build_draft.env_id
+        dialog = EnvironmentCreationDialog(
+            parent=self,
+            base_images=build_draft.base_images,
+            initial_config=build_draft.initial_config,
+            recommended_base_id=env_id,
+            recommendation_reason=build_draft.recommendation_reason,
+            build_use_case=self.environment_build_preparation_use_case,
+        )
+        if dialog.exec():
+            self.environment_build_preparation_use_case.reload_runtime_definitions()
+            self._refresh_env_list()
+            QMessageBox.information(self, "Build Complete", f"Environment '{env_id}' is ready to use.")
 
     @Slot()
     def _stop_container(self):

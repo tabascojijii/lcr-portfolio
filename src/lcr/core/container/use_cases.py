@@ -173,6 +173,12 @@ class EnvironmentBuildPreparationUseCase:
     def synthesize_definition_config(self, analysis: Dict[str, Any], rec_id: str) -> Dict[str, Any]:
         return self.container_manager.synthesize_definition_config(analysis, rec_id)
 
+    def commit_definition(self, def_id: str) -> bool:
+        return self.container_manager.commit_definition(def_id)
+
+    def rollback_definition(self, def_id: str) -> None:
+        self.container_manager.rollback_definition(def_id)
+
 
 class RuntimeExecutionPreparationUseCase:
     """Use case for runtime pre-checks before UI starts execution worker."""
