@@ -12,6 +12,7 @@
 2. `pytest` 合格と構造準拠を独立ゲート化する。
 3. UIからDomainへの直接参照を「禁止ルール」ではなく「経路設計」で不可能化する。
 4. `MainWindow` は Humble Object とし、判断・分岐・永続化・外部I/Oを持たせない。
+5. 2026-05-04 の差し戻し実績（`_run_container`, `_show_create_env_dialog`）を「再発禁止の固定監査項目」として扱う。
 
 ## 2. 最終達成指標（固定KPI）
 
@@ -73,6 +74,10 @@
   - capability mismatch判定
   - 実行ガード発火判断
   - 監査記録指示
+- 実装完了判定（必須）:
+  - `MainWindow._run_container` が UseCase呼び出し + UI表示更新以外を保持しないこと
+  - 同メソッドから Domain/Infrastructure 実装型への直接importが0件であること
+  - 監査証跡として「移管前後の責務差分表」を成果物に残すこと
 
 ### 4.2 `MainWindow._show_create_env_dialog` の境界統制
 
@@ -80,6 +85,10 @@
 - UIはダイアログ表示と入力値受け渡しのみ。
 - 環境候補生成、knowledge参照、作成後の再評価トリガはUseCase側で実施。
 - 環境作成完了後の再起動不要反映（Dynamic Refresh）をUseCase完了条件に含める。
+- 実装完了判定（必須）:
+  - `MainWindow._show_create_env_dialog` が Port/UseCase非経由で環境生成ロジックへ到達しないこと
+  - 「不足import→候補生成→作成→再評価」の制御フローが1つのUseCase境界で完結すること
+  - UI層は候補計算ロジックを持たないこと（0件）
 
 ## 5. フェーズ別実行計画
 
@@ -103,10 +112,12 @@
 2. UseCase/Facade 経由呼び出しへ置換。
 3. Port未経由呼び出しを全面排除。
 4. importグラフを再測定し、禁止依存ゼロ化を確認。
+5. `MainWindow` 対象のメソッド責務監査（`_run_container`, `_show_create_env_dialog`）を専用チェックリストで実施。
 
 完了条件:
 - 構造KPIを全達成。
 - 監査での差し戻し理由（UI責務混在/Port未経由）が再発しない。
+- 上記2メソッドの再発防止チェックリストが監査証跡として保存される。
 
 ### Phase C: Phase 5要件の実装完了
 
@@ -167,10 +178,12 @@
 - 内側層（UseCase/Domain）から外側層（UI/Infrastructure）への直接依存0件
 - Portが `abc.ABC` / `typing.Protocol` で定義済み
 - シグナル/スロット命名規約違反0件
+- 既知再発ポイント監査（`MainWindow._run_container`, `_show_create_env_dialog`）で違反0件
 
 差し戻し規約:
 - 構造ゲート失敗時は `REJECT_TO_ARCHITECT`（設計是正）
 - 機能ゲート失敗時は `REJECT_TO_IMPLEMENT`（実装是正）
+- 同一構造違反が2回連続した場合は自動的に `REJECT_TO_ARCHITECT` へ昇格し、実装タスクを停止する。
 
 ## 6.1 監査プロセス運用（Builder/Validator分離）
 
@@ -209,6 +222,8 @@
   - 対策: ダイジェスト固定 + constraints固定 + APTアーカイブ固定 + マルチステージ強制
 - リスク5: 監査運用が形骸化し差し戻し理由が曖昧化
   - 対策: Builder/Validator分離と処方的差し戻しテンプレートを必須化
+- リスク6: 「監査PASS」を理由に既知欠陥対応の優先度が低下
+  - 対策: 過去差し戻し箇所を恒久監査項目として固定し、PASS時も継続監視する
 
 ## 9. 完了定義（DoD）
 
