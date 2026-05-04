@@ -34,6 +34,7 @@ class MissingImageBuildDraft:
     env_id: str
     initial_config: Dict[str, Any]
     recommendation_reason: str
+    base_images: List[Dict[str, Any]]
 
 
 @dataclass
@@ -148,6 +149,21 @@ class EnvironmentBuildPreparationUseCase:
             selected_runtime_image=selected_image,
         )
 
+    def list_available_runtimes(self) -> List[Dict[str, Any]]:
+        return self.container_manager.get_available_runtimes()
+
+    def reload_runtime_definitions(self) -> None:
+        self.container_manager.reload_definitions()
+
+    def validate_runtime_environment(self) -> None:
+        self.container_manager.validate_environment()
+
+    def get_definition(self, env_id: str) -> Optional[Dict]:
+        return self.container_manager.get_definition(env_id)
+
+    def synthesize_definition_config(self, analysis: Dict[str, Any], rec_id: str) -> Dict[str, Any]:
+        return self.container_manager.synthesize_definition_config(analysis, rec_id)
+
 
 class RuntimeExecutionPreparationUseCase:
     """Use case for runtime pre-checks before UI starts execution worker."""
@@ -235,6 +251,7 @@ class RuntimeExecutionPreparationUseCase:
                 env_id=env_id,
                 initial_config=initial_config,
                 recommendation_reason="Rebuilding existing definition (Image not built)",
+                base_images=container_manager.get_available_runtimes(),
             )
 
         analysis = analyzer.summary(code_text)
@@ -245,6 +262,7 @@ class RuntimeExecutionPreparationUseCase:
             env_id=env_id,
             initial_config=synthesized_config,
             recommendation_reason="Synthesized from code analysis (Missing Image)",
+            base_images=container_manager.get_available_runtimes(),
         )
 
     def prepare_execution(

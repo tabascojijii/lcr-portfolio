@@ -111,6 +111,9 @@ class _ContainerManagerStub:
     def get_docker_run_args(self, _config):
         return ["docker", "run", "env-1"]
 
+    def get_available_runtimes(self):
+        return [self._runtime_rule]
+
 
 class _HistoryManagerStub:
     def to_relative_path(self, value):
@@ -168,6 +171,7 @@ def test_prepare_missing_image_build_draft_prefers_existing_definition():
     assert result.initial_config["id"] == "env-1"
     assert result.initial_config["tag"] == "env-1"
     assert result.recommendation_reason.startswith("Rebuilding existing definition")
+    assert result.base_images == [manager._runtime_rule]
 
 
 def test_prepare_missing_image_build_draft_synthesizes_when_definition_missing():
@@ -186,6 +190,7 @@ def test_prepare_missing_image_build_draft_synthesizes_when_definition_missing()
     assert result.initial_config["id"] == "env-2"
     assert result.initial_config["tag"] == "env-2"
     assert result.recommendation_reason.startswith("Synthesized from code analysis")
+    assert result.base_images == [manager._runtime_rule]
 
 
 def test_prepare_run_preflight_builds_draft_when_image_missing():

@@ -279,7 +279,7 @@ class MainWindow(QMainWindow):
     def _refresh_env_list(self):
         """Reload definitions and update runtime combo dropdown."""
         self.runtime_combo.clear()
-        rules = self.container_manager.get_available_runtimes()
+        rules = self.environment_build_preparation_use_case.list_available_runtimes()
         for i, rule in enumerate(rules):
             self.runtime_combo.addItem(rule['name'])
             # Store full rule in UserRole
@@ -461,7 +461,7 @@ class MainWindow(QMainWindow):
             # The dialog now handles the build process internally.
             
             # Reload definitions to see the new image
-            self.container_manager.reload_definitions()
+            self.environment_build_preparation_use_case.reload_runtime_definitions()
             self._refresh_env_list() # [FIX] Use correct method name
             
             # Select the new environment
@@ -498,7 +498,7 @@ class MainWindow(QMainWindow):
         rec_reason = "Required for execution (Missing Image)"
         
         # Try to load existing definition from disk via Manager
-        existing_config = self.container_manager.get_definition(rec_id)
+        existing_config = self.environment_build_preparation_use_case.get_definition(rec_id)
         
         if existing_config:
             print(f"[JIT] Loaded existing definition for '{rec_id}'")
@@ -510,7 +510,7 @@ class MainWindow(QMainWindow):
         # If no existing definition, synthesize new one
         if existing_config is None:
             analysis = self.analyzer.summary(code_content)
-            existing_config = self.container_manager.synthesize_definition_config(analysis, rec_id)
+            existing_config = self.environment_build_preparation_use_case.synthesize_definition_config(analysis, rec_id)
             rec_reason = "Synthesized from code analysis (Missing Image)"
             print(f"[JIT] Synthesized config for '{rec_id}' (Fallback)")
 
@@ -536,7 +536,7 @@ class MainWindow(QMainWindow):
         dialog = EnvironmentCreationDialog(
             parent=self,
             manager=self.container_manager,
-            base_images=self.container_manager.get_available_runtimes(),
+            base_images=self.environment_build_preparation_use_case.list_available_runtimes(),
             initial_config=existing_config,
             recommended_base_id=rec_id,
             recommendation_reason=rec_reason,
@@ -546,7 +546,7 @@ class MainWindow(QMainWindow):
         # JIT Dialog handling
         if dialog.exec():
             # Success - Image built
-            self.container_manager.reload_definitions()
+            self.environment_build_preparation_use_case.reload_runtime_definitions()
             self._refresh_env_list()
             
             new_config = dialog.result_config
@@ -601,7 +601,7 @@ class MainWindow(QMainWindow):
             
         try:
             # New Validation Method
-            self.container_manager.validate_environment()
+            self.environment_build_preparation_use_case.validate_runtime_environment()
         except Exception as e:
             # JIT: If validating environment logic fails (e.g. docker down), stop.
             # But here we want to catch "Image Missing" in prepare_run_config later?
@@ -702,7 +702,7 @@ class MainWindow(QMainWindow):
                     dialog = EnvironmentCreationDialog(
                         parent=self,
                         manager=self.container_manager,
-                        base_images=self.container_manager.get_available_runtimes(),
+                        base_images=build_draft.base_images,
                         initial_config=build_draft.initial_config,
                         recommended_base_id=env_id,
                         recommendation_reason=build_draft.recommendation_reason,
@@ -711,7 +711,7 @@ class MainWindow(QMainWindow):
                     
                     # Handle dialog result
                     if dialog.exec():
-                        self.container_manager.reload_definitions()
+                        self.environment_build_preparation_use_case.reload_runtime_definitions()
                         self._refresh_env_list()
                         QMessageBox.information(self, "Build Complete", f"Environment '{env_id}' is ready to use.")
                     
@@ -998,7 +998,7 @@ class MainWindow(QMainWindow):
     def _execute_save_and_build(self, config):
         """Save config and trigger build."""
         try:
-            available_runtimes = self.container_manager.get_available_runtimes()
+            available_runtimes = self.environment_build_preparation_use_case.list_available_runtimes()
             plan = self.environment_build_preparation_use_case.prepare_execution_plan(
                 config,
                 available_runtimes,
@@ -1007,7 +1007,7 @@ class MainWindow(QMainWindow):
             self.console_log.append(f"[Synthesizer] Definition saved for tag: {name}")
             
             # 2. Reload Manager
-            self.container_manager.reload_definitions()
+            self.environment_build_preparation_use_case.reload_runtime_definitions()
             self._populate_runtime_combo()
             
             # 3. Select New Env
