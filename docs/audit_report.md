@@ -1,26 +1,32 @@
-# 監査報告書（Roadmap Compliance Audit）
+# Audit Report: docs/roadmap.md
 
 - 監査日: 2026-05-05
 - 監査対象: `docs/roadmap.md`
 - 絶対基準: `docs/plan.md`, `docs/reference_standards.md`
-- 総合判定: **問題あり（REJECT_TO_PM）**
+- 判定: PASS
+
+## 総評
+`docs/roadmap.md` は、`docs/plan.md` の実装計画および `docs/reference_standards.md` の第1〜4章の必須要求に整合しており、監査上の差し戻し事項は確認されなかった。
+
+## 検証結果
+1. ガバナンス整合性
+- Builder/Validator 分離、処方的 REJECT（5要素必須）、構造違反と実装不足の差し戻し先分離が明記されている。
+- `docs/plan.md` の「差し戻し先自動判定」「処方的エラーハンドリング」と整合。
+
+2. フェーズ/マイルストーン整合性
+- M0〜M6 が Phase 5/6/6.1/6.2/6.3/6.4 を網羅し、各ゲート（AC/T）が対応付けされている。
+- M0成果物3点（assessment/proposal/traceability）未充足時に `REJECT_TO_ARCHITECT` とする進行禁止条件が明記され、`docs/plan.md` の先行成果物ゲートと整合。
+
+3. 構造ゲート整合性
+- `UI->Domain直参照=0`、逆方向依存=0、循環依存=0、Port未経由=0、UI業務ロジック=0 を構造ゲートとして明示。
+- `docs/reference_standards.md` 第4章（Humble Object、依存方向、Interface経由、命名規約）と整合。
+
+4. 再現性/監査証跡整合性
+- `FROM` digest固定、EOLミラー切替、`constraints.txt`、マルチステージビルドを必須適用として明記。
+- `image_digest`/`git_commit`、相対パス強制、入出力/パラメータ/ログ本体ハッシュ記録を必須化しており、第2章・第3章要件と整合。
 
 ## 指摘事項
+- なし
 
-### 1) Builder/Validator 分離における監査入力条件の記載不足
-- failure_location: `docs/roadmap.md` 「0. 運用原則（全フェーズ共通）」4
-- violated_standard: `docs/plan.md` 8.1-2（監査入力は「要件文書・差分(Diff)・テスト結果・監査証跡」のみ）
-- evidence: `roadmap` の記載は「差分・証跡・要件のみで監査する」であり、`テスト結果` が監査入力として明示されていない。
-- required_fix: 当該項目を `要件文書・差分(Diff)・テスト結果・監査証跡のみ` に修正し、監査入力の欠落解釈余地をなくすこと。
-- retest_condition: `docs/roadmap.md` を再読し、監査入力4要素（要件文書/差分/テスト結果/監査証跡）が明示されていることを確認する。
-
-### 2) UI命名規約のCI検出要件が未固定
-- failure_location: `docs/roadmap.md` 「2.4 PyQt/PySide アーキテクチャ標準」
-- violated_standard: `docs/plan.md` 9-4（命名規約を lint または静的チェック対象に含め、CIで検出可能状態を維持）
-- evidence: `roadmap` 2.4 は「命名規約準拠」「命名規約違反=0」のKPIはあるが、`lint/静的チェック` と `CI検出` の実装要件が明文化されていない。
-- required_fix: 2.4 に「シグナル/スロット命名規約を lint もしくは静的チェックに組み込み、CIで自動検出する」を必須適用項目として追加すること。
-- retest_condition: `docs/roadmap.md` 再監査時に、命名規約の自動検出手段（lint/静的チェック）とCI適用が明示されていることを確認する。
-
-## 判定理由
-
-`docs/roadmap.md` は全体として高い整合性を有するものの、`docs/plan.md` で必須化された運用要件の一部（監査入力の4要素明示、命名規約CI検出固定）が未記載である。絶対基準運用上、解釈余地を残すため現時点では合格不可。
+## 監査結論
+`docs/roadmap.md` は絶対基準（`docs/plan.md` / `docs/reference_standards.md`）に対して監査上の不適合を認めないため、判定は `AUDIT_PASS_ROADMAP` とする。
