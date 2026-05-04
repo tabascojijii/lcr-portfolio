@@ -21,24 +21,22 @@ class EnvironmentCreationDialog(QDialog):
     and customize installed packages.
     """
     
-    def __init__(self, parent=None, manager: Any = None, base_images: List[Dict[str, Any]] = [], initial_config: Dict = {},
-                 recommended_base_id: Optional[str] = None, recommendation_reason: Optional[str] = None, build_use_case: Any = None):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        base_images: Optional[List[Dict[str, Any]]] = None,
+        initial_config: Optional[Dict[str, Any]] = None,
+        recommended_base_id: Optional[str] = None,
+        recommendation_reason: Optional[str] = None,
+        build_use_case: Any = None,
+    ):
         super().__init__(parent)
-        # Backward-compatible positional argument handling:
-        # legacy call signature passed `manager` as 2nd arg and `base_images` as 3rd.
-        if manager is not None and not isinstance(base_images, list) and isinstance(initial_config, list):
-            base_images, initial_config, recommended_base_id, recommendation_reason, build_use_case = (
-                initial_config,
-                recommended_base_id if isinstance(recommended_base_id, dict) else {},
-                recommendation_reason,
-                build_use_case,
-                None,
-            )
         self.setWindowTitle("Create New Runtime Environment")
         self.resize(700, 850)
         
-        self.base_images = base_images
-        self.initial_config = initial_config
+        self.base_images = base_images or []
+        self.initial_config = initial_config or {}
         self.recommended_base_id = recommended_base_id
         self.recommendation_reason = recommendation_reason
         self.result_config = None

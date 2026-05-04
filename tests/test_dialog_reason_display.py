@@ -66,12 +66,11 @@ def analyze_otolith(image_path):
     
     # Create dialog and verify recommendation reason is rendered
     dialog = EnvironmentCreationDialog(
-        None,
-        manager,
-        manager.get_available_runtimes(),
-        initial_config,
-        rec_id,
-        rec_reason
+        parent=None,
+        base_images=manager.get_available_runtimes(),
+        initial_config=initial_config,
+        recommended_base_id=rec_id,
+        recommendation_reason=rec_reason,
     )
     assert dialog.reason_label is not None
     assert rec_reason in dialog.reason_label.text()
