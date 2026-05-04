@@ -1,27 +1,31 @@
 # Audit Report
 
+## 監査対象
+- 基準: `docs/reference_standards.md`
+- 計画: `docs/plan.md`
+
 ## 判定
-REJECT
+- 総合判定: **PASS（問題なし）**
+- 出力ステータス: `AUDIT_PASS_PLAN`
+
+## 検証結果（基準別）
+1. 監査およびマルチエージェント・ガバナンス標準
+- EMCSによる客観評価: `docs/plan.md` に M1〜M6 の客観メトリクスが定義されており適合。
+- Builder/Validator分離: 入力境界分離および Auditor 入力制約（requirements/diffのみ）が明記され適合。
+- 処方的REJECT要件: 失敗箇所・違反制約・証拠・修正ヒント等の必須項目が定義され適合。
+
+2. EOLスタックのコンテナ化およびビルド再現性標準
+- `FROM` の digest 固定必須、APT archive へのリダイレクト、`constraints.txt` 必須、マルチステージ必須がすべて明記され適合。
+
+3. データ完全性と監査証跡
+- `container_image_digest` と `git_commit_hash` の記録必須が明記され適合。
+- 相対パス強制および絶対パス fail-fast が明記され適合。
+- 4区分ハッシュ（input/output/parameter/log）の全件必須が明記され、基準要求を満たす。
+
+4. PyQt / PySide モダンUIアーキテクチャ標準
+- Humble Object（UI責務制限）、依存方向（UI外側・内側の独立）、Port/Protocol経由通信が明記され適合。
+- Signal/Slot命名規則（Signal=過去分詞, Slot=動詞）を機械検証対象として明記し適合。
 
 ## 指摘事項
-
-1. DoDがEMCS必須項目を欠落させており、基準の強制力を満たしていない
-- 失敗箇所: `docs/plan.md` Section 7 "Definition of Done"
-- 違反制約: `docs/reference_standards.md` 4章（Signal/Slot命名規約は必須）および 1章（客観メトリクスによる厳格評価）
-- 観測証拠:
-  - `docs/plan.md` Section 5.4 で EMCS は `M1〜M6` を定義し、`M6` は「Signal/Slot命名規約違反件数 = 0」
-  - しかし Section 7 は「EMCS（M1〜M5）全て閾値内」と記載し、`M6` をDoDから除外
-- 問題の性質:
-  - 計画内で必須メトリクスの適用範囲が不一致となっており、Signal/Slot規約違反が存在してもDoDを満たせる解釈余地が生じる。
-  - 絶対基準で必須の規約を最終受入条件から外す設計は、監査可能性・再現可能性の担保を弱める。
-- 修正ヒント:
-  - Section 7 の記述を `EMCS（M1〜M6）全て閾値内` に修正する。
-  - 併せて Section 7 に `Signal/Slot命名規約違反0件` を明示的に再掲し、DoD単体で完結するようにする。
-- 再検証条件:
-  - `docs/plan.md` 修正後、Section 5.4（EMCS定義）と Section 7（DoD）のメトリクス範囲が完全一致していること。
-  - Signal/Slot規約が「必須」から「推奨」へ緩和されていないこと。
-- ルーティング先:
-  - `REJECT_TO_ARCHITECT`
-
-## 総括
-上記不整合は計画レベルの受入基準定義不備であり、実装段階に進める前にArchitect側で修正が必要。
+- 重大/中/軽微いずれの違反も検出なし。
+- `docs/plan.md` は `docs/reference_standards.md` の必須制約を網羅し、矛盾・緩和・欠落は確認されなかった。
