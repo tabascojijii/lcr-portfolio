@@ -293,3 +293,48 @@
   - T6.3-2: Port/UseCaseの型注釈チェック
   - T6.3-3: `type: ignore` 理由コメント検査
   - T6.3-4: `Any` 件数の差分監視（増加時Fail）
+
+## Phase 6.4: Contract & Regression Hardening
+
+### 1. 目的
+- 疎結合化・型安全化（Phase 6.1〜6.3）の成果を固定し、将来変更での逆流を防止する。
+- Port契約・監査契約・主要ユースケース導線の回帰を自動検出できる状態を作る。
+
+### 2. 採用方針（確定）
+- P6.4-1 契約優先
+  - Port/DTO/監査レコードの契約をテストで固定する。
+- P6.4-2 回帰優先
+  - 主要導線（Run/Build/Lifecycle/Audit）に対し、破壊的変更を即検出する。
+- P6.4-3 fail-fast
+  - 契約違反・回帰検出時は CI を即失敗とする。
+
+### 3. 機能要件
+
+#### R6.4-1 Port Contract Test
+- UI層は Port 経由のみで外部機能にアクセスすることをテストで保証する。
+- Portシグネチャ変更時は、互換性チェック（引数/戻り値）を必須とする。
+
+#### R6.4-2 DTO/Schema Contract Test
+- Phase 6.2 DTO のシリアライズ/デシリアライズ契約を固定する。
+- 監査レコードの必須キー・型・相対パス制約をスキーマ検証で固定する。
+
+#### R6.4-3 Golden Regression
+- 主要フローのゴールデンケース（入力→判定→出力）を固定し、差分検出を行う。
+- 少なくとも以下を対象にする。
+  - Runtime guard 判定
+  - Environment lifecycle（一括削除/部分失敗継続）
+  - 監査ログ生成（4区分ハッシュ + digest + git hash）
+
+### 4. 受け入れ基準
+- AC6.4-1: Port契約テストが全件Passし、UIの境界バイパスが0件である。
+- AC6.4-2: DTO/監査スキーマ契約テストが全件Passする。
+- AC6.4-3: 主要導線ゴールデン回帰テストが全件Passする。
+- AC6.4-4: 契約違反時にCIがfail-fastで停止する。
+
+### 5. テスト・ゲート要件（必須）
+- `pytest tests/` 全件 Pass を維持する。
+- 最低限、以下の自動テストを追加すること。
+  - T6.4-1: Port contract test（シグネチャ互換/境界バイパス検出）
+  - T6.4-2: DTO contract test（serialize/deserialize互換）
+  - T6.4-3: Audit schema contract test（必須キー/型/相対パス）
+  - T6.4-4: Golden regression test（Run/Build/Lifecycle/Audit）
