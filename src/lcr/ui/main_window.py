@@ -509,9 +509,14 @@ class MainWindow(QMainWindow):
         
         # If no existing definition, synthesize new one
         if existing_config is None:
-            analysis = self.analyzer.summary(code_content)
-            existing_config = self.environment_build_preparation_use_case.synthesize_definition_config(analysis, rec_id)
-            rec_reason = "Synthesized from code analysis (Missing Image)"
+            build_draft = self.runtime_use_case.prepare_missing_image_build_draft(
+                analyzer=None,
+                container_manager=None,
+                code_text=code_content,
+                selected_rule=base_rule,
+            )
+            existing_config = build_draft.initial_config
+            rec_reason = build_draft.recommendation_reason
             print(f"[JIT] Synthesized config for '{rec_id}' (Fallback)")
 
         # [CRITICAL FIX] Always inject the requested ID into config
@@ -646,9 +651,6 @@ class MainWindow(QMainWindow):
                 selected_rule = None
 
             run_decision = self.runtime_use_case.prepare_run_decision(
-                self.analyzer,
-                self.container_manager,
-                self.history_manager,
                 current_content,
                 script_path,
                 data_dir=data_dir,

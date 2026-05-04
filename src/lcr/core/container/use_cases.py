@@ -176,6 +176,28 @@ class EnvironmentBuildPreparationUseCase:
 
 class RuntimeExecutionPreparationUseCase:
     """Use case for runtime pre-checks before UI starts execution worker."""
+    def __init__(self, analyzer=None, container_manager=None, history_manager=None):
+        self._analyzer = analyzer
+        self._container_manager = container_manager
+        self._history_manager = history_manager
+
+    def _resolve_analyzer(self, analyzer=None):
+        resolved = analyzer or self._analyzer
+        if resolved is None:
+            raise ValueError("analyzer is required")
+        return resolved
+
+    def _resolve_container_manager(self, container_manager=None):
+        resolved = container_manager or self._container_manager
+        if resolved is None:
+            raise ValueError("container_manager is required")
+        return resolved
+
+    def _resolve_history_manager(self, history_manager=None):
+        resolved = history_manager or self._history_manager
+        if resolved is None:
+            raise ValueError("history_manager is required")
+        return resolved
 
     def prepare_guard(
         self,
@@ -228,6 +250,8 @@ class RuntimeExecutionPreparationUseCase:
         selected_rule: Optional[Dict[str, Any]],
         selection_mode: str,
     ) -> ManualCompatibilityCheckResult:
+        analyzer = self._resolve_analyzer(analyzer)
+        container_manager = self._resolve_container_manager(container_manager)
         if selection_mode != "Manual" or not selected_rule:
             return ManualCompatibilityCheckResult(False, "")
 
@@ -250,6 +274,8 @@ class RuntimeExecutionPreparationUseCase:
         code_text: str,
         selected_rule: Dict[str, Any],
     ) -> MissingImageBuildDraft:
+        analyzer = self._resolve_analyzer(analyzer)
+        container_manager = self._resolve_container_manager(container_manager)
         env_id = selected_rule["id"]
         existing_config = container_manager.get_definition(env_id)
         if existing_config:
@@ -276,14 +302,16 @@ class RuntimeExecutionPreparationUseCase:
 
     def prepare_execution(
         self,
-        analyzer,
-        container_manager,
         code_text: str,
         script_path: str,
         data_dir: Optional[str],
         output_dir: Optional[str],
         selected_rule: Optional[Dict[str, Any]],
+        analyzer=None,
+        container_manager=None,
     ) -> Dict[str, Any]:
+        analyzer = self._resolve_analyzer(analyzer)
+        container_manager = self._resolve_container_manager(container_manager)
         feature = analyzer.analyze(code_text)
         search_terms = feature.imports + feature.keywords
         if feature.validation_year:
@@ -316,23 +344,24 @@ class RuntimeExecutionPreparationUseCase:
 
     def prepare_execution_plan(
         self,
-        analyzer,
-        container_manager,
-        history_manager,
         code_text: str,
         script_path: str,
         data_dir: Optional[str],
         output_dir: Optional[str],
         selected_rule: Optional[Dict[str, Any]],
+        analyzer=None,
+        container_manager=None,
+        history_manager=None,
     ) -> RuntimeExecutionPlan:
+        history_manager = self._resolve_history_manager(history_manager)
         prepared = self.prepare_execution(
-            analyzer,
-            container_manager,
             code_text,
             script_path,
             data_dir=data_dir,
             output_dir=output_dir,
             selected_rule=selected_rule,
+            analyzer=analyzer,
+            container_manager=container_manager,
         )
         config = prepared["config"]
         image_name = config["image"]
@@ -354,41 +383,44 @@ class RuntimeExecutionPreparationUseCase:
 
     def prepare_run_preflight(
         self,
-        analyzer,
-        container_manager,
-        history_manager,
         code_text: str,
         script_path: str,
         data_dir: Optional[str],
         output_dir: Optional[str],
         selected_rule: Optional[Dict[str, Any]],
         selection_mode: str,
+        analyzer=None,
+        container_manager=None,
+        history_manager=None,
     ) -> RuntimePreflightResult:
+        analyzer = self._resolve_analyzer(analyzer)
+        container_manager = self._resolve_container_manager(container_manager)
+        history_manager = self._resolve_history_manager(history_manager)
         compatibility = self.prepare_manual_compatibility_check(
-            analyzer,
-            container_manager,
-            code_text,
-            selected_rule,
-            selection_mode,
+            code_text=code_text,
+            selected_rule=selected_rule,
+            selection_mode=selection_mode,
+            analyzer=analyzer,
+            container_manager=container_manager,
         )
         execution_plan = self.prepare_execution_plan(
-            analyzer,
-            container_manager,
-            history_manager,
-            code_text,
-            script_path,
+            code_text=code_text,
+            script_path=script_path,
             data_dir=data_dir,
             output_dir=output_dir,
             selected_rule=selected_rule,
+            analyzer=analyzer,
+            container_manager=container_manager,
+            history_manager=history_manager,
         )
         image_missing = not self.image_exists(execution_plan.config["image"])
         build_draft = None
         if image_missing:
             build_draft = self.prepare_missing_image_build_draft(
-                analyzer,
-                container_manager,
-                code_text,
-                execution_plan.selected_rule,
+                code_text=code_text,
+                selected_rule=execution_plan.selected_rule,
+                analyzer=analyzer,
+                container_manager=container_manager,
             )
         return RuntimePreflightResult(
             compatibility=compatibility,
@@ -399,26 +431,29 @@ class RuntimeExecutionPreparationUseCase:
 
     def prepare_run_decision(
         self,
-        analyzer,
-        container_manager,
-        history_manager,
         code_text: str,
         script_path: str,
         data_dir: Optional[str],
         output_dir: Optional[str],
         selected_rule: Optional[Dict[str, Any]],
         selection_mode: str,
+        analyzer=None,
+        container_manager=None,
+        history_manager=None,
     ) -> RuntimeRunDecision:
+        analyzer = self._resolve_analyzer(analyzer)
+        container_manager = self._resolve_container_manager(container_manager)
+        history_manager = self._resolve_history_manager(history_manager)
         preflight = self.prepare_run_preflight(
-            analyzer=analyzer,
-            container_manager=container_manager,
-            history_manager=history_manager,
             code_text=code_text,
             script_path=script_path,
             data_dir=data_dir,
             output_dir=output_dir,
             selected_rule=selected_rule,
             selection_mode=selection_mode,
+            analyzer=analyzer,
+            container_manager=container_manager,
+            history_manager=history_manager,
         )
         return RuntimeRunDecision(
             compatibility=preflight.compatibility,

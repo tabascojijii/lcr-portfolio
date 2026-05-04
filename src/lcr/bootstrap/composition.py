@@ -27,7 +27,11 @@ def build_main_window_dependencies():
         "container_manager": container_manager,
         "history_manager": history_manager,
         "audit_metadata_service": audit_metadata_service,
-        "runtime_use_case": RuntimeExecutionPreparationUseCase(),
+        "runtime_use_case": RuntimeExecutionPreparationUseCase(
+            analyzer=analyzer,
+            container_manager=container_manager,
+            history_manager=history_manager,
+        ),
         "environment_draft_use_case": EnvironmentDraftUseCase(analyzer, container_manager),
         "environment_build_preparation_use_case": EnvironmentBuildPreparationUseCase(container_manager),
         "save_history_use_case": SaveExecutionHistoryUseCase(history_manager),
