@@ -1,162 +1,208 @@
-# LCR ロードマップ（PM）
+# LCR Roadmap（Reference Standards Absolute Baseline）
 
 - 作成日: 2026-05-04
-- 絶対基準: `docs/reference_standards.md`
-- 参照計画: `docs/plan.md`
-- 監査反映: `docs/audit_report.md`（2026-05-04, AUDIT_PASS_ROADMAP）
-- 目的: 監査でREJECTされない実装順序を固定し、構造逸脱と再発を防ぎながら Phase 5/6/6.2/6.3 を完了する。
+- 参照: `docs/plan.md`, `docs/reference_standards.md`
+- 基本方針: `docs/reference_standards.md` を絶対基準とし、本ロードマップ内の全タスク・全ゲートは当該基準に従属する。
 
-## 0.1 監査反映ステータス（2026-05-04）
+## 0. Absolute Compliance Charter
 
-- 監査結果: `AUDIT_PASS_ROADMAP`
-- 指摘事項: `REJECT_TO_PM` を要する不適合なし
-- 反映方針: 本ロードマップの要求・ゲート・完了条件を維持し、`docs/reference_standards.md` を継続して絶対基準として運用する
+以下のいずれかに違反した時点で、当該フェーズは即時 `REJECT` とし、次フェーズ進行を禁止する。
 
-## 0. ロードマップ原則（逸脱禁止）
+1. Docker再現性4要件（digest固定 / EOL archive切替 / constraints適用 / マルチステージ）
+2. Data Integrity要件（相対パス / 入出力+パラメータ+ログ本体ハッシュ / `image_digest` + `git_commit` 記録）
+3. PyQt/PySide設計要件（Humble Object / 依存方向固定 / インターフェース経由 / 命名規約）
+4. 監査ガバナンス要件（Builder/Validator分離 / EMCS客観評価 / 処方的REJECT）
 
-1. **基準優先**: 判断が衝突した場合は常に `docs/reference_standards.md` を優先する。
-2. **構造先行**: 機能追加より先に UI分離・依存方向・Port境界を固定する。
-3. **監査可能性優先**: 実装完了条件は「動作」だけでなく「監査証跡の完全性」を含む。
-4. **Builder/Validator分離**: 実装と監査は役割分離し、Diffベースで判定する。
+## 1. Roadmap Objectives
 
-## 1. マイルストーン
+1. 設計不備を実装で吸収しない工程へ移行する。
+2. UI汚染・境界越え・監査欠落の再発を構造的に不可能化する。
+3. EOLスタックを監査可能かつ再現可能な形で固定する。
 
-### M1: アーキテクチャ固定（Phase A-B）
+## 2. Fixed KPIs（Exit Criteria）
 
-- 期間目安: Week 1-2
-- 成果物:
-  - 依存方向図、責務表、Port一覧（`artifacts/refactoring_proposal.md`）
-  - 違反一覧と是正方針（`artifacts/architecture_decoupling_assessment.md`）
-  - 変更影響テスト仕様（UI変更時/Domain変更時、監査可能形式）
-  - 標準条項トレーサビリティマトリクス（KPI ↔ `docs/reference_standards.md`、監査可能形式）
-  - 標準条項トレーサビリティマトリクス保存先: `artifacts/standards_traceability_matrix.md`
-  - `MainWindow._run_container` / `_show_create_env_dialog` の責務分離完了
-  - `_run_container`（必要に応じて `_show_create_env_dialog` を含む）移管前後の責務差分表
-  - 既知再発2メソッド（`_run_container`, `_show_create_env_dialog`）の専用監査チェックリスト証跡
-- 完了条件:
-  - UI->Domain 直参照 0
-  - Port未経由 0
-  - 循環依存 0
-  - MainWindow業務ロジック 0
-  - `MainWindow._run_container` は UseCase呼び出し + UI表示更新以外を保持しない
-  - `MainWindow._run_container` から Domain/Infrastructure実装型への直接import 0
-  - `MainWindow._show_create_env_dialog` は Port/UseCase非経由で環境生成ロジックへ到達しない
-  - 「不足import→候補生成→作成→再評価」の制御フローは1つのUseCase境界で完結する
-  - Dynamic Refresh（再起動不要反映）が実装されている
-  - 変更影響テスト仕様（UI変更時/Domain変更時）が監査可能な形式で保存済み
-  - 標準条項トレーサビリティマトリクス作成完了（`artifacts/standards_traceability_matrix.md`、監査可能）
-  - 標準条項トレーサビリティマトリクス更新タイミングは M1完了時および各Phase遷移判定前
-  - Phase遷移ゲートで KPI/標準条項対応を照合し、欠落があれば `REJECT_TO_PM`
-  - 移管前後の責務差分表が監査証跡として保存済み
-  - 既知再発2メソッドの専用監査チェックリスト保存完了
-  - Architect承認済み（未承認時は Phase C 以降へ遷移不可）
+### 2.1 Structure KPIs
 
-### M2: Validation Guardrails 完了（Phase C）
+- `UI -> Domain` 直接依存: 0件
+- Port未経由の境界越え: 0件
+- 逆方向依存（内側 -> 外側）: 0件
+- 循環依存: 0件
+- `MainWindow` の業務ロジック保持: 0件
+- Qtシグナル命名規約違反（過去分詞形以外）: 0件
+- Qtスロット命名規約違反（動詞開始以外）: 0件
+- `CC > 10`: 0件
+- `LOC > 80`: 0件
 
-- 期間目安: Week 3
-- 成果物:
-  - capability mapping（推定/実証の明示）
-  - mismatch時 Hard Guard（Run無効化）
-  - 不適合時の強制作成導線
-  - ALCOA++ 監査ログ必須項目記録
-- 完了条件:
-  - AC-1〜AC-5, T5-1〜T5-4 を満たす
-  - `image_digest`, `git_commit`, 各種ハッシュ欠落 0
+### 2.2 Quality KPIs
 
-### M3: Lifecycle Management 完了（Phase D）
+- `pytest tests/` 全件Pass
+- DTO strict/fail-fast違反: 0件
+- `mypy` エラー: 0件
+- 理由なき `type: ignore`: 0件
 
-- 期間目安: Week 4-5
-- 成果物:
-  - Environment Manager
-  - 一括削除2段階確認
-  - 未使用判定・クリーンアップ・メタデータ編集
-  - 部分失敗継続と結果分離表示
-  - Docker再現性4要件の実装
-- 完了条件:
-  - AC6-1〜AC6-7, T6-1〜T6-6 を満たす
-  - Docker基準（Digest固定、Archive APT、constraints、Multi-stage）全合格
+### 2.3 Audit KPIs
 
-### M4: 型安全ゲート完了（Phase E）
+- 相対パス違反: 0件
+- ハッシュ対象欠落（入力/出力/パラメータ/ログ本体）: 0件
+- `image_digest` 記録欠落: 0件
+- `git_commit` 記録欠落: 0件
+- ハッシュ再計算不一致: 0件
 
-- 期間目安: Week 6
-- 成果物:
-  - DTOのPydantic v2 strict化（段階移行）
-  - dict互換アダプタ
-  - mypyゲート
-  - `type: ignore` 理由必須運用
-- 完了条件:
-  - AC6.2-1〜AC6.2-5, T6.2-1〜T6.2-5
-  - AC6.3-1〜AC6.3-4, T6.3-1〜T6.3-4
-  - mypy error 0
+### 2.4 Docker/EOL KPIs
 
-## 2. 実行順序（固定）
+- `FROM` タグ使用: 0件（`@sha256:` 必須）
+- EOL APT未切替: 0件
+- `constraints.txt` 未適用ビルド: 0件
+- C/C++単一ステージビルド: 0件
 
-1. Phase A: 設計固定
-2. Phase B: 境界リファクタ
-3. Phase C: Validation Guardrails
-4. Phase D: Lifecycle Management
-5. Phase E: Type Safety + Static Gate
+## 3. Phase Plan
 
-## 3. ガバナンス・ゲート運用
+### Phase A: Architecture Lock
 
-### 3.1 ダブルゲート（両方必須）
+目的: UI責務分離と依存方向の固定。
 
-- 機能ゲート:
-  - `pytest tests/` 全件Pass
-  - 各PhaseのAC/T項目達成
-- 構造ゲート:
-  - 禁止依存/循環依存 0
-  - Humble Object準拠（UI業務ロジック 0）
-  - Port経由率 100%（測定: importグラフ + 呼び出し経路監査）
-  - 内側層（UseCase/Domain）から外側層（UI/Infrastructure）への直接依存 0（測定: importグラフ）
-  - Port定義が `abc.ABC` または `typing.Protocol`
-  - シグナル/スロット命名規約違反 0
-  - 既知再発ポイント監査（`_run_container`, `_show_create_env_dialog`）違反 0（測定: 専用責務チェックリスト）
+実施:
+1. `MainWindow` を Humble Object 化（イベント中継/表示更新のみ）
+2. 実行導線を `RunContainerUseCase` に集約
+3. 環境作成導線を `CreateEnvironmentFlowUseCase` に集約
+4. UIから実装型直参照を除去し、Port経由へ統一
+5. シグナル/スロット命名規約を全体是正
 
-### 3.2 差し戻し規約
+完了条件:
+1. Structure KPIs 全達成
+2. `_run_container` / `_show_create_env_dialog` から業務判断除去
 
-- 構造違反: `REJECT_TO_ARCHITECT`
-- 機能違反: `REJECT_TO_IMPLEMENT`
-- 同一構造違反の連続発生: Architect是正完了まで後続実装停止
-- フェーズ遷移停止条件: Architect承認がない場合、Phase C/D/E への遷移を禁止
+### Phase B: Reproducible Build Lock
 
-### 3.3 監査判定記録（EMCS必須）
+目的: EOLビルド再現性を監査前提で固定。
 
-- Validatorは全判定をEMCS観点で記録する。
-- 必須記録項目: 構造違反、複雑度、依存違反、影響度
-- 判定ログはDiff根拠と対応づけ、処方的差し戻し指示とセットで保存する。
+実施:
+1. 全 `Dockerfile` の `FROM` を digest固定
+2. EOL APTソースを `old-releases` / `archive.debian.org` へ統一
+3. `constraints.txt` を必須入力化（未適用はFail）
+4. C/C++依存（例: OpenCV）をマルチステージ化
 
-## 4. 監査証跡要件（ALCOA++）
+完了条件:
+1. Docker/EOL KPIs 全達成
 
-全マイルストーンで以下を必須記録とする。
+### Phase C: Phase 5 Guardrails
 
-- 環境・コード: `image_digest`, `git_commit`
-- 改ざん検知: `input_hashes`, `output_hashes`, `param_hash`, `log_hash`
-- 検証性: `relative_path_check`
-- 判定根拠: required imports, capability, mismatch, guard発火状態
+目的: ミスマッチ実行を事前遮断。
 
-欠落時は fail-fast とし、完了判定を認めない。
+実施:
+1. capability mapping（推定/実証）可視化
+2. required imports差分検知
+3. mismatch時Run無効化
+4. 適合環境が無い場合の作成導線
+5. 作成後Dynamic Refresh
+6. 監査ログへ判定根拠を記録
 
-## 5. リスク管理（重点）
+完了条件:
+1. AC-1〜AC-5
+2. T5-1〜T5-4 Pass
 
-1. UIへのロジック逆流
-- 対策: MainWindow責務チェックを固定監査項目化
+### Phase D: Phase 6 Lifecycle
 
-2. Docker再現性ドリフト
-- 対策: 4要件をCI監査項目に固定
+目的: 安全で追跡可能な環境整理。
 
-3. 監査ログ不備
-- 対策: 監査DTO必須化 + 欠落時fail-fast
+実施:
+1. Environment Manager実装
+2. 2段階確認付き一括削除
+3. 未使用判定（最終利用/回数/保護フラグ）
+4. dangling/unused image cleanup
+5. メタ情報編集（内部ID不変）
+6. 部分失敗継続と結果分離表示
+7. 監査ログ完全記録（対象/時刻/成否/容量/理由）
 
-4. 型移行時の互換破壊
-- 対策: DTO段階導入 + 互換アダプタ併用
+完了条件:
+1. AC6-1〜AC6-7
+2. T6-1〜T6-6 Pass
 
-## 6. 完了定義（DoD）
+### Phase E: Type Safety & Static Gate
 
-以下をすべて満たした時点で、ロードマップ完了とする。
+目的: 実行時・静的解析の二重ゲート化。
 
-1. 全PhaseのAC/T項目が達成済み
-2. 構造KPI・品質KPI・監査KPIが全達成
-3. 既知再発箇所（`_run_container`, `_show_create_env_dialog`）で違反0
-4. 監査証跡が再実行可能な粒度で保存済み
-5. 監査判定が連続してREJECTなし
+実施:
+1. DTOを段階的にPydantic v2へ移行
+2. strict + fail-fast を強制
+3. 境界にdict互換アダプタ配置
+4. `mypy` をCI必須ゲート化
+5. `Any` / `type: ignore` の理由管理と増加監視
+
+完了条件:
+1. AC6.2-1〜AC6.2-5 / T6.2-1〜T6.2-5
+2. AC6.3-1〜AC6.3-4 / T6.3-1〜T6.3-4
+
+### Phase F: Contract & Regression Hardening
+
+目的: 将来変更時の品質逆流防止。
+
+実施:
+1. Port contract test
+2. DTO/Audit schema contract test
+3. Golden regression（Run/Build/Lifecycle/Audit）
+
+完了条件:
+1. AC6.4-1〜AC6.4-4
+2. T6.4-1〜T6.4-4 Pass
+
+## 4. Governance Gates
+
+### 4.1 Functional Gate
+
+- 該当フェーズのACを満たす
+- 必須テスト（`pytest`, `mypy`, contract, regression）が全Pass
+
+### 4.2 Structural Gate
+
+- Structure KPIs 全達成
+- UI責務混在再発 0件
+- Port bypass 0件
+
+### 4.3 Audit Integrity Gate
+
+- ハッシュ対象4区分を全生成
+- 保存先 `artifacts/audit/hashes/` 固定
+- 命名規約 `<run_id>_<target_kind>_<relative_path_normalized>.sha256`
+- 再計算一致を全件確認
+
+### 4.4 Governance Gate
+
+- Builder/Validator分離チェックが `Yes`
+- 監査入力が「要件仕様 + Diff + テスト結果」のみ
+- REJECT時に処方的指示が記録されている
+
+### 4.5 Stop Rules
+
+1. いずれかのゲートFailで次フェーズ進行禁止
+2. 構造ゲートFail時は実装停止し、Architect是正を先行
+3. Docker/EOL 4要件の1件Failで全実装停止
+4. 監査データ完全性未達で即Fail-fast
+
+## 5. Mandatory Artifacts
+
+各フェーズ完了時に以下を更新・保存する。
+
+1. `artifacts/architecture_decoupling_assessment.md`
+2. `artifacts/refactoring_proposal.md`
+3. `artifacts/traceability_matrix.md`
+4. `artifacts/audit/hashes/*.sha256`
+5. フェーズ別テスト証跡（pytest/mypy/contract/regression）
+6. Docker/EOL検証証跡（digest, APT, constraints, multi-stage）
+
+## 6. RACI（Execution Accountability）
+
+- PM: 本ロードマップ運用、ゲート進行判定、差し戻し経路管理
+- Architect: 境界設計、Port定義、構造違反是正案作成
+- Implementer: フェーズ単位実装、テスト実行、証跡生成
+- Auditor: absolute baseline準拠監査、EMCS評価、処方的REJECT発行
+
+## 7. Definition of Done
+
+以下をすべて満たした時のみ完了。
+
+1. Phase A〜F の完了条件達成
+2. Fixed KPIs（Structure/Quality/Audit/Docker-EOL）全達成
+3. Mandatory Artifacts 最新化
+4. 全フェーズでBuilder/Validator分離 `Yes`
+5. `docs/reference_standards.md` 逸脱 0件
