@@ -1,33 +1,73 @@
 # 監査報告書（Auditor）
 
-## 監査手順実行結果
-1. `pytest tests/` 実行結果
-- 実行日時: 2026-05-06 (JST)
-- 結果: **77 passed / 0 failed / 0 error**
-- ログ要約:
-  - `collected 77 items`
-  - `============================= 77 passed in 4.20s ==============================`
+## 判定
+REJECT_TO_ARCHITECT
 
-2. `docs/reference_standards.md` 基準照合（対象: `src/`・`tests/`・`artifacts/`）
-- 監査ガバナンス: 監査レポートに客観根拠（テスト実行結果・成果物実在確認）を明記。
-- Docker再現性/Data Integrity/UI分離規約: `tests/` の関連テスト群（例: `test_dockerfile_digest_policy.py`、`test_data_integrity_audit_use_case.py`、`test_ui_usecase_separation.py`、`test_phase61_decoupling_use_case.py`）が全Passで、規約違反を示す失敗証跡なし。
-- `artifacts/` 内の Phase 6.1 関連成果物に required セクションが存在し、規約照合上の欠落なし。
+## 総評
+`docs/plan.md` は UI責務分離、Port化、型安全化、Data Integrity、Gate分離については基準適合度が高い。
+ただし、`docs/reference_standards.md` を絶対基準として照合した場合、必須規約の一部が計画レベルで未固定であり、現時点では受け入れ不可。
 
-3. Phase 6.1 受け入れ基準照合（`docs/requirements.md`）
-- 必須成果物存在:
-  - `artifacts/architecture_decoupling_assessment.md` 存在確認済み
-  - `artifacts/refactoring_proposal.md` 存在確認済み
-- AC6.1-1〜AC6.1-7 適合確認:
-  - AC6.1-1: 違反一覧の記載方式定義あり（違反0件として提示）
-  - AC6.1-2: 改善方針（Port設計・移管先レイヤ）記載あり
-  - AC6.1-3: P0/P1/P2 の実施順序記載あり
-  - AC6.1-4: テスト戦略・判定指標記載あり
-  - AC6.1-5: importグラフ抽出手順・一覧・件数記載あり
-  - AC6.1-6: 変更影響テスト手順（シナリオ/期待影響/合否条件）記載あり
-  - AC6.1-7: 固定数値閾値（禁止依存0、循環0、UI業務ロジック0、境界違反テスト100%）記載あり
+## 指摘事項（重大度順）
 
-## 指摘事項
-- なし（pytest失敗・基準違反ともに未検出）
+### 1) EOLコンテナ再現性標準の必須4要件が計画に明示固定されていない（Critical）
+- 失敗箇所: `docs/plan.md` 全体（Docker再現性要件の固定節が不在）
+- 違反制約:
+  - `FROM` のSHA256ダイジェスト固定
+  - EOL OSのアーカイブリポジトリへのAPT切替
+  - `constraints.txt` によるpip探索範囲固定
+  - OpenCV等ビルド時のマルチステージ分離
+- 根拠: `docs/reference_standards.md`「2. EOLスタックのコンテナ化およびビルド再現性標準 (Docker)」
+- 影響: 環境再現性が実装者裁量に委ねられ、将来の再現不能・ビルド不安定化を防止できない。
+- 最小修正単位の指示:
+  1. `docs/plan.md` に「Docker Reproducibility 固定章」を追加する。
+  2. DoDに上記4要件の達成証跡（設定ファイル名/検証項目）を追加する。
+  3. Gate-Sまたは専用Gateに「タグ利用禁止・digest必須」等の機械検査条件を追加する。
+- 原因層: 設計
+- 差し戻し先: `REJECT_TO_ARCHITECT`
+- 再検証条件: 計画本文で4要件が「必須」「固定」「検証方法付き」で明文化されていること。
 
-## 最終判定
-- **AUDIT_PASS_IMPLEMENT**
+### 2) 監査標準の「客観メトリクス（EMCS）」定義が不足（High）
+- 失敗箇所: `docs/plan.md` 5章 Gate-S
+- 違反制約: 主観排除のため、客観メトリクスに基づく判定（例: SRP違反、複雑度超過）
+- 根拠: `docs/reference_standards.md`「1. 監査およびマルチエージェント・ガバナンス標準」
+- 影響: Gate-S が「0件」基準のみで、複雑度・責務過多を定量排除できない。
+- 最小修正単位の指示:
+  1. Gate-Sに定量KPIを追加（例: 関数複雑度上限、依存ルール違反件数、UI層許容LOC/責務数など）。
+  2. KPIの測定方法と閾値超過時の自動REJECT条件を明記する。
+- 原因層: 設計
+- 差し戻し先: `REJECT_TO_ARCHITECT`
+- 再検証条件: Gate-Sに測定可能な数値基準と閾値が定義されていること。
+
+### 3) Builder/Validator分離の運用境界が不十分（High）
+- 失敗箇所: `docs/plan.md` 5章〜7章
+- 違反制約: Validatorは実装思考過程を共有せず、要件とDiffのみで敵対的レビュー
+- 根拠: `docs/reference_standards.md`「1. 監査およびマルチエージェント・ガバナンス標準」
+- 影響: 監査独立性が運用上あいまいで、甘い判定が混入する余地が残る。
+- 最小修正単位の指示:
+  1. 監査入力を「requirements + reference standards + diff + test evidence」に限定すると明記。
+  2. 設計/実装担当から監査担当への非許容入力（口頭説明、主観補足等）を禁止事項に追加。
+- 原因層: 設計
+- 差し戻し先: `REJECT_TO_ARCHITECT`
+- 再検証条件: 監査I/O境界と禁止入力が計画に明文化されていること。
+
+### 4) シグナル/スロット命名規約の拘束条件が未定義（Medium）
+- 失敗箇所: `docs/plan.md` 3章（UI境界仕様）
+- 違反制約: シグナルは過去分詞形、スロットは動詞命名
+- 根拠: `docs/reference_standards.md`「4. PyQt / PySide モダンUIアーキテクチャ標準」
+- 影響: UIイベント命名の一貫性検証ができず、規約逸脱を見逃す。
+- 最小修正単位の指示:
+  1. 命名規約を3章またはGate-Sに明記。
+  2. lint/静的検査またはレビュー観点として検証手順を追加。
+- 原因層: 設計
+- 差し戻し先: `REJECT_TO_ARCHITECT`
+- 再検証条件: 命名規約と検証方法が計画に追加されていること。
+
+## 適合している主要項目（参考）
+- Gate-S/Gate-F 分離と `REJECT_TO_ARCHITECT` 方針
+- UI責務削減と Port 経由強制
+- `typing.Protocol` / `abc.ABC` 利用方針
+- Data Integrity 必須記録項目（digest/hash/relative path）
+- 監査テンプレートでの処方的差し戻し項目
+
+## 最終結論
+`docs/reference_standards.md` の必須事項に未充足があるため、現計画は不合格。判定は `REJECT_TO_ARCHITECT`。
