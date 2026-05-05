@@ -19,6 +19,7 @@
 - 要件対応範囲:
   - Phase 5（Validation Guardrails）
   - Phase 6（Lifecycle Management）
+  - EOLコンテナ再現性標準（digest固定/アーカイブ切替/constraints/マルチステージ）
   - Phase 6.1〜6.4（疎結合化・型安全化・静的ゲート・契約回帰）
   - Phase 6.51/6.52（可視化・ログ標準化）
 
@@ -40,6 +41,11 @@
 3. 差し戻し先規約
 - 構造違反の起因が設計層なら `REJECT_TO_ARCHITECT` として再設計
 - 実装層へ局所修正を返す前に、設計成果物（責務表・依存図・Port契約）更新を必須化
+
+4. 監査運用規約（Builder/Validator分離）
+- 監査入力物は `requirements + diff + test evidence` のみに制限
+- 実装中間思考プロセスを監査に持ち込むことを禁止
+- 監査は敵対的・独立に実施し、差し戻しは処方的指示（失敗箇所/違反制約/修正ヒント）を必須化
 
 ---
 
@@ -138,6 +144,19 @@ Pydantic v2 strict で以下を段階導入。
 完了条件:
 - AC6.52-1〜AC6.52-5
 
+### Phase G: EOLコンテナ再現性標準の固定（Reference Standards準拠）
+1. `Dockerfile` の `FROM` をタグ参照からSHA256 digest固定へ置換
+2. EOL OS系ベースイメージでAPTソースをアーカイブリポジトリへ切替
+3. `constraints.txt` を導入し、pip依存解決範囲を固定
+4. OpenCV等C++ビルドをマルチステージ化し、実行ステージを最小化
+5. 上記4項目の検証タスク（静的検査 + 実ビルド検証）をCIへ追加
+
+完了条件:
+- digest未固定 `FROM` = 0
+- EOL対象のAPTソースがアーカイブ向けに固定
+- pip installが `constraints.txt` 前提で再現
+- C++依存ビルドのマルチステージ化完了
+
 ---
 
 ## 5. 品質ゲート（無限ループ防止の運用分離）
@@ -151,10 +170,24 @@ Pydantic v2 strict で以下を段階導入。
   - 主要導線で `0`（`_run_container` / `_show_create_env_dialog` を含む）
 - Portバイパス:
   - `0`
+- PyQt命名規約:
+  - signalは過去分詞形（例: `dataChanged`）
+  - slotは動詞開始（例: `update_display`）
+  - 規約逸脱 `0`
+- 監査運用分離:
+  - 監査入力物制約（requirements/diff/test evidenceのみ）違反 `0`
 
 ### Gate-2 機能合格
 - `pytest tests/` 全件Pass
 - Phase別必須テスト（T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52）Pass
+- 監査証跡必須項目テストPass:
+  - コンテナイメージDigest記録の存在/形式
+  - 実行時Gitコミットハッシュ（`git rev-parse HEAD`）記録の存在/形式
+- EOLコンテナ再現性テストPass:
+  - digest固定検査
+  - アーカイブリポジトリ設定検査
+  - constraints適用検査
+  - マルチステージビルド検査
 
 運用規則:
 - Gate-1未達時はGate-2結果に関わらず先へ進まない
@@ -178,6 +211,8 @@ Pydantic v2 strict で以下を段階導入。
 - mismatch結果
 - ガード発火状態
 - 操作種別/時刻/対象/成否/解放容量/実行理由
+- コンテナイメージDigest
+- 実行時Gitコミットハッシュ（`git rev-parse HEAD`）
 - 相対パス強制
 - ハッシュ完全化（入力/出力/実行ログ/主要パラメータ）
 
@@ -186,12 +221,16 @@ Pydantic v2 strict で以下を段階導入。
 ## 7. リスクと対策
 1. 既存UIイベント配線の破断
 - 対策: UI変更は最小化し、シグナル/スロット境界でUseCase呼び出しに置換
+ - 追加対策: 命名規約チェックをGate-1に組み込み、可読性崩壊を防止
 
 2. dict互換経路での型移行失敗
 - 対策: DTOアダプタを先行導入し、段階的切替
 
 3. テストは通るが構造違反が残る再発
 - 対策: Gate-1をCIの先行ジョブ化、未達時は即fail-fast
+
+4. EOL依存の外部変動でビルド再現性が崩れる
+- 対策: digest固定 + アーカイブリポジトリ + constraints + マルチステージをセットで強制し、単独適用を禁止
 
 ---
 
@@ -206,6 +245,9 @@ Pydantic v2 strict で以下を段階導入。
 3. Port契約・DTO契約・監査契約テストPass
 4. 監査成果物更新完了
 5. `post_mortem` 指摘の2箇所（`_run_container` / `_show_create_env_dialog`）が設計上の責務移管完了状態である
+6. 監査証跡にコンテナDigestとGitコミットハッシュが必ず記録される
+7. EOLコンテナ再現性4要件（digest/アーカイブ/constraints/マルチステージ）が実装・検証済み
+8. PyQtシグナル/スロット命名規約違反が0件
 
 ---
 
@@ -215,5 +257,6 @@ Pydantic v2 strict で以下を段階導入。
 3. 実装着手
 4. 機能・回帰試験（Gate-2）
 5. 監査証跡更新
+6. EOL再現性検証更新（Docker関連証跡）
 
 この順序を破る変更要求は、再発防止方針違反として却下する。
