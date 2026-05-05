@@ -14,6 +14,7 @@
 2. `pytest` 合格と構造合格を独立ゲートで管理する。
 3. UI責務過多・Port未経由は「検出」ではなく「構造的に不可能化」する。
 4. 構造違反の差し戻し先は Implementer ではなく Architect とする（`REJECT_TO_ARCHITECT`）。
+5. `docs/reference_standards.md` の必須規約は「推奨」ではなく「固定要件」としてDoDに拘束する。
 
 ## 2. post_mortem 起点の是正要求（RC閉塞）
 `docs/post_mortem.md` の RC-1〜RC-3 を以下で閉じる。
@@ -78,6 +79,33 @@ UIの責務は「入力受理・表示更新・確認ダイアログ」に限定
 - `execution_log_sha256`
 - `path_mode`（相対パス強制結果）
 
+### 3.5 UIイベント命名規約（固定）
+- Signal は過去分詞形（例: `environmentCreated`, `validationFailed`）を必須とする。
+- Slot は動詞始まり（例: `update_environment_list`, `show_validation_error`）を必須とする。
+- 新規/変更UIイベントは命名規約違反をレビューでRejectする。
+- 検証方法:
+  - UI層変更PRで Signal/Slot 一覧を差分提出する。
+  - `tests/architecture/test_ui_signal_slot_naming.py`（追加必須）で命名パターン検査を自動化する。
+
+## 3.6 Docker Reproducibility 固定章（必須）
+`docs/reference_standards.md` 2章に基づき、以下4要件を全フェーズ共通の拘束条件として固定する。
+
+1. `FROM` digest 固定
+- `Dockerfile` の `FROM` はタグ禁止、`@sha256:` 必須。
+- 検証: `tests/architecture/test_docker_reproducibility.py::test_from_uses_digest_only`
+
+2. EOL APT リポジトリ固定
+- EOL OS利用時、APTソースはアーカイブ（`old-releases.ubuntu.com` / `archive.debian.org`）へ書換必須。
+- 検証: `test_eol_apt_uses_archive_mirror`
+
+3. pip constraints 強制
+- EOL/legacy依存を含む build は `constraints.txt` を必須化し、無制約installを禁止。
+- 検証: `test_pip_install_has_constraints`
+
+4. マルチステージビルド強制
+- OpenCV等のネイティブビルドは build/runtime ステージ分離を必須化。
+- 検証: `test_native_build_uses_multistage`
+
 ## 4. フェーズ実行順（変更禁止）
 
 ### Phase A: 6.51 Baseline Visualization
@@ -123,12 +151,30 @@ UIの責務は「入力受理・表示更新・確認ダイアログ」に限定
 - `MainWindow._run_container` 業務判断残存
 - `MainWindow._show_create_env_dialog` 業務判断残存
 - `UseCase/Domain -> Qt依存`
+- `Dockerfile FROM tag usage`（digest未使用）
+- `UI Signal/Slot naming violation`
+
+EMCS客観メトリクス（閾値固定）:
+- `SRP violation hotspots`: 0件
+  - 測定: UI層クラスで「UI描画以外の責務カテゴリ（判定/永続化/外部I/O）」が2種以上混在するクラス数
+- `Cyclomatic complexity overflow`: 0件
+  - 閾値: UseCase公開メソッド `CC <= 10`、UIメソッド `CC <= 7`
+- `UI method LOC overflow`: 0件
+  - 閾値: UIイベントハンドラ `<= 40 LOC`
+- `Unjustified type ignore`: 0件
+  - `# type: ignore` に理由コメントがないものを違反として計上
+
+自動REJECT条件:
+- 上記メトリクスのいずれかが閾値超過した時点で `REJECT_TO_ARCHITECT`。
+- Gate-F未実行でもGate-S単独で差し戻し確定とする。
 
 ### Gate-F: 機能ゲート
 合格条件:
 - `pytest tests/` 全件Pass
 - Phase別必須テスト（T5, T6, T6.2, T6.3, T6.4, T6.51, T6.52, T6.53, T6.54）Pass
 - Data Integrity 必須項目テストPass
+- Docker Reproducibility 4要件テストPass（3.6節）
+- UI Signal/Slot命名テストPass（3.5節）
 
 運用規則:
 - Gate-S fail 時は `REJECT_TO_ARCHITECT`。
@@ -140,6 +186,26 @@ UIの責務は「入力受理・表示更新・確認ダイアログ」に限定
 3. Phase 5, 6, 6.1〜6.4, 6.51〜6.54 の受け入れ基準を満たす。
 4. 監査証跡が相対パス・ハッシュ完全化・fail-fast原則に準拠。
 5. 同型障害（UI責務過多/Port未経由/ゲート混線）の再発防止証跡が存在。
+6. Docker Reproducibility 4要件（digest固定/EOL archive/constraints/マルチステージ）の証跡が存在。
+7. EMCS客観メトリクスの実測値と閾値判定結果が監査成果物に記録されている。
+8. Builder/Validator分離ルールに違反する監査入力が0件である。
+
+## 6.1 Builder/Validator 分離運用（固定）
+監査担当（Validator/Auditor）への許容入力を以下に限定する。
+- `docs/requirements.md`
+- `docs/reference_standards.md`
+- `git diff`（または同等差分）
+- テスト証跡（`pytest` / 型検査 / Gate-S測定結果）
+
+監査担当への禁止入力:
+- 実装者の思考過程メモ
+- 口頭/チャットでの主観的補足説明
+- 「意図したからOK」という非検証主張
+- 差分に存在しない将来対応の約束
+
+違反時規則:
+- 禁止入力が監査判定に混入した場合、その監査は無効化し再監査を必須とする。
+- 無効化時は `artifacts/audit_reject_template.md` に「監査I/O境界違反」として記録する。
 
 ## 7. 監査成果物（必須）
 - `artifacts/architecture_decoupling_assessment.md`
