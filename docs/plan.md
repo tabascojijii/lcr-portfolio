@@ -2,11 +2,13 @@
 
 ## 0. 目的と前提
 本計画は `docs/core_philosophy.md`、`docs/requirements.md`、`docs/reference_standards.md`、`docs/post_mortem.md` に準拠し、過去の構造的欠陥（UI責務過多・Port未経由・設計課題の実装押し戻し）を再発不能にすることを目的とする。
+また、`docs/audit_report.md` が `AUDIT_PASS_PLAN`（指摘なし）である事実を前提に、監査PASSと実装時構造健全性を同一視しない補完統制を本計画へ明示する。
 
 最重要方針:
 1. 先に設計を固定し、後で実装する（順序逆転を禁止）
 2. `pytest` 合格と構造合格を独立ゲートとして運用する
 3. UIからDomainへの直接参照を構造的に不可能化する
+4. 監査PASS時でも `post_mortem` 起点の重点検査を省略しない
 
 ---
 
@@ -47,6 +49,11 @@
 - `test evidence` は監査入力に含めず、機能合格用の別ゲートでのみ扱う
 - 実装中間思考プロセスを監査に持ち込むことを禁止
 - 監査は敵対的・独立に実施し、差し戻しは処方的指示（失敗箇所/違反制約/修正ヒント）を必須化
+
+5. 監査PASS時の補完統制（`audit_report` 指摘なし対策）
+- `audit_report` に指摘がなくても、`post_mortem` 既知欠陥2点（`_run_container` / `_show_create_env_dialog`）は毎回の固定検査対象とする
+- 固定検査は「存在確認」ではなく「責務ゼロ化確認」（UI側の判断・永続化・外部I/Oがないこと）で判定する
+- 判定結果は成果物へ定量記録し、未達時は `REJECT_TO_ARCHITECT` とする
 
 ---
 
@@ -120,6 +127,8 @@ Pydantic v2 strict で以下を段階導入。
 完了条件:
 - `UI->Domain直参照 = 0`
 - Port未経由境界越え = 0
+- `MainWindow._run_container` のUI責務混在 = 0
+- `MainWindow._show_create_env_dialog` のPort未経由呼び出し = 0
 
 ### Phase C: ガードレール実装確定（Phase 5）
 1. required imports と capability 差分算出をUseCase化
@@ -221,6 +230,10 @@ Pydantic v2 strict で以下を段階導入。
 - `artifacts/phase_6_51_test_baseline.md`
 - `artifacts/phase_6_52_logging_migration_report.md`
 - `artifacts/phase_6_52_print_elimination_evidence.md`
+- `artifacts/post_mortem_closure_checklist.md`（新規）
+  - 既知欠陥2点の解消判定
+  - Gate-1/Gate-2独立運用の実行記録
+  - 差し戻し先判定（Architect/Implementer）の根拠
 
 監査ログ契約:
 - required imports
