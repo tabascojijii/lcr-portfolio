@@ -1,7 +1,7 @@
 # LCR ロードマップ（PM）
 
 ## 0. 基本方針（絶対基準）
-本ロードマップは `docs/reference_standards.md` を唯一の絶対基準として策定する。`docs/plan.md` の実装計画は、この絶対基準へ適合する範囲で具体化・実行する。
+本ロードマップは `docs/plan.md` と `docs/reference_standards.md` を同列の絶対基準として策定する。実装・運用は両基準を同時に満たすことを必須条件とし、片方のみの充足を許容しない。
 
 非交渉ルール:
 1. Builder/Validator 分離を維持し、監査は `requirements + diff` を一次入力として敵対的に実施する。
@@ -60,6 +60,7 @@
 
 実施項目:
 - Gate-1（構造）をGate-2（機能）より先行
+- Gate-1判定項目へ `逆方向依存 = 0` を明示し、未達時は停止
 - PyQt命名規約チェック（signal過去分詞/slot動詞開始）を静的検査化
 - 固定重点検査（`_run_container`/`_show_create_env_dialog`）を毎回実行
 - Gate-2必須項目を固定運用:
@@ -123,6 +124,7 @@
 - 構造KPI:
   - `UI->Domain直参照 = 0`
   - `Port/Interface非経由通信 = 0`
+  - `逆方向依存 = 0`
   - `循環依存 = 0`
 - 再現性KPI:
   - `digest未固定FROM = 0`
