@@ -70,6 +70,8 @@ class CollectAuditMetadataUseCase:
             "input_sha256",
             "output_sha256",
             "log_sha256",
+            "execution_log_sha256",
+            "path_mode",
             "hashes",
         )
         missing = [key for key in required_keys if key not in metadata]
@@ -84,11 +86,43 @@ class CollectAuditMetadataUseCase:
         if unavailable:
             raise ValueError(f"Incomplete audit metadata: unavailable fields: {', '.join(unavailable)}")
 
+        if metadata.get("path_mode") != "relative_only":
+            raise ValueError("Incomplete audit metadata: path_mode must be relative_only")
+
+        self._ensure_hash_formats(metadata)
+        self._ensure_git_commit_hash(metadata)
+
         hashes = metadata.get("hashes") or {}
         hash_keys = ("all_input_files", "all_output_files", "all_parameter_files", "audit_log_record")
         missing_hash_keys = [k for k in hash_keys if k not in hashes]
         if missing_hash_keys:
             raise ValueError(f"Incomplete audit metadata: missing hashes keys: {', '.join(missing_hash_keys)}")
+
+    def _ensure_hash_formats(self, metadata):
+        hash_fields = (
+            "script_sha256",
+            "parameter_sha256",
+            "log_sha256",
+            "execution_log_sha256",
+        )
+        for key in hash_fields:
+            value = str(metadata.get(key, "")).strip().lower()
+            if len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+                raise ValueError(f"Incomplete audit metadata: invalid SHA-256 format in {key}")
+
+        for grouped_key in ("input_sha256", "output_sha256"):
+            grouped = metadata.get(grouped_key) or {}
+            if not isinstance(grouped, dict):
+                raise ValueError(f"Incomplete audit metadata: {grouped_key} must be a dict")
+            for _, digest in grouped.items():
+                value = str(digest).strip().lower()
+                if len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+                    raise ValueError(f"Incomplete audit metadata: invalid SHA-256 format in {grouped_key}")
+
+    def _ensure_git_commit_hash(self, metadata):
+        value = str(metadata.get("git_commit_hash", "")).strip().lower()
+        if len(value) != 40 or any(ch not in "0123456789abcdef" for ch in value):
+            raise ValueError("Incomplete audit metadata: git_commit_hash must be a 40-char hex string")
 
 
 class PrepareAuditMetadataUseCase:

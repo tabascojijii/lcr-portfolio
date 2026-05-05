@@ -269,7 +269,14 @@ class StandardsTraceabilityUseCase:
         "artifacts/phase_6_51_test_baseline.md",
         "artifacts/phase_6_52_logging_migration_report.md",
         "artifacts/phase_6_52_print_elimination_evidence.md",
+        "artifacts/phase_6_53_analyzer_porting_report.md",
+        "artifacts/phase_6_53_analyzer_failure_policy.md",
         "artifacts/post_mortem_closure_checklist.md",
+        "artifacts/audit_reject_template.md",
+        "artifacts/data_integrity_field_matrix.md",
+        "artifacts/docker_reproducibility_checklist.md",
+        "artifacts/docker_digest_lock_evidence.md",
+        "artifacts/docker_multistage_evidence.md",
     )
 
     def build_standards_traceability_matrix(self, rows: Sequence[Dict]) -> List[Dict]:

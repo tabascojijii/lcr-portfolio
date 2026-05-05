@@ -66,6 +66,8 @@ class AuditMetadataService:
             "input_sha256": input_hashes,
             "output_sha256": output_hashes,
             "log_sha256": "unavailable",
+            "execution_log_sha256": "unavailable",
+            "path_mode": "relative_only",
             "hashes": {
                 "all_input_files": input_hashes,
                 "all_output_files": output_hashes,
@@ -85,6 +87,7 @@ class AuditMetadataService:
             log_sha = self._sha256_file(log_path)
             metadata["log_hash"] = log_sha
             metadata["log_sha256"] = log_sha
+            metadata["execution_log_sha256"] = log_sha
             metadata["hashes"]["audit_log_record"] = log_sha
             metadata["relative_paths"]["log"] = normalized_log_path
         return metadata

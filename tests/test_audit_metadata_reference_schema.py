@@ -40,6 +40,8 @@ def test_collect_includes_reference_schema_fields(tmp_path, monkeypatch):
     assert metadata["guard_state"] == "blocked"
     assert metadata["parameter_sha256"] == metadata["param_hash"]
     assert metadata["log_sha256"] == expected_log_hash
+    assert metadata["execution_log_sha256"] == expected_log_hash
+    assert metadata["path_mode"] == "relative_only"
     assert metadata["log_hash"] == expected_log_hash
     assert metadata["relative_paths"] == {
         "script": "rel/script.py",
