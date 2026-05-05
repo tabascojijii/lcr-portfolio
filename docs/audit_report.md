@@ -1,41 +1,51 @@
-# 監査レポート（Auditor）
+# 監査報告書（Auditor）
 
-## 判定
-REJECT_TO_PM（問題あり）
+判定: **REJECT_TO_PM**
 
 ## 監査対象
-- 基準: `docs/plan.md`
-- 基準: `docs/reference_standards.md`
+- 基準1: `docs/plan.md`
+- 基準2: `docs/reference_standards.md`
 - 被監査: `docs/roadmap.md`
 
-## 総評
-`docs/roadmap.md` は全体として `docs/reference_standards.md` と高い整合を持つが、`docs/plan.md` で「必須固定」とされた監査運用要件の一部が未記載であり、絶対基準に対して不完全。したがって現状は承認不可。
+## 指摘事項（重大度順）
 
-## 指摘事項（必須修正）
+1. Data Integrity 固定仕様の欠落（Major）
+- 失敗箇所: `docs/roadmap.md`（Data Integrity章に相当する固定仕様の欠落）
+- 根拠:
+  - `docs/plan.md:249` 以降では、監査ログ必須7項目（`container_image_digest`, `git_commit_hash`, `input_sha256`, `output_sha256`, `parameter_sha256`, `execution_log_sha256`, `path_mode`）と、T-DI-1〜4 の固定テスト定義を明示。
+  - `docs/roadmap.md:18-21` は要約記述のみで、7項目の完全列挙および T-DI-1〜4 の個別要件定義がない。
+- 違反制約: `docs/plan.md` の固定仕様の未充足（監査必須仕様の欠落）。
+- 修正指示:
+  - `docs/roadmap.md` に Data Integrity 固定仕様節を追加し、7必須項目と T-DI-1〜4 を明記すること。
 
-1. `audit_reject_template.md` の必須項目定義が欠落
-- 失敗箇所: `docs/roadmap.md` セクション5
-- 違反制約: `docs/plan.md` 5章「`audit_reject_template.md` の必須項目（1〜6）」
-- 詳細: `roadmap` は成果物名として `artifacts/audit_reject_template.md` を列挙しているが、テンプレートに必須な6項目（失敗箇所、違反制約、具体的修正指示、原因層判定、差し戻し先、再検証条件）を明示していない。
-- 修正指示: `docs/roadmap.md` に `audit_reject_template.md` の必須記載項目1〜6を明文化すること。
+2. Gate-S 必須判定項目の不完全記載（Major）
+- 失敗箇所: `docs/roadmap.md:140-150`
+- 根拠:
+  - `docs/plan.md:158` に `インターフェース非経由通信 = 0` が Gate-S 必須として固定。
+  - `docs/roadmap.md` の Gate-S 必須一覧には同項目が存在しない。
+- 違反制約: `docs/plan.md` Gate-S 固定ルールの欠落。
+- 修正指示:
+  - Gate-S 必須に `インターフェース非経由通信 = 0` を追加すること。
 
-2. REJECT無効化ルール（監査運用ルール）が欠落
-- 失敗箇所: `docs/roadmap.md` セクション5
-- 違反制約: `docs/plan.md` 5章「必須項目が1つでも欠けるREJECTは監査失格として無効化」
-- 詳細: `roadmap` には処方的REJECT要件はあるが、必須項目欠落時のREJECT無効化規則が記載されていない。
-- 修正指示: 監査運用ルールとして「必須項目欠落REJECTの無効化」を明記すること。
+3. Definition of Done の固定要件欠落（Major）
+- 失敗箇所: `docs/roadmap.md:242-249`
+- 根拠:
+  - `docs/plan.md:244` には「同型差し戻し（UI責務過多/Port未経由/ゲート混線）が再発しない運用が証跡で確認できる」を DoD として明記。
+  - `docs/roadmap.md` DoD には同要件が存在しない。
+- 違反制約: `docs/plan.md` DoD 固定要件の未反映。
+- 修正指示:
+  - DoD に再発防止運用の証跡確認要件を追加すること。
 
-3. `post_mortem_closure_checklist.md` の必須項目定義が欠落
-- 失敗箇所: `docs/roadmap.md` セクション5
-- 違反制約: `docs/plan.md` 5章「`post_mortem_closure_checklist.md` の必須項目（1〜3）」
-- 詳細: `roadmap` は成果物としてファイル名のみ列挙し、必須項目（既知2欠陥の閉塞証跡、Gate-S/Gate-F独立運用記録、差し戻し先判定ログ）を固定していない。
-- 修正指示: `docs/roadmap.md` に当該チェックリストの必須項目1〜3を明記すること。
+4. 監査入力制約の精度不足（Minor）
+- 失敗箇所: `docs/roadmap.md:201-207`
+- 根拠:
+  - `docs/plan.md:227` は許可入力を「`docs/requirements.md` と関連する承認済み要件差分」まで具体化。
+  - `docs/roadmap.md:202` は「要件文書 + 変更差分」のみで、承認済み要件差分の明示がない。
+- 違反制約: Builder/Validator 分離の入力定義の具体性不足。
+- 修正指示:
+  - 許可入力に「承認済み要件差分」を明示追加すること。
 
-4. DoD の固定条件が一部欠落
-- 失敗箇所: `docs/roadmap.md` セクション7
-- 違反制約: `docs/plan.md` 6章 DoD #4
-- 詳細: `plan` が要求する「監査証跡が相対パス・ハッシュ完全化・fail-fast原則に準拠」が `roadmap` の DoD に明示されていない。
-- 修正指示: DoD に当該要件を追加し、Data Integrity項目との関係を明示すること。
+## 総合判定
+`docs/roadmap.md` は `docs/reference_standards.md` の主要原則とは概ね整合するが、`docs/plan.md` に固定された監査必須仕様の一部が欠落しているため、現時点では受理不可。
 
-## 結論
-上記4点は `docs/plan.md` の必須固定条件に該当し、未充足のため `docs/roadmap.md` は現時点で基準未達。修正後に再監査を実施すること。
+最終判定: **REJECT_TO_PM**
