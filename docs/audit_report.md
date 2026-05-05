@@ -1,53 +1,36 @@
-# 監査報告書（Auditor）
+# 監査レポート（Auditor）
 
-対象:
-- 基準: `docs/reference_standards.md`
-- 監査対象: `docs/plan.md`
+## 総合判定
+REJECT_TO_ARCHITECT
 
-判定:
-- REJECT_TO_ARCHITECT
+## 監査対象
+- 基準: `docs/reference_standards.md`（絶対基準）
+- 計画: `docs/plan.md`
 
 ## 指摘事項（重大度順）
 
-1. [重大] PyQt/PySide 命名規約の固定不足
-- 失敗箇所: `docs/plan.md` 全体（シグナル/スロット命名規則の明文化なし）
-- 違反規約: `docs/reference_standards.md` 4章「シグナルは過去分詞形、スロットは動詞」
-- 根拠: 基準は「絶対的な技術基準」として命名規則の順守を要求。計画に検証項目・移行方針・DoD反映がないため、準拠を担保できない。
-- 最小修正指示: Phase 6.2〜6.4 もしくは Gate-S に以下を追加すること。
-  - 既存シグナル/スロット名の棚卸し
-  - 命名規約違反をFailにする静的チェック（または監査チェックリスト）
-  - DoDに「命名規約違反0件」を明記
+### 1) Clean Architecture の依存方向に関する重大違反
+- 失敗箇所: `docs/plan.md` セクション「1. 失敗分析起点の設計制約」
+  - 記載: `UI -> UseCase -> Domain -> Infrastructure` のみ許可
+- 違反した制約:
+  - `docs/reference_standards.md` 4章「クリーンアーキテクチャと依存の方向」
+  - 内側のビジネスルール（Entities, Use Cases）がUIフレームワーク等の外側要素へ依存してはならない。
+- 客観根拠:
+  - `Domain -> Infrastructure` を許可すると、内側レイヤー（Domain）が外側レイヤー（Infrastructure）へ依存する構図になり、依存方向が逆転する。
+  - これは「内側は外側に依存しない」という基準に反する。
 - 原因層: 設計
 - 差し戻し先: Architect
+- 最小修正指示（処方）:
+  1. 依存許可方向を `UI -> UseCase -> Domain` とし、Infrastructure は「内側インターフェース実装として外側から内側へ依存」に修正すること。
+  2. 文書上で「Domain は Infrastructure を import しない」ことを明記すること。
+  3. Port/Repository の定義主体を内側（UseCase/Domain）に固定し、実装主体を Infrastructure に固定すること。
 
-2. [重大] Builder/Validator分離の「差分限定レビュー」規定が未固定
-- 失敗箇所: `docs/plan.md` 7章（役割分担）
-- 違反規約: `docs/reference_standards.md` 1章「Builder/Validatorの分離（要件と生成差分のみでレビュー）」
-- 根拠: 役割分担に「敵対的かつ厳格レビュー」はあるが、レビュー入力を「要件とDiffのみに限定」する運用制約が明示されていない。
-- 最小修正指示: 監査プロセス定義へ以下を追加。
-  - Auditor入力: 要件定義＋差分(Diff)＋テスト結果のみ
-  - Implementer思考過程・補助メモの参照禁止
-  - 違反時は監査無効として再監査
-- 原因層: 設計
-- 差し戻し先: Architect
+## 適合確認（主要項目）
+- EMCS による客観評価、REJECT時の処方的記載要求: 計画内に反映あり。
+- Builder/Validator 分離（差分限定レビュー）: 計画内に反映あり。
+- Docker再現性要件（digest固定、EOL archive、constraints、マルチステージ）: 計画内に反映あり。
+- 監査証跡（`git rev-parse HEAD`、相対パス、各種ハッシュ）: 計画内に反映あり。
+- PyQt/PySide 命名規約（Signal過去分詞、Slot動詞）: 計画内に反映あり。
 
-3. [中] EMCSの客観メトリクス定義不足
-- 失敗箇所: `docs/plan.md` 4章 Gate-S
-- 違反規約: `docs/reference_standards.md` 1章「EMCSモデルに基づく客観的メトリクス評価」
-- 根拠: Gate-Sは違反項目列挙があるが、EMCS観点での測定可能指標（例: 複雑度閾値、SRP逸脱判定基準、閾値超過時処理）が未定義。
-- 最小修正指示: Gate-Sに定量メトリクスを追加。
-  - 例: サイクロマティック複雑度上限、UI層メソッド行数上限、責務違反判定ルール
-  - しきい値とFail条件を明記
-- 原因層: 設計
-- 差し戻し先: Architect
-
-4. [中] 監査証跡のGitハッシュ取得方法が未規定
-- 失敗箇所: `docs/plan.md` 5章
-- 違反規約: `docs/reference_standards.md` 3章「git rev-parse HEAD を必ず記録」
-- 根拠: `git_commit_hash` 項目はあるが、取得方法（`git rev-parse HEAD`）の明記がない。監査再現時に実装差異を招く。
-- 最小修正指示: 必須実装として `git rev-parse HEAD` の取得・記録を明文化。
-- 原因層: 設計
-- 差し戻し先: Architect
-
-## 総括
-`docs/plan.md` は基準の主要方針（UI責務分離、Port化、Gate-S/Gate-F分離、Docker再現性、監査証跡項目）を広く包含している。一方で、絶対基準で要求される運用拘束と客観メトリクスの固定が不足しており、現状では基準完全準拠を証明できない。よって判定は `REJECT_TO_ARCHITECT` とする。
+## 結論
+上記の依存方向違反はアーキテクチャ根幹に関わるため、現行 `docs/plan.md` は基準適合と認められない。`REJECT_TO_ARCHITECT` とする。
