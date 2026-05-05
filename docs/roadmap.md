@@ -1,7 +1,7 @@
 # LCR ロードマップ（PM）
 
 ## 0. 基本方針（絶対基準）
-本ロードマップは `docs/plan.md` と `docs/reference_standards.md` を同列の絶対基準として策定する。実装・運用は両基準を同時に満たすことを必須条件とし、片方のみの充足を許容しない。
+本ロードマップは `docs/reference_standards.md` を絶対基準とし、`docs/plan.md` をその実装計画基準として準拠させる。実装・運用は両基準を同時に満たすことを必須条件とし、片方のみの充足を許容しない。
 
 非交渉ルール:
 1. Builder/Validator 分離を維持し、監査は `requirements + diff` を一次入力として敵対的に実施する。
@@ -79,11 +79,21 @@
 目的: 法的証拠レベルの再現性と改ざん検知を担保。
 
 実施項目:
+- 監査ログ契約フルセットを必須実装:
+  - required imports
+  - environment capability
+  - mismatch結果
+  - ガード発火状態
+  - 操作種別/時刻/対象/成否/解放容量/実行理由
 - 実行ログへコンテナDigestと `git rev-parse HEAD` を記録
 - ログ/設定/スクリプトの相対パス強制
 - 入出力/パラメータ/実行ログへSHA-256適用
 
 完了条件:
+- `required imports` 記録欠落 0
+- `environment capability` 記録欠落 0
+- `mismatch結果/ガード発火状態` 記録欠落 0
+- `操作種別/時刻/対象/成否/解放容量/実行理由` 記録欠落 0
 - Digest記録欠落 0
 - Gitコミットハッシュ記録欠落 0
 - 絶対パス混入 0
@@ -130,6 +140,10 @@
   - `digest未固定FROM = 0`
   - `constraints未適用ビルド = 0`
 - 監査証跡KPI:
+  - `required imports記録欠落 = 0`
+  - `environment capability記録欠落 = 0`
+  - `mismatch/guard state記録欠落 = 0`
+  - `操作詳細記録欠落（種別/時刻/対象/成否/解放容量/実行理由） = 0`
   - `Digest/Git Hash記録欠落 = 0`
   - `ハッシュ未付与監査対象 = 0`
 - 運用KPI:
@@ -155,7 +169,8 @@
 2. `plan.md` のPhase 5/6/6.1〜6.4/6.51/6.52要件が、上記絶対基準に整合して達成済み。
 3. 固定重点検査（`_run_container` / `_show_create_env_dialog`）で責務ゼロ化を確認済み。
 4. Gate-2必須項目（`pytest tests/`、T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52、Digest/Git hash記録テスト、EOL再現性テスト）が全てPass。
-5. Gate-1先行運用と監査証跡更新が継続可能な手順として定着済み。
+5. 監査ログ契約（required imports / environment capability / mismatch結果 / guard state / 操作詳細 / Digest / Git hash / 相対パス / SHA-256）が0欠落で継続運用可能。
+6. Gate-1先行運用と監査証跡更新が継続可能な手順として定着済み。
 
 ---
 
