@@ -262,6 +262,16 @@ class SignalSlotNamingAuditUseCase:
 class StandardsTraceabilityUseCase:
     """Builds auditable traceability and regression checklist records."""
 
+    REQUIRED_ROADMAP_ARTIFACTS = (
+        "artifacts/architecture_decoupling_assessment.md",
+        "artifacts/refactoring_proposal.md",
+        "artifacts/phase_6_51_baseline_inventory.md",
+        "artifacts/phase_6_51_test_baseline.md",
+        "artifacts/phase_6_52_logging_migration_report.md",
+        "artifacts/phase_6_52_print_elimination_evidence.md",
+        "artifacts/post_mortem_closure_checklist.md",
+    )
+
     def build_standards_traceability_matrix(self, rows: Sequence[Dict]) -> List[Dict]:
         matrix = []
         for item in rows:
@@ -331,3 +341,6 @@ class StandardsTraceabilityUseCase:
                 ],
             },
         ]
+
+    def list_required_roadmap_artifacts(self) -> List[str]:
+        return list(self.REQUIRED_ROADMAP_ARTIFACTS)
