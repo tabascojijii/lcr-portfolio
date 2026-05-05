@@ -143,6 +143,7 @@
 - 循環依存 = 0
 - Portバイパス = 0
 - 対象2関数UI業務ロジック = 0
+- インターフェース非経由通信 = 0
 - UseCase->Qt依存 = 0
 - Domain->Qt依存 = 0
 - Qt Signal命名違反 = 0
@@ -199,7 +200,7 @@
 - `artifacts/docker_multistage_evidence.md`
 
 監査ログ入力制約:
-- 許可入力: 要件文書 + 変更差分のみ
+- 許可入力: `docs/requirements.md` と関連する承認済み要件差分 + 変更差分のみ
 - 禁止入力: 実装者思考ログ、口頭説明、未証跡メモ
 - 監査証跡への必須記録:
   - 要件版識別子（例: `docs/requirements.md@<hash or revision>`）
@@ -244,6 +245,23 @@
 2. post_mortem 指摘の責務移管が完了。
 3. Phase 5, 6, 6.1〜6.4, 6.51, 6.52, 6.53 の受け入れ基準を満たす。
 4. 監査証跡が相対パス・ハッシュ完全化・fail-fast 原則に準拠する（Data Integrity 要件と整合）。
-5. Docker再現性4要件を証跡付きで満たす。
-6. Data Integrity 必須項目を自動テストで担保。
-7. Qt命名規約とQt非依存が機械検証で violation 0。
+5. 同型差し戻し（UI責務過多/Port未経由/ゲート混線）が再発しない運用を証跡で確認できる。
+6. Docker再現性4要件を証跡付きで満たす。
+7. Data Integrity 必須項目を自動テストで担保。
+8. Qt命名規約とQt非依存が機械検証で violation 0。
+
+## 8. Data Integrity 固定仕様（監査必須）
+監査ログ必須記録項目:
+1. `container_image_digest`（実行イメージのSHA256ダイジェスト）
+2. `git_commit_hash`（`git rev-parse HEAD` の値）
+3. `input_sha256`（入力データ）
+4. `output_sha256`（出力データ）
+5. `parameter_sha256`（パラメータファイル）
+6. `execution_log_sha256`（実行ログ本体）
+7. `path_mode`（相対パス強制の検証結果）
+
+固定テスト（Gate-F必須）:
+- T-DI-1: 上記7項目の存在検証（欠落0件）
+- T-DI-2: すべてのハッシュ値がSHA-256形式であることを検証
+- T-DI-3: `git_commit_hash` が40桁16進であることを検証
+- T-DI-4: パスが絶対パスを含む場合 fail-fast で失敗することを検証
