@@ -1,26 +1,32 @@
-# 監査報告書（Roadmap 検証）
+# 監査報告書（Auditor）
 
-## 1. 監査対象
-- 対象文書: `docs/roadmap.md`
-- 絶対基準:
-  - `docs/plan.md`
-  - `docs/reference_standards.md`
+## 監査対象
+- `docs/roadmap.md`
 
-## 2. 監査入力（Builder/Validator 分離ルール準拠）
-- 要件/基準入力:
-  - `docs/plan.md@sha256:A91A23D4807EAE741DC4CE75654E9BA3E56D0A43CB98B31232695E2BCC3F41DB`
-  - `docs/reference_standards.md@sha256:44C65F9825029C456A75F88545DE1D7D98B247997D783D731C63C5EE39D1810A`
-- 検証対象:
-  - `docs/roadmap.md@sha256:8B4583EF5365EE3D8F619B70ADE46026155C0EED5556F2DB1793551A0005C2ED`
-- 判定者ロール: Auditor
-- 判定時刻: 2026-05-05 (Asia/Tokyo)
+## 絶対基準
+- `docs/plan.md`
+- `docs/reference_standards.md`
 
-## 3. 判定結果
-- 総合判定: PASS
-- 判定理由: `docs/roadmap.md` は `docs/plan.md` と `docs/reference_standards.md` の必須拘束（ガバナンス、Docker再現性、Data Integrity、UI/依存方向、Port固定、Gate-S/Gate-F、監査証跡要件、DoD）を充足し、重大な欠落・矛盾を確認しなかった。
+## 判定
+- **REJECT_TO_PM**
 
-## 4. 指摘事項
-- 指摘なし（0件）
+## 指摘事項
 
-## 5. 補足
-- 本監査では、基準文書に定義された fail-fast 原則と REJECT 運用条件に照らし、Roadmap 内に再設計要求レベルの逸脱は確認されなかった。
+1. **監査入力識別子の定義が監査入力制約と不整合**
+- 失敗箇所: `docs/roadmap.md` セクション「0. 位置づけ」
+- 現状記述: 監査入力識別子として `docs/plan.md` と `docs/reference_standards.md` のハッシュを固定している。
+- 違反制約:
+  - `docs/plan.md` 5.1「Builder/Validator 分離の運用固定（監査入力制約）」
+  - `docs/roadmap.md` 5章「監査ログ入力制約（許可入力は requirements + Diff のみ）」
+- 問題内容:
+  - 監査入力は「要件文書（`docs/requirements.md` と承認済み要件差分）+ 変更差分（Diff）」に限定されるべきところ、`plan` と `reference_standards` を監査入力識別子として固定しており、同一文書内の制約と矛盾している。
+- 具体的修正指示（最小修正単位）:
+  - セクション0の「監査入力識別子を固定する」から `docs/plan.md@...` と `docs/reference_standards.md@...` を削除し、`docs/requirements.md@<hash or revision>` と `Diff識別子（PR/commit range/patch hash）` を記載すること。
+- 原因層判定: **設計ではなくPMドキュメント記述（運用定義）起因**
+- 差し戻し先: **REJECT_TO_PM**
+- 再検証条件:
+  - 監査入力識別子が「requirements版識別子 + Diff識別子 + 判定時刻 + Validatorロール」に統一され、文書内矛盾が解消されていること。
+
+## 総括
+- アーキテクチャ方針・フェーズ構成・Gate-S/Gate-F・Docker/Data Integrity/Qt規約の主要要件は概ね整合している。
+- ただし上記の監査入力定義の矛盾は監査運用の根幹に関わるため、是正完了まで受理不可。
