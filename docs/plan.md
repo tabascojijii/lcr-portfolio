@@ -61,6 +61,15 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 - 検証失敗は fail-fast
 - `mypy` を CI 主ゲート化、`type: ignore` は理由コメント必須
 
+### 2.4 Qt 命名規約固定（reference_standards 4章準拠）
+- シグナル命名は過去分詞形（例: `dataChanged`, `executionFinished`）を必須とする
+- スロット命名は動詞開始（例: `update_display`, `start_cleanup`）を必須とする
+- 命名違反は警告扱いにせず Gate-S 失敗（fail-fast）とする
+- 機械検証ルールを固定する
+  - Signal: `Signal(...)` を持つ属性名が過去分詞規則に適合すること
+  - Slot: `@Slot` デコレータ対象メソッド名が動詞開始規則に適合すること
+  - 既存 Qt 命名規約例外は `artifacts/qt_naming_exceptions.md` に理由付きで明示し、無理由例外を禁止する
+
 ## 3. フェーズ別実装計画
 ### Phase A: 6.51 ベースライン固定
 - 責務マップ、副作用インベントリ、改修対象/対象外を確定
@@ -151,6 +160,20 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 - EMCS-M2（複雑度）: 主要UseCase公開メソッドの循環的複雑度 <= 10、超過件数 = 0
 - EMCS-M3（SRP逸脱）: 1クラス内で `UI描画 + 永続化 + 外部I/O` の3責務同居件数 = 0
 - EMCS-M4（境界純度）: UI層の外部I/O直接呼び出し件数 = 0
+- `UseCase->Qt dependency = 0`
+- `Domain->Qt dependency = 0`
+- `Qt signal naming violation = 0`
+- `Qt slot naming violation = 0`
+
+Gate-S 検査対象パス（固定）:
+- UI: `src/lcr/ui`
+- UseCase: `src/lcr/core/use_cases`
+- Domain: `src/lcr/core/domain`
+
+Gate-S 機械検証ルール（固定）:
+- 依存検査（AST/import lint）で `src/lcr/core/use_cases` と `src/lcr/core/domain` から `PyQt*` / `PySide*` import を検出した場合 fail
+- 命名検査（AST）で Qt Signal/Slot 規約違反を検出した場合 fail
+- 例外は `artifacts/qt_naming_exceptions.md` に記載済みかつ理由付きの場合のみ許可
 
 ### Gate-F（機能）
 - `pytest tests/` 全件 Pass
@@ -158,6 +181,8 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 - 監査ログ必須項目テスト Pass
 - Docker再現性テスト Pass（ダイジェスト固定/apt書換/constraints/マルチステージ）
 - Data Integrity 必須項目テスト Pass（digest/commit hash/全対象SHA-256）
+- Qt 命名規約検証テスト Pass（T-UI-NAME-1/2）
+- Qt 非依存検証テスト Pass（T-ARCH-QT-1/2）
 
 運用:
 - Gate-S fail は設計再作成を必須化
@@ -204,6 +229,7 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 5. 同型差し戻し（UI責務過多/Port未経由/ゲート混線）が再発しない運用が証跡で確認できる
 6. Docker再現性4要件（digest固定/apt書換/constraints/マルチステージ）が証跡付きで満たされる
 7. Data Integrity 必須記録項目（コンテナdigest・git commit hash・入力/出力/パラメータ/実行ログSHA-256）が自動テストで担保される
+8. Qt 命名規約（Signal/Slot）と UseCase/Domain の Qt 非依存が機械検証で 0 violation
 
 ## 7. Data Integrity 実装固定仕様（監査必須）
 監査ログの必須記録項目:
@@ -220,3 +246,16 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 - T-DI-2: すべてのハッシュ値がSHA-256形式であることを検証
 - T-DI-3: `git_commit_hash` が40桁16進であることを検証
 - T-DI-4: パスが絶対パスを含む場合 fail-fast で失敗することを検証
+
+## 8. 追加固定テスト（監査差し戻し是正）
+Qt 命名規約:
+- T-UI-NAME-1: Signal 命名検証（過去分詞形違反 = 0）
+- T-UI-NAME-2: Slot 命名検証（動詞開始違反 = 0）
+
+Qt 非依存:
+- T-ARCH-QT-1: UseCase 層の Qt import 検証（`PyQt*` / `PySide*` 依存 = 0）
+- T-ARCH-QT-2: Domain 層の Qt import 検証（`PyQt*` / `PySide*` 依存 = 0）
+
+合格条件:
+- 上記4テストは Gate-F 必須Pass
+- いずれか1件でも失敗した場合は `REJECT_TO_ARCHITECT`
