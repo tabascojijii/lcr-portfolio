@@ -13,7 +13,9 @@
 `docs/post_mortem.md` の RC-1〜RC-3 を、以下の制約として固定する。
 
 1. RC-1 対策（境界強制）
-- 依存方向は `UI -> UseCase -> Domain -> Infrastructure` のみ許可。
+- 依存方向は `UI -> UseCase -> Domain` を許可し、Infrastructure は外側実装層として内側（UseCase/Domain）が定義した Port に依存して実装する。
+- `Domain` は `Infrastructure` を import してはならない（0件固定、違反は Gate-S Fail）。
+- `Port/Repository` の **定義主体は内側（UseCase/Domain）**、**実装主体は Infrastructure** に固定する。
 - UI から Domain 直接参照は 0 件を固定目標ではなく「ビルド失敗条件」にする。
 - UI から外部I/O（file/network/subprocess）実行を禁止し、Port/Gateway/Repository 経由のみ許可。
 
