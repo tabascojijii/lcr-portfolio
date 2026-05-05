@@ -105,6 +105,8 @@ Fail条件（1件でもあれば失敗）:
 - `MainWindow._run_container` に業務判断残存
 - `MainWindow._show_create_env_dialog` に業務判断残存
 - UI層からQt以外の外側依存規約違反
+- PyQt/PySide 命名規約違反（Signal が過去分詞形でない、Slot が動詞開始でない）
+- EMCSメトリクス閾値超過（下記 4.3 を参照）
 
 Gate-S は `REJECT_TO_ARCHITECT` 判定を返す。
 
@@ -113,6 +115,26 @@ Pass条件:
 - `pytest tests/` 全件Pass
 - 各フェーズ必須テスト（T5/T6/T6.2/T6.3/T6.4/T6.51〜）Pass
 - 監査ログ完全性（相対パス + ハッシュ）Pass
+
+### 4.3 EMCS 客観メトリクス（Gate-S判定基準）
+測定対象とFail条件:
+- E（Encapsulation/SRP）:
+  - UI層メソッド行数上限 60 行。超過1件でFail。
+  - UI層メソッドの分岐数（`if/for/while/match`）上限 5。超過1件でFail。
+- M（Modularity/Dependency）:
+  - `UI->Domain` 直参照 0 件固定。1件でもFail。
+  - 逆方向依存 0 件、循環依存 0 件。1件でもFail。
+  - Port未経由境界越え 0 件。1件でもFail。
+- C（Complexity）:
+  - UseCase/Orchestrator のサイクロマティック複雑度上限 10。超過1件でFail。
+- S（Safety/Auditability）:
+  - 監査必須キー欠落 0 件。
+  - 相対パス違反 0 件。
+  - 上記いずれか1件でもFail。
+
+判定運用:
+- Gate-S は定量閾値に基づく機械判定を優先し、主観裁量での合格を禁止する。
+- 閾値超過時は Auditor が `違反メトリクス/実測値/閾値/修正最小単位` を必須記録する。
 
 ## 5. 監査証跡の固定要件
 
@@ -124,6 +146,10 @@ Pass条件:
 - `parameter_sha256`
 - `execution_log_sha256`
 - `path_mode`（relative 強制結果）
+
+Gitハッシュ記録方式（固定）:
+- `git_commit_hash` は必ず `git rev-parse HEAD` の実行結果を記録する。
+- 取得失敗時は監査ログを不完全として Gate-F Fail にする。
 
 Docker再現性必須:
 - `FROM @sha256` 固定
@@ -152,6 +178,8 @@ Implementer:
 Auditor:
 - EMCS観点で客観評価。
 - REJECT時は「違反箇所・違反規約・最小修正指示・原因層・差し戻し先」を必須記載。
+- レビュー入力は「要件定義 + 生成差分（Diff） + テスト結果」のみに限定し、Implementerの思考過程・補助メモ・下書きの参照を禁止する。
+- 上記入力制約違反があった監査は無効とし、差分限定条件で再監査する。
 
 ## 8. 成果物（最低限）
 - `artifacts/architecture_decoupling_assessment.md`
@@ -160,11 +188,18 @@ Auditor:
 - `artifacts/phase_6_51_test_baseline.md`
 - `artifacts/post_mortem_closure_checklist.md`
 - `artifacts/audit_reject_template.md`
+- `artifacts/qt_naming_inventory.md`
+- `artifacts/emcs_metrics_report.md`
 
 `post_mortem_closure_checklist.md` 必須項目:
 - RC-1〜RC-3 閉塞証跡
 - Gate-S/Gate-F 独立運用記録
 - REJECT先判定記録（Architect/Implementer）
+
+`qt_naming_inventory.md` 必須項目:
+- 既存Signal/Slot名の棚卸し一覧（ファイル、識別子、判定）
+- 命名規約違反一覧と修正方針
+- 「違反0件」到達証跡
 
 ## 9. Definition of Done
 以下を同一リビジョンで満たした場合のみ完了。
@@ -176,3 +211,5 @@ Auditor:
 5. Port バイパス 0 件
 6. 監査証跡（相対パス・ハッシュ・digest・git hash）完全
 7. post_mortem 再発防止証跡が成果物として保存済み
+8. PyQt/PySide 命名規約違反 0 件（Signal過去分詞、Slot動詞）
+9. Builder/Validator 分離運用（差分限定レビュー）が監査記録で確認可能
