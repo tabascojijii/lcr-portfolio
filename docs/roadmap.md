@@ -25,6 +25,14 @@
 - 依存方向は `UI -> UseCase -> Domain -> Infrastructure` のみ許可する。
 - UseCase/Domain から Qt 依存を禁止する。
 - 層間通信は `abc.ABC` または `typing.Protocol` を必須化する。
+- 必須Portを固定し、未充足は構造違反として扱う。
+  - `EnvironmentCapabilityPort`
+  - `EnvironmentRepositoryPort`
+  - `ContainerRuntimePort`
+  - `AuditLogPort`
+  - `ImageCleanupPort`
+  - `KnowledgeMappingPort`
+  - `PackageLookupPort`
 - Qt命名規約（Signal=過去分詞、Slot=動詞開始）違反は失敗扱いとする。
 
 ## 2. ロードマップ全体像
@@ -139,6 +147,17 @@
 - Domain->Qt依存 = 0
 - Qt Signal命名違反 = 0
 - Qt Slot命名違反 = 0
+- 必須Port未実装/未経由 = 0
+
+固定検査対象パス:
+- UI: `src/lcr/ui`
+- UseCase: `src/lcr/core/use_cases`
+- Domain: `src/lcr/core/domain`
+
+固定機械検証ルール:
+- 依存検査（AST/import lint）で `src/lcr/core/use_cases` と `src/lcr/core/domain` から `PyQt*` / `PySide*` import を検出した場合 fail とする。
+- 命名検査（AST）で Qt Signal/Slot 規約違反を検出した場合 fail とする。
+- 例外は `artifacts/qt_naming_exceptions.md` に理由付きで記載されたもののみ許可する。
 
 補助メトリクス（EMCS）:
 - UI業務判断分岐上限
@@ -173,6 +192,10 @@
 監査ログ入力制約:
 - 許可入力: 要件文書 + 変更差分のみ
 - 禁止入力: 実装者思考ログ、口頭説明、未証跡メモ
+- 監査証跡への必須記録:
+  - 要件版識別子（例: `docs/requirements.md@<hash or revision>`）
+  - Diff識別子（例: `PR#xx / commit range / patch hash`）
+  - 判定時刻と判定者ロール（Validator）
 
 ## 6. マイルストーン
 1. M1（構造回復）
