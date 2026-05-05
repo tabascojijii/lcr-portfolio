@@ -1,187 +1,200 @@
-# LCR ロードマップ（PM）
+# LCR Roadmap（PM）
 
-## 0. 基本方針（絶対基準）
-本ロードマップは `docs/reference_standards.md` を絶対基準とし、`docs/plan.md` をその実装計画基準として準拠させる。実装・運用は両基準を同時に満たすことを必須条件とし、片方のみの充足を許容しない。
+## 0. 位置づけ
+本ロードマップは `docs/reference_standards.md` を絶対基準として策定する。`docs/plan.md` は実装計画の詳細化ソースとして参照し、矛盾時は常に `reference_standards` を優先する。
 
-非交渉ルール:
-1. Builder/Validator 分離を維持し、監査は `requirements + diff` を一次入力として敵対的に実施する。
-2. UI層は Humble Object を徹底し、業務ロジック・外部I/O・永続化判断を持たない。
-3. クラス間通信は `abc.ABC` / `typing.Protocol` のインターフェース経由を強制する。
-4. EOLコンテナ再現性は digest固定・アーカイブAPT・constraints・マルチステージを常時満たす。
-5. 監査証跡は ALCOA++ 準拠で、Digest/Git Hash/相対パス/ハッシュ完全化を必須化する。
+## 1. 絶対遵守原則（Non-Negotiable）
+1. 監査・実装ガバナンス
+- Builder/Validator 分離を厳守する。
+- 監査判定は要件と差分（Diff）に限定し、主観評価を禁止する。
+- REJECT は処方的（失敗箇所・違反制約・修正指示）であることを必須化する。
 
----
+2. Docker 再現性
+- `FROM` はタグ禁止、`@sha256:` ダイジェスト固定を必須化する。
+- EOL OS のAPTは `old-releases.ubuntu.com` / `archive.debian.org` へ切替える。
+- `constraints.txt` により依存解決範囲を固定する。
+- C/C++ビルド依存イメージはマルチステージビルドを強制する。
 
-## 1. マイルストーン
+3. Data Integrity
+- `container_image_digest` と `git_commit_hash` を必須記録する。
+- 入出力・パラメータ・実行ログの SHA-256 記録を必須化する。
+- 記録パスはプロジェクトルート基準の相対パスのみ許可する。
 
-### M1: ガバナンス固定（監査運用の先行確立）
-目的: 要件逸脱と差し戻しループを予防する運用土台の固定。
+4. UI/アーキテクチャ
+- Humble Object パターンを適用し、UI責務を最小化する。
+- 依存方向は `UI -> UseCase -> Domain -> Infrastructure` のみ許可する。
+- UseCase/Domain から Qt 依存を禁止する。
+- 層間通信は `abc.ABC` または `typing.Protocol` を必須化する。
+- Qt命名規約（Signal=過去分詞、Slot=動詞開始）違反は失敗扱いとする。
 
-実施項目:
-- EMCS観点の監査チェックリストを成果物化
-- REJECT時の処方的テンプレート（失敗箇所/違反制約/修正ヒント）標準化
-- 監査入力制約（requirements + diff）をCI/運用手順へ明文化
-- 差し戻し先規約を明文化（設計起因の構造違反は `REJECT_TO_ARCHITECT` を必須化）
+## 2. ロードマップ全体像
+- Phase A: 6.51 ベースライン固定
+- Phase B: 6.1 境界再配線（最優先）
+- Phase C: Phase 5 Guardrails 固定
+- Phase D: Phase 6 Lifecycle 固定
+- Phase E: 6.2〜6.4 契約・回帰固定
+- Phase F: 6.52 Logging 標準化
+- Phase G: 6.53 Analyzer 境界分離
+- Phase H: Docker再現性標準固定
 
-完了条件:
-- 監査手順書で Builder/Validator 分離が明文化済み
-- REJECTメッセージ雛形が定義済み
-- 監査入力制約違反 0
-- `REJECT_TO_ARCHITECT` 判定漏れ 0
+順序原則:
+1. Gate-S（構造）成立前に Gate-F（機能）合格のみで進捗化しない。
+2. Phase B を最優先し、UI責務過多と Port バイパスを構造的に排除する。
+3. Docker再現性とData Integrityはリリース直前ではなく並行実装で前倒し固定する。
 
-### M2: UI境界の構造是正（Clean Architecture + Humble Object）
-目的: `main_window.py` を表示責務へ限定し、業務判断をUseCaseへ隔離。
+## 3. フェーズ計画
+### Phase A: 6.51 ベースライン固定
+目的:
+- 責務マップ、副作用インベントリ、現状テスト結果を証跡化する。
 
-実施項目:
-- `_run_container` の判定系責務を `RunPreparationUseCase` へ移管
-- `_show_create_env_dialog` の候補生成責務を `EnvironmentCreationProposalUseCase` へ移管
-- UI->Domain/UI->Infrastructure の直接参照を排除
-
-完了条件:
-- UI層の業務ロジック主要導線 0
-- UI->Domain 直参照 0
-- Port/Interface 非経由呼び出し 0
-
-### M3: インターフェース規律と型契約固定
-目的: 実装の抜け漏れと暗黙契約を排除。
-
-実施項目:
-- Port群（EnvironmentCapability/Repository/ContainerRuntime/AuditLog/ImageCleanup/KnowledgeMapping）の契約明文化
-- UI-Application、UI-Presenter、UseCase間、Domainサービス間の通信をProtocol/ABC化
-- DTO strict化（Pydantic v2）と dict互換アダプタ整備
-
-完了条件:
-- 主要境界の具象直接依存 0
-- DTOバリデーションfail-fast動作確認
-- `Any` 無制限利用 0（境界契約上）
-
-### M4: 品質ゲート定着（構造先行）
-目的: 「テスト合格だが構造違反」を再発不能化。
-
-実施項目:
-- Gate-1（構造）をGate-2（機能）より先行
-- Gate-1判定項目へ `逆方向依存 = 0` を明示し、未達時は停止
-- PyQt命名規約チェック（signal過去分詞/slot動詞開始）を静的検査化
-- 固定重点検査（`_run_container`/`_show_create_env_dialog`）を毎回実行
-- Gate-2必須項目を固定運用:
-  - `pytest tests/` 全件Pass
-  - Phase別必須テスト（T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52）Pass
-  - Digest/Gitコミットハッシュ記録の存在・形式テストPass
-  - EOL再現性テスト（digest固定/アーカイブAPT/constraints/マルチステージ）Pass
+主要成果物:
+- `artifacts/phase_6_51_baseline_inventory.md`
+- `artifacts/phase_6_51_test_baseline.md`
 
 完了条件:
-- Gate-1未達で先行不可ルール運用 100%
-- 命名規約違反 0
-- 固定重点検査の未実施回 0
-- Gate-2必須テスト未実施 0
+- 対象/非対象境界が監査可能な形で固定されている。
 
-### M5: 監査証跡の完全実装（Data Integrity）
-目的: 法的証拠レベルの再現性と改ざん検知を担保。
+### Phase B: 6.1 境界再配線（最優先）
+目的:
+- `MainWindow._run_container` と `MainWindow._show_create_env_dialog` の業務判断をUseCaseへ移管する。
 
-実施項目:
-- 監査ログ契約フルセットを必須実装:
-  - required imports
-  - environment capability
-  - mismatch結果
-  - ガード発火状態
-  - 操作種別/時刻/対象/成否/解放容量/実行理由
-- 実行ログへコンテナDigestと `git rev-parse HEAD` を記録
-- ログ/設定/スクリプトの相対パス強制
-- 入出力/パラメータ/実行ログへSHA-256適用
+主要施策:
+- `RunPreparationUseCase` に実行可否判定を集約。
+- `EnvironmentCreationProposalUseCase` に環境提案ロジックを集約。
+- `LifecycleManagementUseCase` に削除/クリーンアップ判断を集約。
 
 完了条件:
-- `required imports` 記録欠落 0
-- `environment capability` 記録欠落 0
-- `mismatch結果/ガード発火状態` 記録欠落 0
-- `操作種別/時刻/対象/成否/解放容量/実行理由` 記録欠落 0
-- Digest記録欠落 0
-- Gitコミットハッシュ記録欠落 0
-- 絶対パス混入 0
-- ハッシュ未付与対象 0
+- UIからDomain/Infrastructure直接参照 0。
+- Port未経由境界越え 0。
+- 対象2関数のUI業務ロジック 0。
 
-### M6: EOLコンテナ再現性標準の実装完了
-目的: Python2.7/OpenCV2.4系の再現可能ビルドを恒常運用化。
-
-実施項目:
-- `FROM` digest固定（タグ運用禁止）
-- EOL OSのAPTをアーカイブリポジトリへ切替
-- `constraints.txt` による依存解決範囲固定
-- OpenCV等C++ビルドのマルチステージ化
-- 上記4項目の静的検査 + 実ビルド検証をCIへ追加
+### Phase C: Phase 5 Guardrails 固定
+目的:
+- capability可視化と mismatch 時ハードガードを実装する。
 
 完了条件:
-- digest未固定 `FROM` 0
-- EOL対象APTソース不備 0
-- constraints未適用pip install 0
-- 単一ステージのC++ビルド経路 0
-- EOL再現性検証未実施 0
+- AC-1〜AC-5, T5-1〜T5-4 充足。
 
----
+### Phase D: Phase 6 Lifecycle 固定
+目的:
+- 環境削除・クリーンアップ・監査記録を運用可能な形で固定する。
 
-## 2. 実行順序（固定）
-1. ガバナンス固定（M1）
-2. UI境界是正（M2）
-3. インターフェース/型契約固定（M3）
-4. 構造先行ゲート運用定着（M4, Gate-1先行でGate-2を実施）
-5. 監査証跡完全実装（M5）
-6. EOL再現性実装と検証更新（M6）
+完了条件:
+- AC6-1〜AC6-7, T6-1〜T6-6 充足。
 
-順序逸脱は原則禁止。設計変更が必要な場合は実装継続より先に設計成果物を更新する。
+### Phase E: 6.2〜6.4 契約・回帰固定
+目的:
+- DTO strict化、型検証、契約テストを固定する。
 
----
+主要施策:
+- Pydantic v2 strict を監査DTO→RuntimeDTO→環境DTOの順で導入。
+- `mypy` を主ゲート化し `type: ignore` は理由コメント必須化。
+- Port/DTO/Audit の contract test と golden regression 整備。
 
-## 3. KPI（定量管理）
-- 構造KPI:
-  - `UI->Domain直参照 = 0`
-  - `Port/Interface非経由通信 = 0`
-  - `逆方向依存 = 0`
-  - `循環依存 = 0`
-- 再現性KPI:
-  - `digest未固定FROM = 0`
-  - `constraints未適用ビルド = 0`
-- 監査証跡KPI:
-  - `required imports記録欠落 = 0`
-  - `environment capability記録欠落 = 0`
-  - `mismatch/guard state記録欠落 = 0`
-  - `操作詳細記録欠落（種別/時刻/対象/成否/解放容量/実行理由） = 0`
-  - `Digest/Git Hash記録欠落 = 0`
-  - `ハッシュ未付与監査対象 = 0`
-- 運用KPI:
-  - `Gate-1未達でGate-2へ進行した件数 = 0`
-  - `処方的でないREJECT件数 = 0`
+完了条件:
+- AC6.2-1〜AC6.2-5, AC6.3-1〜AC6.3-4, AC6.4-1〜AC6.4-4 充足。
 
----
+### Phase F: 6.52 Logging 標準化
+目的:
+- 対象コア領域の `print(` を除去し、例外経路のログレベルを統一する。
 
-## 4. リスク管理
-1. UI改修によるイベント配線破断
-- 対応: UIは導線のみ変更し、責務移管はUseCase側で吸収。
+完了条件:
+- AC6.52-1〜AC6.52-5 充足。
 
-2. 型厳格化に伴う既存dict経路の移行失敗
-- 対応: DTOアダプタを先行導入し、段階的にstrict化。
+### Phase G: 6.53 Analyzer 境界分離
+目的:
+- `CodeAnalyzer` から直接 I/O を排除し、Port経由へ統一する。
 
-3. EOL外部要因でビルド不安定化
-- 対応: digest + archive + constraints + multistage の4点セットを単位運用し、部分適用を禁止。
+主要施策:
+- PyPI照会を `PackageLookupPort` 経由へ移管。
+- mapping読込を Repository/Port 経由へ移管。
 
----
+完了条件:
+- AC6.53-1〜AC6.53-5 充足。
 
-## 5. Done条件
-1. `reference_standards` の4領域（ガバナンス/Docker/Data Integrity/UI規約）すべてで違反0。
-2. `plan.md` のPhase 5/6/6.1〜6.4/6.51/6.52要件が、上記絶対基準に整合して達成済み。
-3. 固定重点検査（`_run_container` / `_show_create_env_dialog`）で責務ゼロ化を確認済み。
-4. Gate-2必須項目（`pytest tests/`、T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52、Digest/Git hash記録テスト、EOL再現性テスト）が全てPass。
-5. 監査ログ契約（required imports / environment capability / mismatch結果 / guard state / 操作詳細 / Digest / Git hash / 相対パス / SHA-256）が0欠落で継続運用可能。
-6. Gate-1先行運用と監査証跡更新が継続可能な手順として定着済み。
+### Phase H: Docker再現性標準固定
+目的:
+- EOLスタックを含む全Dockerビルドの再現性を業界標準で固定する。
 
----
+完了条件:
+- ダイジェスト未固定 `FROM` = 0。
+- EOL時APTアーカイブ未設定 = 0。
+- `constraints.txt` 未使用ビルド = 0。
+- C/C++ビルド依存でマルチステージ未適用 = 0。
 
-## 6. 必須成果物（`plan.md` 対応）
-- `artifacts/architecture_decoupling_assessment.md`（M2/M3）
-- `artifacts/refactoring_proposal.md`（M2/M3）
-- `artifacts/phase_6_51_baseline_inventory.md`（M2着手前ベースライン）
-- `artifacts/phase_6_51_test_baseline.md`（M2着手前ベースライン）
-- `artifacts/phase_6_52_logging_migration_report.md`（M5）
-- `artifacts/phase_6_52_print_elimination_evidence.md`（M5）
-- `artifacts/post_mortem_closure_checklist.md`（M4/M5/M6統合）
-  - 既知欠陥2点の解消判定
-  - Gate-1/Gate-2独立運用の実行記録
-  - 差し戻し先判定（Architect/Implementer）の根拠
+証跡:
+- `artifacts/docker_reproducibility_checklist.md`
+- `artifacts/docker_digest_lock_evidence.md`
+- `artifacts/docker_multistage_evidence.md`
+
+## 4. 品質ゲート運用
+### Gate-S（構造）
+必須:
+- UI->Domain直参照 = 0
+- 逆方向依存 = 0
+- 循環依存 = 0
+- Portバイパス = 0
+- 対象2関数UI業務ロジック = 0
+- UseCase->Qt依存 = 0
+- Domain->Qt依存 = 0
+- Qt Signal命名違反 = 0
+- Qt Slot命名違反 = 0
+
+補助メトリクス（EMCS）:
+- UI業務判断分岐上限
+- UseCase複雑度上限
+- SRP逸脱件数
+- UI層外部I/O直呼び出し件数
+
+### Gate-F（機能）
+必須:
+- `pytest tests/` 全件Pass
+- Phase別必須テスト（T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52/T6.53）Pass
+- 監査ログ必須項目テスト Pass
+- Docker再現性テスト Pass
+- Data Integrity テスト（T-DI-1〜4）Pass
+- Qt命名規約テスト（T-UI-NAME-1/2）Pass
+- Qt非依存テスト（T-ARCH-QT-1/2）Pass
+
+ゲート判定原則:
+1. Gate-S fail は `REJECT_TO_ARCHITECT`。
+2. Gate-F pass 単独は進捗扱いにしない。
+3. 両ゲート同一リビジョンPassのみ Done 判定可能。
+
+## 5. 監査証跡と運用成果物
+必須成果物:
+- `artifacts/architecture_decoupling_assessment.md`
+- `artifacts/refactoring_proposal.md`
+- `artifacts/post_mortem_closure_checklist.md`
+- `artifacts/audit_reject_template.md`
+- `artifacts/data_integrity_field_matrix.md`
+- Phase別成果物（6.51, 6.52, 6.53, Docker）
+
+監査ログ入力制約:
+- 許可入力: 要件文書 + 変更差分のみ
+- 禁止入力: 実装者思考ログ、口頭説明、未証跡メモ
+
+## 6. マイルストーン
+1. M1（構造回復）
+- Phase A-B 完了
+- Gate-S 主要違反 0 化
+
+2. M2（機能安定）
+- Phase C-D 完了
+- Phase 5/6 系受け入れ基準充足
+
+3. M3（契約固定）
+- Phase E-G 完了
+- 型・契約・回帰・ログ標準化完了
+
+4. M4（再現性監査完了）
+- Phase H + Data Integrity 完了
+- Gate-S/Gate-F 同一リビジョンPass
+
+## 7. Definition of Done
+1. Gate-S と Gate-F が同一リビジョンでPass。
+2. post_mortem 指摘の責務移管が完了。
+3. Phase 5, 6, 6.1〜6.4, 6.51, 6.52, 6.53 の受け入れ基準を満たす。
+4. Docker再現性4要件を証跡付きで満たす。
+5. Data Integrity 必須項目を自動テストで担保。
+6. Qt命名規約とQt非依存が機械検証で violation 0。
