@@ -206,6 +206,22 @@
   - Diff識別子（例: `PR#xx / commit range / patch hash`）
   - 判定時刻と判定者ロール（Validator）
 
+`artifacts/post_mortem_closure_checklist.md` 必須項目:
+1. 既知2欠陥の閉塞証跡
+2. Gate-S / Gate-F 独立運用記録
+3. 差し戻し先判定ログ（Architect/Implementer）
+
+`artifacts/audit_reject_template.md` 必須項目:
+1. 失敗箇所（file path + 関数/クラス + 行動）
+2. 違反制約（どの規約/受け入れ基準に違反したか）
+3. 具体的修正指示（最小修正単位のヒント）
+4. 原因層（設計/実装）の判定
+5. 差し戻し先（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT`）
+6. 再検証条件（何を満たせば再提出可能か）
+
+監査運用ルール:
+- 上記必須項目が1つでも欠ける REJECT は監査失格として無効化する。
+
 ## 6. マイルストーン
 1. M1（構造回復）
 - Phase A-B 完了
@@ -227,6 +243,7 @@
 1. Gate-S と Gate-F が同一リビジョンでPass。
 2. post_mortem 指摘の責務移管が完了。
 3. Phase 5, 6, 6.1〜6.4, 6.51, 6.52, 6.53 の受け入れ基準を満たす。
-4. Docker再現性4要件を証跡付きで満たす。
-5. Data Integrity 必須項目を自動テストで担保。
-6. Qt命名規約とQt非依存が機械検証で violation 0。
+4. 監査証跡が相対パス・ハッシュ完全化・fail-fast 原則に準拠する（Data Integrity 要件と整合）。
+5. Docker再現性4要件を証跡付きで満たす。
+6. Data Integrity 必須項目を自動テストで担保。
+7. Qt命名規約とQt非依存が機械検証で violation 0。
