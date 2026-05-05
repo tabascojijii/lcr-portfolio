@@ -122,6 +122,23 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 完了条件:
 - AC6.53-1〜AC6.53-5
 
+### Phase H: Docker再現性標準の固定（reference_standards準拠）
+- `Dockerfile` の `FROM` をタグ指定禁止とし、`@sha256:` ダイジェスト固定を必須化
+- EOL OS 利用時は APT ソースを `old-releases.ubuntu.com` / `archive.debian.org` へ書き換える
+- `constraints.txt` を導入し、pip 依存解決範囲を固定（バックトラッキング暴走防止）
+- OpenCV 等のビルド依存を持つ環境はマルチステージビルドを強制（build/runtime 分離）
+
+完了条件:
+- ダイジェスト未固定 `FROM` = 0
+- EOLベースイメージ利用時のAPTアーカイブ未設定 = 0
+- 対象Dockerビルドで `constraints.txt` 未使用 = 0
+- C/C++ビルド依存イメージでマルチステージ未適用 = 0
+
+証跡:
+- `artifacts/docker_reproducibility_checklist.md`
+- `artifacts/docker_digest_lock_evidence.md`
+- `artifacts/docker_multistage_evidence.md`
+
 ## 4. 品質ゲート（再発防止コア）
 ### Gate-S（構造）
 - `UI->Domain直参照 = 0`
@@ -130,11 +147,17 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 - `Portバイパス = 0`
 - `MainWindow._run_container` と `_show_create_env_dialog` の業務ロジック = 0
 - インターフェース非経由通信 = 0
+- EMCS-M1（責務密度）: UIクラスごとの業務判断分岐数（`if/elif` + 判定分岐）<= 2、逸脱件数 = 0
+- EMCS-M2（複雑度）: 主要UseCase公開メソッドの循環的複雑度 <= 10、超過件数 = 0
+- EMCS-M3（SRP逸脱）: 1クラス内で `UI描画 + 永続化 + 外部I/O` の3責務同居件数 = 0
+- EMCS-M4（境界純度）: UI層の外部I/O直接呼び出し件数 = 0
 
 ### Gate-F（機能）
 - `pytest tests/` 全件 Pass
 - 各Phase必須テスト（T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52/T6.53）Pass
 - 監査ログ必須項目テスト Pass
+- Docker再現性テスト Pass（ダイジェスト固定/apt書換/constraints/マルチステージ）
+- Data Integrity 必須項目テスト Pass（digest/commit hash/全対象SHA-256）
 
 運用:
 - Gate-S fail は設計再作成を必須化
@@ -151,11 +174,27 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 - `artifacts/phase_6_53_analyzer_porting_report.md`
 - `artifacts/phase_6_53_analyzer_failure_policy.md`
 - `artifacts/post_mortem_closure_checklist.md`（新規）
+- `artifacts/docker_reproducibility_checklist.md`
+- `artifacts/docker_digest_lock_evidence.md`
+- `artifacts/docker_multistage_evidence.md`
+- `artifacts/data_integrity_field_matrix.md`
+- `artifacts/audit_reject_template.md`
 
 `post_mortem_closure_checklist.md` の必須項目:
 1. 既知2欠陥の閉塞証跡
 2. Gate-S / Gate-F 独立運用記録
 3. 差し戻し先判定ログ（Architect/Implementer）
+
+`audit_reject_template.md` の必須項目:
+1. 失敗箇所（file path + 関数/クラス + 行動）
+2. 違反制約（どの規約/受け入れ基準に違反したか）
+3. 具体的修正指示（最小修正単位のヒント）
+4. 原因層（設計/実装）の判定
+5. 差し戻し先（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT`）
+6. 再検証条件（何を満たせば再提出可能か）
+
+監査運用ルール:
+- 上記必須項目が1つでも欠けるREJECTは監査失格として無効化する。
 
 ## 6. Definition of Done
 1. Gate-S, Gate-F の両方が同一リビジョンで Pass
@@ -163,3 +202,21 @@ UI の責務を「入力受理・状態表示・確認ダイアログ」に限�
 3. Phase 5, 6, 6.1〜6.4, 6.51, 6.52, 6.53 の受け入れ基準を満たす
 4. 監査証跡が相対パス・ハッシュ完全化・fail-fast 原則に準拠
 5. 同型差し戻し（UI責務過多/Port未経由/ゲート混線）が再発しない運用が証跡で確認できる
+6. Docker再現性4要件（digest固定/apt書換/constraints/マルチステージ）が証跡付きで満たされる
+7. Data Integrity 必須記録項目（コンテナdigest・git commit hash・入力/出力/パラメータ/実行ログSHA-256）が自動テストで担保される
+
+## 7. Data Integrity 実装固定仕様（監査必須）
+監査ログの必須記録項目:
+1. `container_image_digest`（実行イメージのSHA256ダイジェスト）
+2. `git_commit_hash`（`git rev-parse HEAD` の値）
+3. `input_sha256`（入力データ）
+4. `output_sha256`（出力データ）
+5. `parameter_sha256`（パラメータファイル）
+6. `execution_log_sha256`（実行ログ本体）
+7. `path_mode`（相対パス強制の検証結果）
+
+テスト固定（Gate-F必須）:
+- T-DI-1: 上記7項目の存在検証（欠落0件）
+- T-DI-2: すべてのハッシュ値がSHA-256形式であることを検証
+- T-DI-3: `git_commit_hash` が40桁16進であることを検証
+- T-DI-4: パスが絶対パスを含む場合 fail-fast で失敗することを検証
