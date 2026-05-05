@@ -1,38 +1,69 @@
-# 監査報告書（Plan監査）
+# 監査報告書（Roadmap 検証）
 
-## 監査対象
-- 基準: `docs/reference_standards.md`
-- 被監査計画: `docs/plan.md`
-- 監査ロール: Auditor（Validator）
+## 判定
+REJECT_TO_PM
 
-## 監査結論
-- 判定: **PASS（問題なし）**
-- `docs/plan.md` は、`docs/reference_standards.md` の必須要求（第1章〜第4章）を満たしており、基準逸脱は確認されなかった。
+## 監査基準
+- `docs/plan.md`（絶対基準）
+- `docs/reference_standards.md`（絶対基準）
 
 ## 指摘事項
-- **指摘なし（基準違反 0 件）**
 
-## 根拠（基準適合サマリ）
-1. 監査/ガバナンス標準（reference 1章）
-- EMCSに基づく客観メトリクスをGate-Sへ明示（M1〜M4）。
-- Builder/Validator分離を5.1で運用固定。
-- REJECT時の処方的テンプレート要件を `artifacts/audit_reject_template.md` 必須項目として規定。
+### 1. 監査証跡の必須記録項目が欠落
+- 失敗箇所（file path + セクション）:
+  - `docs/roadmap.md` セクション「5. 監査証跡と運用成果物 / 監査ログ入力制約」
+- 違反制約:
+  - `docs/plan.md` 5.1「Builder/Validator 分離の運用固定（監査入力制約）」で必須とされる以下が未記載。
+  - 要件版識別子（例: `docs/requirements.md@<hash or revision>`）
+  - Diff識別子（例: `PR#xx / commit range / patch hash`）
+  - 判定時刻と判定者ロール（Validator）
+- 具体的修正指示:
+  - `docs/roadmap.md` の監査ログ入力制約に、上記3項目を「監査証跡への必須記録」として明記すること。
+- 原因層（設計/実装）:
+  - 設計
+- 差し戻し先:
+  - `REJECT_TO_PM`
+- 再検証条件:
+  - 監査証跡の必須記録3項目が `docs/roadmap.md` に明示され、`docs/plan.md` 5.1 と整合していること。
 
-2. Docker再現性標準（reference 2章）
-- `FROM` ダイジェスト固定、EOL aptアーカイブ切替、`constraints.txt`、マルチステージビルドをPhase Hで必須化。
-- Gate-Fで再現性テスト必須Pass化。
+### 2. Gate-S の固定検査仕様が不十分（機械検証条件の欠落）
+- 失敗箇所（file path + セクション）:
+  - `docs/roadmap.md` セクション「4. 品質ゲート運用 / Gate-S（構造）」
+- 違反制約:
+  - `docs/plan.md` 4章で固定される以下の機械検証仕様が未記載。
+  - 検査対象パス固定（UI: `src/lcr/ui` / UseCase: `src/lcr/core/use_cases` / Domain: `src/lcr/core/domain`）
+  - `PyQt*` / `PySide*` import を UseCase/Domain で検出時 fail とするASTルール
+  - Qt命名規約違反のAST検出 fail ルール
+  - 例外を `artifacts/qt_naming_exceptions.md` 理由付き記載時のみ許可する条件
+- 具体的修正指示:
+  - `docs/roadmap.md` Gate-S に、上記4点を「固定ルール」として追記すること。
+- 原因層（設計/実装）:
+  - 設計
+- 差し戻し先:
+  - `REJECT_TO_PM`
+- 再検証条件:
+  - Gate-S の検査対象・検出方式・例外条件が `docs/plan.md` 4章と同等の粒度で明記されていること。
 
-3. Data Integrity標準（reference 3章）
-- `container_image_digest` と `git_commit_hash` の記録を必須化。
-- 相対パス強制（`path_mode`）と絶対パスfail-fastテストを固定。
-- 入出力/パラメータ/実行ログのSHA-256を必須化し、検証テストを規定。
+### 3. Port 契約の固定対象がロードマップから欠落
+- 失敗箇所（file path + セクション）:
+  - `docs/roadmap.md` セクション「1. 絶対遵守原則 / 4. UI/アーキテクチャ」および全体
+- 違反制約:
+  - `docs/plan.md` 2.2 で必須Portとして固定される以下が未定義。
+  - `EnvironmentCapabilityPort`
+  - `EnvironmentRepositoryPort`
+  - `ContainerRuntimePort`
+  - `AuditLogPort`
+  - `ImageCleanupPort`
+  - `KnowledgeMappingPort`
+  - `PackageLookupPort`
+- 具体的修正指示:
+  - `docs/roadmap.md` に必須Port一覧を明示し、未充足をGate-S失敗として扱う方針を追加すること。
+- 原因層（設計/実装）:
+  - 設計
+- 差し戻し先:
+  - `REJECT_TO_PM`
+- 再検証条件:
+  - 必須Port一覧と、インターフェース経由強制ルールが `docs/plan.md` 2.2 と整合すること。
 
-4. PyQt/PySide標準（reference 4章）
-- Humble Object方針としてUI責務を入力受理・表示・確認へ限定。
-- UseCase/DomainのQt非依存をGate-S機械検証で強制。
-- `typing.Protocol` / `abc.ABC` によるPort契約を必須化。
-- Signal（過去分詞）/Slot（動詞開始）の命名規約を固定し、違反をGate-S fail化。
-
-## 監査メモ
-- 本監査は計画書監査であり、実装差分監査ではない。
-- 実装監査時は `docs/plan.md` が規定する 5.1 の入力制約（要件+Diff限定）を厳守すること。
+## 総括
+`docs/roadmap.md` は大枠の方向性は整合しているが、`docs/plan.md` の固定仕様（監査証跡必須記録、Gate-S機械検証仕様、必須Port固定）の一部が欠落しているため、現時点では基準未達。
