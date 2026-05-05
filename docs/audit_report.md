@@ -1,57 +1,67 @@
-# Audit Report
+# 監査レポート（Auditor）
 
-## 1. Pytest Execution Result
-- Command: `pytest tests/`
-- Result: **PASS**
-- Summary: `71 passed in 12.38s`
-- Error logs: なし
+## 判定
+REJECT_TO_ARCHITECT
 
-## 2. Reference Standards Conformance Check (`docs/reference_standards.md`)
+## 総評
+`docs/plan.md` は UI責務分離・Port境界・品質ゲート運用については強いが、`docs/reference_standards.md` の「絶対基準」を満たすには必須要件の明示が不足している。特に Docker再現性標準、監査証跡の必須記録項目（イメージDigest/Gitハッシュ）、PyQt命名規約の具体拘束が計画に欠落しており、現時点では基準適合と判定できない。
 
-### 2.1 `src/` Quality Check
-- 監査観点: 依存方向規約、UI責務分離、Port/UseCase境界、Docker再現性、監査証跡方針。
-- 判定: **適合**（少なくとも以下で裏付け）
-  - `tests/test_ui_usecase_separation.py` PASS
-  - `tests/test_signal_slot_naming_use_case.py` PASS
-  - `tests/test_dockerfile_digest_policy.py` PASS
-  - `tests/test_audit_metadata_reference_schema.py` PASS
+## 指摘事項（重大度順）
 
-### 2.2 `tests/` Quality Check
-- 監査観点: 要件フェーズ対応テストの存在と全件PASS。
-- 判定: **適合**
-  - `pytest tests/` 全件PASS
-  - Phase 6.1検証テスト `tests/test_phase61_decoupling_use_case.py` を確認
+### 1) EOLコンテナ再現性標準の必須要件が計画に未定義（重大）
+- 失敗箇所:
+  - `docs/plan.md` 全体に、以下必須要件の実装/検証タスクが存在しない。
+- 違反基準:
+  - `docs/reference_standards.md` セクション2
+    - `FROM` のSHA256 digest固定
+    - EOL OS向けアーカイブリポジトリ切替
+    - `constraints.txt` による pip 依存解決制約
+    - OpenCV等C++依存のマルチステージビルド強制
+- 影響:
+  - 環境再現性が担保されず、将来のビルド不安定化・監査不適合リスクが残る。
+- 修正指示:
+  - Phaseを新設し、Dockerfile/ビルド定義に対して上記4項目の「実装タスク + 検証タスク + 完了条件」を明文化すること。
 
-### 2.3 `artifacts/` Quality Check
-- 監査観点: フェーズ要求成果物の存在、内容の受け入れ基準適合性。
-- 判定: **適合**
+### 2) 監査証跡契約に必須の「コンテナDigest/Gitコミットハッシュ記録」が未明記（重大）
+- 失敗箇所:
+  - `docs/plan.md` 「6. 監査証跡・成果物」内の監査ログ契約に、
+    - コンテナイメージDigest
+    - 実行時Gitコミットハッシュ（`git rev-parse HEAD`）
+    の明記がない。
+- 違反基準:
+  - `docs/reference_standards.md` セクション3「環境とコードのハッシュ記録」
+- 影響:
+  - 実行時点のコード/環境同一性を証明できず、ALCOA++水準の追跡性を満たせない。
+- 修正指示:
+  - 監査ログ必須項目に2項目を追加し、テスト項目（存在確認・フォーマット確認・欠落時fail）をGate-2に組み込むこと。
 
-## 3. Phase 6.1 Deliverables & Acceptance Criteria Check (`docs/requirements.md`)
+### 3) PyQtシグナル/スロット命名規約の拘束が未定義（中）
+- 失敗箇所:
+  - `docs/plan.md` に命名規約チェック（過去分詞シグナル、動詞スロット）の実装/検証タスクがない。
+- 違反基準:
+  - `docs/reference_standards.md` セクション4「シグナル・スロットの命名規則」
+- 影響:
+  - UI層の可読性・一貫性低下、将来的な責務崩壊の温床となる。
+- 修正指示:
+  - 命名規約を設計成果物へ追記し、静的チェック（命名lintまたはレビューゲート）をGate-1に追加すること。
 
-### 3.1 Mandatory Deliverables
-- `artifacts/architecture_decoupling_assessment.md`: **存在確認済み**
-- `artifacts/refactoring_proposal.md`: **存在確認済み**
+### 4) Builder/Validator分離の運用定義が不十分（中）
+- 失敗箇所:
+  - `docs/plan.md` はGate責任分離を記述するが、
+    - 「実装思考プロセス非共有」
+    - 「要件と差分のみで監査」
+    の運用手順が明文化されていない。
+- 違反基準:
+  - `docs/reference_standards.md` セクション1「Builder/Validatorの分離」
+- 影響:
+  - 監査の独立性が弱まり、見逃しや合意バイアスが発生しうる。
+- 修正指示:
+  - 監査運用章を追加し、入力物制約（requirements + diff + test evidenceのみ）と禁止事項（実装中間思考の参照）を規程化すること。
 
-### 3.2 Acceptance Criteria Fit
-- AC6.1-1: 主要違反を `file path + 関数/クラス + 違反種別 + 根拠` 形式で記述する要件
-  - 判定: **適合**（違反0件として明示、フォーマット定義あり）
-- AC6.1-2: 改善方針（移管先レイヤ、インターフェース設計）
-  - 判定: **適合**（Port設計と移管方針を明示）
-- AC6.1-3: P0/P1/P2 優先度と実施順序
-  - 判定: **適合**
-- AC6.1-4: 改善後検証方法（テスト/判定指標）
-  - 判定: **適合**
-- AC6.1-5: importグラフ結果（UI->Domain直参照/逆方向依存/循環依存の一覧と件数）
-  - 判定: **適合**
-- AC6.1-6: 変更影響テスト手順（シナリオ、期待影響、合否条件）
-  - 判定: **適合**
-- AC6.1-7: 数値固定の合否指標
-  - 判定: **適合**（0件/0件/0件/100% を固定閾値として明記）
+## 適合している点（参考）
+- UI責務剥離、UseCase/Port中心の一方向依存固定は、セクション4（Humble Object/依存方向/インターフェース規律）に概ね整合。
+- 構造ゲート先行（Gate-1）と機能ゲート分離（Gate-2）は、再発防止観点で有効。
+- 監査ログの相対パス強制、ハッシュ完全化方針はセクション3の一部に整合。
 
-## 4. Findings / Violations
-- 指摘事項: **なし**
-- REJECT理由: **なし**
-
-## 5. Final Audit Decision
-- 総合判定: **PASS**
-- 実装移行判定文字列: `AUDIT_PASS_IMPLEMENT`
+## 結論
+上記の必須欠落が解消されるまで、計画は基準未達。判定は **REJECT_TO_ARCHITECT**。
