@@ -1,40 +1,39 @@
-# 監査報告書（Roadmap監査）
+# 監査報告書（Phase 6.1 実装監査）
 
 ## 監査対象
-- docs/roadmap.md
+- `src/`
+- `tests/`
+- `artifacts/`
+- `docs/reference_standards.md`
+- `docs/requirements.md`（Phase 6.1）
 
-## 監査基準（絶対）
-- docs/plan.md
-- docs/reference_standards.md
+## 実施手順と結果
+1. `pytest tests/` 実行
+- 結果: **73 passed / 0 failed**
+- 実行ログ要約:
+  - `collected 73 items`
+  - `============================= 73 passed in 3.53s =============================`
 
-## 判定
-- 結果: **問題なし（PASS）**
-- ステータス: `AUDIT_PASS_ROADMAP`
+2. `docs/reference_standards.md` 照合（src/tests/artifacts）
+- 違反検出: **なし**
+- 補足:
+  - 依存方向/責務分離/命名規約/監査関連はテスト群（例: `test_ui_usecase_separation.py`, `test_signal_slot_naming_use_case.py`, `test_standards_traceability_use_case.py`）および成果物記載と整合。
 
-## 総評
-`docs/roadmap.md` は、`docs/reference_standards.md` の4領域（監査ガバナンス / Docker再現性 / Data Integrity / UIアーキテクチャ）を網羅し、かつ `docs/plan.md` の制約・フェーズ要件・ゲート運用・成果物要件と整合している。絶対基準に対する明確な矛盾、不足、順序違反は確認されなかった。
+3. 必須成果物の存在確認
+- `artifacts/architecture_decoupling_assessment.md`: **存在**
+- `artifacts/refactoring_proposal.md`: **存在**
 
-## 照合結果（要点）
-1. 監査ガバナンス整合
-- Builder/Validator分離、`requirements + diff` 一次入力、処方的REJECT、差し戻し先規約（`REJECT_TO_ARCHITECT`）を明記。
+4. `docs/requirements.md` Phase 6.1 受け入れ基準適合性確認
+- AC6.1-1: 適合（違反列挙セクションあり。結果は0件）
+- AC6.1-2: 適合（改善方針・移管先・Port設計が定義）
+- AC6.1-3: 適合（P0/P1/P2優先度と順序あり）
+- AC6.1-4: 適合（追加/更新テスト方針と判定指標あり）
+- AC6.1-5: 適合（UI->Domain直参照/逆方向依存/循環依存の一覧と件数あり）
+- AC6.1-6: 適合（変更影響テスト手順・期待影響範囲・合否条件あり）
+- AC6.1-7: 適合（禁止依存0件、循環依存0件、UI層業務ロジック0件、境界違反テスト100%）
 
-2. UI/境界規約整合
-- Humble Object原則、UI責務限定、`_run_container` / `_show_create_env_dialog` の責務移管、UI→Domain/Infrastructure直参照排除を明記。
+## 指摘事項（エラーログ/違反基準）
+- **なし**
 
-3. インターフェース規律整合
-- `abc.ABC` / `typing.Protocol` 経由通信を境界横断で強制し、`plan.md` の適用対象と一致。
-
-4. 品質ゲート整合
-- Gate-1先行、Gate-2後行、固定重点検査、命名規約検査、必須テスト群（T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52）を明記。
-
-5. Data Integrity整合
-- Digest/Git hash記録、相対パス強制、SHA-256ハッシュ完全化を明記。
-
-6. EOL Docker再現性整合
-- digest固定、archive APT、constraints、マルチステージ、CIでの静的検査+実ビルド検証を明記。
-
-7. 成果物・DoD整合
-- `plan.md` 指定の必須成果物とDone条件に整合。
-
-## 指摘事項
-- なし
+## 最終判定
+- **PASS**（テストPass、基準違反なし、Phase 6.1受け入れ基準適合）
