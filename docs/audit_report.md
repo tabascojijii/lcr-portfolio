@@ -1,35 +1,42 @@
-# 監査報告書（Plan監査）
+# 監査報告書（Roadmap監査）
 
 ## 監査対象
-- 基準: `docs/reference_standards.md`
-- 計画: `docs/plan.md`
+- 対象: `docs/roadmap.md`
+- 絶対基準:
+  - `docs/plan.md`
+  - `docs/reference_standards.md`
 
 ## 総合判定
-- 判定: **PASS（問題なし）**
-- 監査ステータス出力: `AUDIT_PASS_PLAN`
+`REJECT_TO_PM`
 
-## 評価結果（基準適合性）
+## 指摘事項（基準差分）
 
-1. 監査・ガバナンス標準（基準1章）
-- 適合。
-- 根拠: `docs/plan.md` は EMCS による客観閾値判定（4.3）を明示し、REJECT時の必須記載（違反箇所/規約/最小修正指示/原因層/差し戻し先）を規定（7章）。
-- 根拠: Builder/Validator 分離（差分限定レビュー）を明示（7章, 9章-9）。
+1. Gate-S失敗時の差し戻し先が未固定
+- 重大度: 高
+- 違反箇所: `docs/roadmap.md` 5章（品質ゲート運用）
+- 基準根拠: `docs/plan.md` 4.1「Gate-S は REJECT_TO_ARCHITECT 判定を返す。」
+- 現状: Gate-S の Fail 条件は列挙されているが、Fail 時の判定遷移（REJECT_TO_ARCHITECT）が明文化されていない。
+- 最小修正指示: Gate-S節に「Gate-S Fail時は必ず REJECT_TO_ARCHITECT とする」を追記すること。
+- 原因層: 実装（文書具体化）
+- 差し戻し先: PM
 
-2. EOLスタックのDocker再現性標準（基準2章）
-- 適合。
-- 根拠: `FROM @sha256`、EOL apt archive、`constraints.txt`、マルチステージビルドを必須要件として明示（5章 Docker再現性必須）。
+2. 監査所見の必須項目「原因層」がルールとして未明記
+- 重大度: 高
+- 違反箇所: `docs/roadmap.md` 7章（役割責任）/9章（レビュー運用ルール）
+- 基準根拠: `docs/plan.md` 1章 RC-2 対策「監査所見に 原因層: 設計 or 実装 を必須記載。」
+- 現状: Auditor責務として「差し戻し先明記」はあるが、原因層の必須記載が運用ルールに固定されていない。
+- 最小修正指示: 監査ルールに「全REJECTで原因層（設計/実装）記載を必須化」を追記すること。
+- 原因層: 実装（文書具体化）
+- 差し戻し先: PM
 
-3. データ完全性・監査証跡（基準3章）
-- 適合。
-- 根拠: `container_image_digest`、`git_commit_hash`（`git rev-parse HEAD`固定）、入出力/パラメータ/実行ログのSHA-256、相対パス強制（`path_mode`）を必須化（5章）。
-- 根拠: Gate-Fで監査ログ完全性を合格条件化（4.2）。
+3. Gitハッシュ取得失敗時の扱いが未固定
+- 重大度: 中
+- 違反箇所: `docs/roadmap.md` 5章 Gate-F / 3章 M4
+- 基準根拠: `docs/plan.md` 5章「git_commit_hash は git rev-parse HEAD の実行結果を記録。取得失敗時は監査ログ不完全として Gate-F Fail」
+- 現状: git hash 記録要件は記載される一方、取得失敗時に Gate-F Fail とする強制条件が明示されていない。
+- 最小修正指示: Gate-F節または監査証跡節に失敗時Fail条件を明文化すること。
+- 原因層: 実装（文書具体化）
+- 差し戻し先: PM
 
-4. PyQt/PySideモダンUIアーキテクチャ標準（基準4章）
-- 適合。
-- 根拠: UI責務の限定、業務ロジック移管（2.1, 2.2）、依存方向固定（1章 RC-1対策）、`Protocol`/`ABC`利用（2.3）、Signal/Slot命名規約をGate-S Fail条件化（4.1）を明示。
-
-## 指摘事項
-- なし（基準文書に対する明確な逸脱は検出されず）。
-
-## 監査メモ
-- 本監査は「計画文書の基準適合性」監査であり、実装差分の妥当性監査ではない。
+## 判定理由
+不整合はすべてロードマップ文書の明文化不足であり、設計再定義（要件/アーキテクチャ再設計）は不要。PMによる文書修正で解消可能。
