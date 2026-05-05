@@ -1,237 +1,219 @@
-# 実装計画（Architect / Structural Defect Eradication Plan）
+# 実装計画（Architect）
 
-- 作成日: 2026-05-05
-- 対象: Phase 5 / Phase 6 / Phase 6.1〜6.4
-- 根拠: `docs/core_philosophy.md`, `docs/requirements.md`, `docs/reference_standards.md`, `docs/post_mortem.md`
-- 目的: 2026-05-04 に顕在化した監査差し戻しループの構造原因を、設計・ゲート・運用の3層で恒久的に除去する。
+## 0. 目的と前提
+本計画は `docs/core_philosophy.md`、`docs/requirements.md`、`docs/reference_standards.md`、`docs/post_mortem.md` に準拠し、過去の構造的欠陥（UI責務過多・Port未経由・設計課題の実装押し戻し）を再発不能にすることを目的とする。
 
-## 1. 失敗の再定義（post_mortem 反映）
+最重要方針:
+1. 先に設計を固定し、後で実装する（順序逆転を禁止）
+2. `pytest` 合格と構造合格を独立ゲートとして運用する
+3. UIからDomainへの直接参照を構造的に不可能化する
 
-過去失敗は「実装不足」ではなく、以下の設計運用不備だったと定義する。
+---
 
-1. 境界違反を禁止ルールに留め、構造的に不可能化できていない。
-2. 構造違反の差し戻し先が Implementer 側へ流れ、局所修正ループ化した。
-3. `pytest` Pass と構造準拠を同一ゲートとして扱い、進行判定が混線した。
+## 1. 対象スコープ
+- 主対象:
+  - `src/lcr/ui/main_window.py`
+  - `src/lcr/core/use_cases/*`
+  - `src/lcr/core/*/ports*`（Port定義）
+  - `src/lcr/infrastructure/*`（Port実装）
+- 要件対応範囲:
+  - Phase 5（Validation Guardrails）
+  - Phase 6（Lifecycle Management）
+  - Phase 6.1〜6.4（疎結合化・型安全化・静的ゲート・契約回帰）
+  - Phase 6.51/6.52（可視化・ログ標準化）
 
-本計画では上記3点を直接つぶす。
+---
 
-## 2. 非交渉原則（Architecture Constitution）
+## 2. 失敗分析に基づく設計制約（Hard Constraints）
+`post_mortem` の RC-1〜RC-3 を踏まえ、以下を設計上の強制制約とする。
 
-1. UI は Humble Object を厳守し、業務判断・永続化・外部 I/O 制御を持たない。
-2. 依存方向は `UI -> UseCase -> Domain -> Infrastructure` のみ。
-3. 境界越えは Port/Interface のみ。UI から Domain/Infrastructure 実装型への直接参照は禁止ではなく「経路上不可能」にする。
-4. 内部IDは不変。表示名/説明/タグ/保護フラグはメタデータとして扱う。
-5. 監査不変条件（相対パス、ハッシュ完全化、fail-fast）を機能要件と同格で扱う。
+1. UI層禁止事項（`main_window.py` 含む）
+- 業務判断（環境適合判定、未使用判定、削除可否判定）
+- 永続化直接操作（JSON更新、監査ログ組み立て）
+- 外部I/O直接制御（Docker操作、subprocess実行）
 
-## 3. 先行成果物ゲート（実装開始前の必須条件）
+2. 境界越え規約
+- `UI -> UseCase -> Domain -> Infrastructure` の一方向依存を固定
+- UIからDomain/Infrastructureへの直接import禁止
+- すべての外部機能呼び出しはPort経由
 
-以下が揃うまでコード実装を開始しない。
+3. 差し戻し先規約
+- 構造違反の起因が設計層なら `REJECT_TO_ARCHITECT` として再設計
+- 実装層へ局所修正を返す前に、設計成果物（責務表・依存図・Port契約）更新を必須化
 
-1. `artifacts/architecture_decoupling_assessment.md`
-- 違反一覧（`file + class/function + 違反種別 + 根拠`）
-- 実測件数（`UI->Domain直参照`, `逆方向依存`, `循環依存`, `Port未経由`）
+---
 
-2. `artifacts/refactoring_proposal.md`
-- `MainWindow._run_container` と `_show_create_env_dialog` の責務移管先
-- Port 定義（`abc.ABC` / `typing.Protocol`）
-- P0/P1/P2 の段階移行順
-- 変更影響テスト（UI変更時/Domain変更時）の実施手順と合否条件
+## 3. アーキテクチャ再設計
 
-3. `artifacts/traceability_matrix.md`
-- 要件ID（Phase5/6/6.1/6.2/6.3/6.4）→ 実装タスク → テストID → 監査証跡 の1対1対応
+### 3.1 UseCaseファサード化（MainWindow依存の遮断）
+`MainWindow._run_container` と `_show_create_env_dialog` から業務判断を剥離し、以下のUseCaseへ移管する。
 
-未充足は即 `REJECT_TO_ARCHITECT`。
+- `RunPreparationUseCase`
+  - 入力: script解析結果、選択環境ID
+  - 出力: `RunGuardDecisionDTO`（実行可否、不足import、推奨環境、誘導アクション）
+- `EnvironmentCreationProposalUseCase`
+  - 入力: required imports
+  - 出力: `EnvironmentCreationProposalDTO`（候補package、根拠種別: knowledge/既定）
+- `LifecycleManagementUseCase`
+  - 入力: 削除候補/確認状態/実行理由
+  - 出力: `LifecycleExecutionResultDTO`（成功/失敗明細、解放容量）
 
-## 4. 差し戻し先の自動判定ルール
+UIはDTOを受けて表示と操作導線のみ担う。
 
-監査は原因層を必ず判定し、差し戻し先を固定する。
+### 3.2 Port再定義（境界強制）
+以下Portを明文化し、UseCaseはPort以外へ依存しない。
+- `EnvironmentCapabilityPort`
+- `EnvironmentRepositoryPort`
+- `ContainerRuntimePort`
+- `AuditLogPort`
+- `ImageCleanupPort`
+- `KnowledgeMappingPort`
 
-1. `REJECT_TO_ARCHITECT`
-- 依存方向違反
-- UI責務混在
-- Port未経由
-- 循環依存
-- ゲート設計欠陥
+Portは `typing.Protocol` または `abc.ABC` で型契約を固定し、戻り値型省略と `Any` の無制限利用を禁止。
 
-2. `REJECT_TO_IMPLEMENT`
-- 仕様未達
-- テスト不備
-- バグ修正不足（構造違反を伴わない）
+### 3.3 DTO強化（Phase 6.2整合）
+Pydantic v2 strict で以下を段階導入。
+1. 監査DTO
+2. Runtime判定DTO
+3. 環境作成/更新DTO
 
-3. 強制停止条件
-- 同一構造違反が2連続で再発した場合、実装作業を停止し Architect 再設計へ自動移送。
+バリデーション失敗はfail-fast。既存dict入力はアダプタ層で吸収。
 
-## 5. 実施フェーズ計画
+---
 
-### Phase 0: Structural Freeze（即時）
+## 4. 実装フェーズ計画（順序固定）
 
-目的: ループ起点の境界違反を先に封じる。
-
-タスク:
-1. `MainWindow` の責務を「入力受理・表示更新・UseCase呼び出し」に限定する設計へ固定。
-2. `_run_container` の業務判断・実行制御を UseCase 側へ移管する仕様を確定。
-3. `_show_create_env_dialog` の候補生成・作成制御を UseCase 側へ移管する仕様を確定。
-4. UI 直参照禁止対象（Domain/Infrastructure 実装）を明文化。
-
-完了条件:
-1. 2関数の責務分離設計が成果物で承認済み。
-2. `UI->Domain直参照 = 0` を達成可能な呼び出し経路図が確定。
-
-### Phase 1: Phase 5 Guardrails 実装
-
-目的: ミスマッチ環境実行を Hard Guard で防止。
-
-タスク:
-1. capability mapping（推定/実証）表示
-2. required imports 差分算出
-3. mismatch 時 Run 無効化
-4. 適合環境なし時の作成導線
-5. 作成後 Dynamic Refresh
-6. 監査ログ（required imports/capability/mismatch/guard）記録
-
-完了条件:
-1. AC-1〜AC-5 達成
-2. T5-1〜T5-4 Pass
-
-### Phase 2: Phase 6 Lifecycle 実装
-
-目的: 安全な環境整理を専用UIへ隔離。
-
-タスク:
-1. Environment Manager ダイアログ
-2. 2段階確認付き一括削除
-3. 未使用判定（最終利用日時+利用回数+保護フラグ）
-4. dangling/unused image クリーンアップ
-5. メタデータ編集（内部ID不変）
-6. 部分失敗継続と結果分離表示
-7. 監査ログ完全化
+### Phase A: ベースライン固定（6.51）
+1. 責務マップと副作用インベントリを更新
+2. `main_window.py` の責務違反箇所を関数単位で証跡化
+3. `pytest tests/` 現状値を保存
 
 完了条件:
-1. AC6-1〜AC6-7 達成
-2. T6-1〜T6-6 Pass
+- `artifacts/phase_6_51_baseline_inventory.md` 更新済み
+- `artifacts/phase_6_51_test_baseline.md` 更新済み
 
-### Phase 3: Type Safety（6.2）
-
-目的: 境界DTOで strict/fail-fast を固定。
-
-タスク:
-1. A→B→C順で Pydantic v2 DTO 導入
-2. strict validation 強制
-3. fail-fast 強制
-4. dict互換アダプタで段階移行
+### Phase B: 境界再配線（6.1中核是正）
+1. `MainWindow._run_container` の判定ロジックを `RunPreparationUseCase` へ移管
+2. `_show_create_env_dialog` の候補生成を `EnvironmentCreationProposalUseCase` へ移管
+3. UIからDomain/Infrastructure直参照を除去
 
 完了条件:
-1. AC6.2-1〜AC6.2-5 達成
-2. T6.2-1〜T6.2-5 Pass
+- `UI->Domain直参照 = 0`
+- Port未経由境界越え = 0
 
-### Phase 4: Static Type Gate（6.3）
-
-目的: 実行前に型不整合をCIで遮断。
-
-タスク:
-1. `mypy` 設定導入（必要なら `pyright` 補助）
-2. Port/UseCase の型注釈完全化
-3. `Any` / `type: ignore` 管理
+### Phase C: ガードレール実装確定（Phase 5）
+1. required imports と capability 差分算出をUseCase化
+2. mismatch時 `Run` 無効化（Hard Guard）
+3. 適合環境なしで作成導線を強制
 
 完了条件:
-1. AC6.3-1〜AC6.3-4 達成
-2. T6.3-1〜T6.3-4 Pass
+- AC-1〜AC-5 満足
+- T5-1〜T5-4 自動テストPass
 
-### Phase 5: Contract & Regression Hardening（6.4）
-
-目的: 将来変更での逆流防止。
-
-タスク:
-1. Port contract test
-2. DTO/Audit schema contract test
-3. Golden regression（Run/Build/Lifecycle/Audit）
+### Phase D: ライフサイクル管理確定（Phase 6）
+1. Environment Manager導線のUseCase主導化
+2. 一括削除2段階確認と部分失敗継続
+3. dangling/unused image cleanup
+4. 監査ログ必須項目固定
 
 完了条件:
-1. AC6.4-1〜AC6.4-4 達成
-2. T6.4-1〜T6.4-4 Pass
+- AC6-1〜AC6-7 満足
+- T6-1〜T6-6 Pass
 
-## 6. ダブルゲート運用（混線防止）
+### Phase E: 型・契約・静的ゲート固定（6.2〜6.4）
+1. Pydantic DTO strict化
+2. `mypy` ゲート導入（必要なら `pyright` 補助）
+3. Port契約/監査契約/Golden回帰テスト整備
 
-### 6.1 機能ゲート
+完了条件:
+- AC6.2-1〜AC6.2-5
+- AC6.3-1〜AC6.3-4
+- AC6.4-1〜AC6.4-4
 
+### Phase F: ログ標準化（6.52）
+1. 対象範囲の `print(` を0化
+2. レベル規約（DEBUG/INFO/WARNING/ERROR）統一
+3. 例外経路ログ保証
+
+完了条件:
+- AC6.52-1〜AC6.52-5
+
+---
+
+## 5. 品質ゲート（無限ループ防止の運用分離）
+
+### Gate-1 構造合格（先行必須）
+- 禁止依存:
+  - `UI->Domain直参照 = 0`
+  - `逆方向依存 = 0`
+  - `循環依存 = 0`
+- UI層業務ロジック:
+  - 主要導線で `0`（`_run_container` / `_show_create_env_dialog` を含む）
+- Portバイパス:
+  - `0`
+
+### Gate-2 機能合格
+- `pytest tests/` 全件Pass
+- Phase別必須テスト（T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52）Pass
+
+運用規則:
+- Gate-1未達時はGate-2結果に関わらず先へ進まない
+- Gate-1失敗はArchitect責任で設計更新、Implementerへの局所押し戻し禁止
+
+---
+
+## 6. 監査証跡・成果物
+以下成果物を更新し、再現可能性を担保する。
+
+- `artifacts/architecture_decoupling_assessment.md`
+- `artifacts/refactoring_proposal.md`
+- `artifacts/phase_6_51_baseline_inventory.md`
+- `artifacts/phase_6_51_test_baseline.md`
+- `artifacts/phase_6_52_logging_migration_report.md`
+- `artifacts/phase_6_52_print_elimination_evidence.md`
+
+監査ログ契約:
+- required imports
+- environment capability
+- mismatch結果
+- ガード発火状態
+- 操作種別/時刻/対象/成否/解放容量/実行理由
+- 相対パス強制
+- ハッシュ完全化（入力/出力/実行ログ/主要パラメータ）
+
+---
+
+## 7. リスクと対策
+1. 既存UIイベント配線の破断
+- 対策: UI変更は最小化し、シグナル/スロット境界でUseCase呼び出しに置換
+
+2. dict互換経路での型移行失敗
+- 対策: DTOアダプタを先行導入し、段階的切替
+
+3. テストは通るが構造違反が残る再発
+- 対策: Gate-1をCIの先行ジョブ化、未達時は即fail-fast
+
+---
+
+## 8. Definition of Done
+以下をすべて満たした場合に完了とする。
 1. `pytest tests/` 全件Pass
-2. 当該フェーズAC全達成
+2. 構造指標:
+- `UI->Domain直参照 0`
+- `逆方向依存 0`
+- `循環依存 0`
+- UI層業務ロジック主要導線 0
+3. Port契約・DTO契約・監査契約テストPass
+4. 監査成果物更新完了
+5. `post_mortem` 指摘の2箇所（`_run_container` / `_show_create_env_dialog`）が設計上の責務移管完了状態である
 
-### 6.2 構造ゲート
+---
 
-1. `UI->Domain直参照 = 0`
-2. Port未経由 = 0
-3. 逆方向依存 = 0
-4. 循環依存 = 0
-5. UI層業務ロジック = 0
-6. 監査必須構造成果物の欠落 = 0
+## 9. 実行順序（固定）
+1. 設計成果物更新（責務表/依存図/Port契約）
+2. 構造ゲート試験（Gate-1）
+3. 実装着手
+4. 機能・回帰試験（Gate-2）
+5. 監査証跡更新
 
-### 6.3 進行判定
-
-1. どちらか1つでもFailなら次フェーズ進行禁止。
-2. 構造ゲートFail時は実装修正を停止し、Architect 是正を先行。
-3. 機能ゲートのみPassは「未完了」と明示する。
-
-## 7. 監査・再現性固定要件（reference standards 同期）
-
-1. 相対パス強制（絶対パスは fail-fast）。
-2. ハッシュ対象完全化（入力/出力/パラメータ/ログ本体）。
-3. 実行ログに `image_digest` と `git_commit` を必須記録。
-4. EOLコンテナ再現性4要件を満たす。
-- `FROM` digest固定
-- EOLミラー切替
-- `constraints.txt` 適用
-- マルチステージビルド
-
-## 8. 監査ガバナンス運用（Builder/Validator 分離 + 処方的差し戻し）
-
-### 8.1 Builder/Validator 分離（必須）
-
-1. 監査（Validator）は、実装（Builder）と独立した判定主体として運用する。
-2. 監査入力は `要件文書` `差分(Diff)` `テスト結果` `監査証跡` のみとし、実装者の意図説明・思考過程は判定根拠に使用しない。
-3. 判定は `docs/reference_standards.md` と `docs/requirements.md` への適合性のみで実施する。
-4. この分離要件に違反した監査結果は無効とし、再監査を必須化する。
-
-### 8.2 処方的エラーハンドリング（差し戻しテンプレート必須）
-
-`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT` のいずれでも、差し戻しメッセージは以下5項目を必須とする。
-
-1. `failure_location`: 失敗箇所（`file path + class/function`）
-2. `violated_standard`: 違反した基準/要件ID（例: `reference_standards 1章` / `AC6.1-5`）
-3. `evidence`: 客観的証拠（実測値・ログ・差分断片）
-4. `required_fix`: 必須修正内容（移管先レイヤ、必要なPort、削除すべき直参照など）
-5. `retest_condition`: 再検証条件（実行コマンド、期待結果、合格閾値）
-
-上記5項目の欠落が1つでもある差し戻しは不受理とし、監査側へ修正差し戻しする。
-
-## 9. UI命名規約（PyQt/PySide）
-
-1. シグナル名は過去分詞形を使用する（例: `dataChanged`, `executionFinished`）。
-2. スロット名は動詞開始の操作名を使用する（例: `update_display`, `start_cleanup`）。
-3. 新規/変更コードはレビュー時に命名規約チェックを必須化し、違反は `REJECT_TO_IMPLEMENT` とする。
-4. 命名規約は lint または静的チェック対象に含め、CIで検出可能な状態に維持する。
-
-## 10. 定量KPI（完了判定）
-
-1. 構造KPI
-- 禁止依存系（直参照/逆依存/循環/Port未経由）: すべて 0件
-- `MainWindow._run_container` / `_show_create_env_dialog` の業務ロジック残存: 0件
-
-2. 品質KPI
-- `pytest tests/` Pass
-- mypy エラー 0件
-- DTO strict/fail-fast 違反 0件
-
-3. 監査KPI
-- 相対パス違反 0件
-- ハッシュ欠落 0件
-- 監査必須項目欠落 0件
-
-## 11. Definition of Done
-
-以下を全て満たした場合のみ完了とする。
-
-1. Phase 5/6/6.1/6.2/6.3/6.4 の AC と必須テストを満たす。
-2. 機能ゲート・構造ゲートの両方がPass。
-3. `post_mortem` で特定された再発点（境界違反、差し戻し先誤り、ゲート混線）が運用ルールとして明文化され、証跡で検証可能。
-4. 監査証跡（assessment/proposal/traceability/test evidence）が最新化されている。
+この順序を破る変更要求は、再発防止方針違反として却下する。
