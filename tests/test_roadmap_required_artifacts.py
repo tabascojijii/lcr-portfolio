@@ -15,6 +15,8 @@ def test_required_roadmap_artifact_list_matches_reference():
         "artifacts/phase_6_52_print_elimination_evidence.md",
         "artifacts/phase_6_53_analyzer_porting_report.md",
         "artifacts/phase_6_53_analyzer_failure_policy.md",
+        "artifacts/phase_6_54_container_porting_report.md",
+        "artifacts/phase_6_54_container_error_model.md",
         "artifacts/post_mortem_closure_checklist.md",
         "artifacts/audit_reject_template.md",
         "artifacts/data_integrity_field_matrix.md",
