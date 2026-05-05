@@ -3,6 +3,13 @@
 ## 0. 位置づけ
 本ロードマップは `docs/reference_standards.md` を絶対基準として策定する。`docs/plan.md` は実装計画の詳細化ソースとして参照し、矛盾時は常に `reference_standards` を優先する。
 
+監査反映（2026-05-05, Asia/Tokyo）:
+- `docs/audit_report.md` の判定結果（PASS / 指摘0件）を確認済み。
+- 監査入力識別子を固定する。
+  - `docs/plan.md@sha256:A91A23D4807EAE741DC4CE75654E9BA3E56D0A43CB98B31232695E2BCC3F41DB`
+  - `docs/reference_standards.md@sha256:44C65F9825029C456A75F88545DE1D7D98B247997D783D731C63C5EE39D1810A`
+  - `docs/roadmap.md` は本改訂版を再監査対象とする。
+
 ## 1. 絶対遵守原則（Non-Negotiable）
 1. 監査・実装ガバナンス
 - Builder/Validator 分離を厳守する。
