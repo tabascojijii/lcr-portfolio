@@ -26,12 +26,14 @@
 ### 2.2 Data Integrity
 - 監査ログに `container_image_digest` と `git_commit_hash` を必須記録。
 - 入力/出力/パラメータ/実行ログのSHA-256を必須記録。
+- 監査ログに `path_mode`（相対パス強制結果）を必須記録。
 - パスはプロジェクトルート相対のみを許容（絶対パス禁止）。
 
 ### 2.3 UI/Architecture Discipline
 - UIはHumble Objectを厳守し、業務判断・外部I/Oを持たない。
 - 依存方向は `UI -> UseCase -> Domain -> Infrastructure` に固定。
 - Port/Interface は `abc.ABC` または `typing.Protocol` を必須利用。
+- 必須Port一覧を固定要件とする: `EnvironmentCapabilityPort`, `EnvironmentRepositoryPort`, `ContainerRuntimePort`, `AuditLogPort`, `ImageCleanupPort`, `KnowledgeMappingPort`, `PackageLookupPort`（欠落はGate-S不合格）。
 - Signal は過去分詞、Slot は動詞始まりを必須化。
 
 ## 3. フェーズロードマップ（変更禁止）
@@ -85,6 +87,7 @@
 
 完了条件:
 - Pydantic v2 strictを監査DTO→Runtime DTO→環境DTOの順で適用。
+- 境界DTOは必ずPydanticモデルを通過させ、旧dict入力はアダプタ層のみで吸収する。
 - `mypy` を主ゲート化し、理由なき `type: ignore` を0件化。
 - Port/DTO/Audit契約テストとgolden regressionが安定運用される。
 
@@ -153,6 +156,7 @@ EMCS閾値:
 - UI Signal/Slot命名テストPass
 
 運用規則:
+- EMCS各メトリクスの閾値超過はGate-S failと同値とし、検出時点で自動 `REJECT_TO_ARCHITECT` とする。
 - Gate-S fail 時点で `REJECT_TO_ARCHITECT`。
 - Gate-F pass単独は進捗として扱わない。
 
