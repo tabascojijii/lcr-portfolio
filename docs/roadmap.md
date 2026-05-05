@@ -160,10 +160,10 @@
 - 例外は `artifacts/qt_naming_exceptions.md` に理由付きで記載されたもののみ許可する。
 
 補助メトリクス（EMCS）:
-- UI業務判断分岐上限
-- UseCase複雑度上限
-- SRP逸脱件数
-- UI層外部I/O直呼び出し件数
+- EMCS-M1（責務密度）: UIクラスごとの業務判断分岐数（`if/elif` + 判定分岐）<= 2、逸脱件数 = 0
+- EMCS-M2（複雑度）: 主要UseCase公開メソッドの循環的複雑度 <= 10、超過件数 = 0
+- EMCS-M3（SRP逸脱）: 1クラス内で `UI描画 + 永続化 + 外部I/O` の3責務同居件数 = 0
+- EMCS-M4（境界純度）: UI層の外部I/O直接呼び出し件数 = 0
 
 ### Gate-F（機能）
 必須:
@@ -179,15 +179,24 @@
 1. Gate-S fail は `REJECT_TO_ARCHITECT`。
 2. Gate-F pass 単独は進捗扱いにしない。
 3. 両ゲート同一リビジョンPassのみ Done 判定可能。
+4. T-UI-NAME-1/2, T-ARCH-QT-1/2 のいずれか1件でも失敗した場合は `REJECT_TO_ARCHITECT`。
 
 ## 5. 監査証跡と運用成果物
 必須成果物:
 - `artifacts/architecture_decoupling_assessment.md`
 - `artifacts/refactoring_proposal.md`
+- `artifacts/phase_6_51_baseline_inventory.md`
+- `artifacts/phase_6_51_test_baseline.md`
+- `artifacts/phase_6_52_logging_migration_report.md`
+- `artifacts/phase_6_52_print_elimination_evidence.md`
+- `artifacts/phase_6_53_analyzer_porting_report.md`
+- `artifacts/phase_6_53_analyzer_failure_policy.md`
 - `artifacts/post_mortem_closure_checklist.md`
 - `artifacts/audit_reject_template.md`
 - `artifacts/data_integrity_field_matrix.md`
-- Phase別成果物（6.51, 6.52, 6.53, Docker）
+- `artifacts/docker_reproducibility_checklist.md`
+- `artifacts/docker_digest_lock_evidence.md`
+- `artifacts/docker_multistage_evidence.md`
 
 監査ログ入力制約:
 - 許可入力: 要件文書 + 変更差分のみ
