@@ -568,3 +568,61 @@
   - T6.54-2: Gateway分離検証（Docker照会の直接`subprocess`排除確認）。
   - T6.54-3: ファイル副作用Service検証（出力生成/スナップショット動作の整合）。
   - T6.54-4: エラー伝播検証（recoverable/non-recoverable分類と上位通知整合）。
+
+## Phase 6.55: Responsibility Split (ContainerManager Decomposition)
+
+### 1. 目的
+- `ContainerManager` に集中した責務を分割し、単一責務原則に沿った構造へ再編する。
+- 変更影響範囲を局所化し、以後の改修・監査・テストコストを継続的に低減する。
+
+### 2. 採用方針（確定）
+- P6.55-1 分割方針
+  - 少なくとも以下の責務単位に分割する。
+    - Runtime選定責務（Resolver）
+    - 実行設定生成責務（RunConfigFactory）
+    - 定義永続化責務（DefinitionRepository/Façade経由）
+- P6.55-2 移行方針
+  - 外部公開APIは互換維持を優先し、段階的に内部実装を差し替える。
+- P6.55-3 ファサード方針
+  - `ContainerManager` は薄いオーケストレーション層として残し、ロジック実装を持たない方向に寄せる。
+- P6.55-4 監査方針
+  - 旧実装と新実装の機能同等性を成果物とテストで証明する。
+
+### 3. 機能要件
+
+#### R6.55-1 Runtime Resolver分離
+- ランタイム選定スコアリング・互換判定ロジックを専用コンポーネントへ移管すること。
+- 選定理由（reason/score）の出力契約を維持すること。
+
+#### R6.55-2 RunConfig Factory分離
+- 実行コンフィグ組み立て（volume/command/output計画）を専用Factoryへ移管すること。
+- 実行設定生成は副作用レス（計画生成）を基本とし、副作用処理は外部Serviceへ委譲すること。
+
+#### R6.55-3 Manager薄化
+- `ContainerManager` は分割済みコンポーネント呼び出しに専念すること。
+- 新規ロジック追加時は、Manager直実装を禁止し分割先へ実装すること。
+
+#### R6.55-4 互換性維持
+- 既存UseCase/UIから見た呼び出し契約（メソッド名、戻り値の主要キー）を維持すること。
+- 互換維持が困難な場合はアダプタを追加し、破壊的変更を回避すること。
+
+### 4. 成果物（必須）
+- `artifacts/phase_6_55_container_decomposition_report.md`
+  - 分割前後の責務対応表、クラス構成図、影響範囲を記載すること。
+- `artifacts/phase_6_55_compatibility_matrix.md`
+  - 旧APIと新実装の互換性検証結果（メソッド/戻り値/挙動）を記載すること。
+
+### 5. 受け入れ基準
+- AC6.55-1: Runtime選定責務が `ContainerManager` から分離されている。
+- AC6.55-2: RunConfig生成責務が `ContainerManager` から分離されている。
+- AC6.55-3: `ContainerManager` が薄いオーケストレーション層として機能している。
+- AC6.55-4: 既存UseCase/UI契約との互換が維持され、主要導線に回帰がない。
+- AC6.55-5: `pytest tests/` が全件 Pass し、分割後も機能同等性が確認できる。
+
+### 6. テスト・ゲート要件（必須）
+- `pytest tests/` 全件 Pass を必須とする。
+- 最低限、以下の検証を実施すること。
+  - T6.55-1: 責務分離検証（Resolver/Factory/Repository責務の混在なし）。
+  - T6.55-2: 互換契約検証（既存呼び出し契約の維持）。
+  - T6.55-3: 選定ロジック回帰検証（reason/score/選定結果の整合）。
+  - T6.55-4: RunConfig回帰検証（volume/command/output計画の整合）。
