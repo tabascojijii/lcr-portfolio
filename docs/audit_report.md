@@ -1,37 +1,38 @@
-# 監査報告書（Auditor）
+# 監査報告書（Plan監査）
 
-## 判定
-REJECT_TO_ARCHITECT
+## 監査対象
+- 基準: `docs/reference_standards.md`
+- 被監査計画: `docs/plan.md`
+- 監査ロール: Auditor（Validator）
 
-## 総評
-`docs/plan.md` は多くの基準（Docker再現性、Data Integrity、Qt命名規約、Gate-S/Gate-F分離、処方的REJECTテンプレート）を網羅しているが、`docs/reference_standards.md` 第1章の絶対要件を1件満たしていないため、合格不可と判定する。
+## 監査結論
+- 判定: **PASS（問題なし）**
+- `docs/plan.md` は、`docs/reference_standards.md` の必須要求（第1章〜第4章）を満たしており、基準逸脱は確認されなかった。
 
-## 指摘事項（重大度: High）
+## 指摘事項
+- **指摘なし（基準違反 0 件）**
 
-1. **Builder/Validator分離の運用固定が欠落**
-- 失敗箇所: `docs/plan.md`（監査運用ルール全体）
-- 違反制約: `docs/reference_standards.md` 1章「Builder/Validatorの分離」
-  - 要件: 「実装役と思考プロセスを共有せず、要件と生成された差分(Diff)のみから敵対的かつ厳格にレビュー」
-- 根拠: `docs/plan.md` には Gate や成果物、REJECTテンプレートは定義されているが、監査プロセスとして
-  - 監査入力を「要件+Diff」に限定する規則
-  - 実装者の思考過程/中間メモ/非成果物情報を監査入力から排除する規則
-  が明文化されていない。
-- リスク: 監査の独立性が崩れ、恣意的判断やサイレント逸脱見逃しを招く。reference_standards が求める敵対的検証の再現性が担保できない。
-- 最小修正指示:
-  1. `docs/plan.md` の監査運用ルール節に「監査入力制約」を追加する。
-  2. 監査入力を `docs/requirements.md` と PR Diff（または変更ファイル差分）に限定する旨を明文化する。
-  3. 「実装者の思考ログ・口頭説明・未コミットメモを監査根拠に使用禁止」と明記する。
-  4. 監査証跡に「使用した入力一覧（要件版、Diff識別子）」を必須記録として追加する。
+## 根拠（基準適合サマリ）
+1. 監査/ガバナンス標準（reference 1章）
+- EMCSに基づく客観メトリクスをGate-Sへ明示（M1〜M4）。
+- Builder/Validator分離を5.1で運用固定。
+- REJECT時の処方的テンプレート要件を `artifacts/audit_reject_template.md` 必須項目として規定。
 
-## 原因層判定
-設計（Architect）
+2. Docker再現性標準（reference 2章）
+- `FROM` ダイジェスト固定、EOL aptアーカイブ切替、`constraints.txt`、マルチステージビルドをPhase Hで必須化。
+- Gate-Fで再現性テスト必須Pass化。
 
-## 差し戻し先
-REJECT_TO_ARCHITECT
+3. Data Integrity標準（reference 3章）
+- `container_image_digest` と `git_commit_hash` の記録を必須化。
+- 相対パス強制（`path_mode`）と絶対パスfail-fastテストを固定。
+- 入出力/パラメータ/実行ログのSHA-256を必須化し、検証テストを規定。
 
-## 再提出条件
-以下を `docs/plan.md` に反映し、監査運用として固定したことを確認できること。
-1. Builder/Validator分離の明文化
-2. 監査入力制約（要件 + Diff限定）の明文化
-3. 非許可入力（思考過程等）利用禁止の明文化
-4. 監査証跡への入力ソース記録要件の追加
+4. PyQt/PySide標準（reference 4章）
+- Humble Object方針としてUI責務を入力受理・表示・確認へ限定。
+- UseCase/DomainのQt非依存をGate-S機械検証で強制。
+- `typing.Protocol` / `abc.ABC` によるPort契約を必須化。
+- Signal（過去分詞）/Slot（動詞開始）の命名規約を固定し、違反をGate-S fail化。
+
+## 監査メモ
+- 本監査は計画書監査であり、実装差分監査ではない。
+- 実装監査時は `docs/plan.md` が規定する 5.1 の入力制約（要件+Diff限定）を厳守すること。
