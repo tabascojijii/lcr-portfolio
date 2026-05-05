@@ -1,32 +1,53 @@
-# Audit Report (2026-05-06)
+# 監査報告書（Auditor）
 
-## 1) Pytest結果
-- 実行コマンド: `pytest tests/`
-- 結果: **77 passed** / 0 failed / 0 skipped
-- 結論: テストゲートは合格。
+対象:
+- 基準: `docs/reference_standards.md`
+- 監査対象: `docs/plan.md`
 
-## 2) `docs/reference_standards.md` 準拠監査（`src/`・`tests/`・`artifacts/`）
-- 監査標準1（監査ガバナンス）: 監査証跡としてテスト結果および要件照合結果を記録。
-- 監査標準2（Docker再現性）: 関連テスト（`tests/test_dockerfile_digest_policy.py`）がPassしており、違反は検出されない。
-- 監査標準3（データ完全性）: 関連テスト（監査メタデータ/ハッシュ証跡系）がPassしており、違反は検出されない。
-- 監査標準4（UI分離/Humble Object/依存方向）: 関連テスト（UI-UseCase分離、境界違反、命名規約等）がPassしており、違反は検出されない。
-- 指摘事項: **なし**（本監査範囲で規約違反を確認できず）。
+判定:
+- REJECT_TO_ARCHITECT
 
-## 3) Phase 6.1 成果物存在・受け入れ基準適合
-- 成果物存在確認:
-  - `artifacts/architecture_decoupling_assessment.md`: 存在
-  - `artifacts/refactoring_proposal.md`: 存在
-- 要件参照元: `docs/requirements.md` の「Phase 6.1: Architecture Decoupling Assessment & Refactoring Proposal」
+## 指摘事項（重大度順）
 
-### AC6.1 適合判定
-- AC6.1-1: 適合（違反列挙フォーマット定義および結果記載あり。現状違反0件）
-- AC6.1-2: 適合（Port設計・移管先レイヤ・インターフェース方針あり）
-- AC6.1-3: 適合（P0/P1/P2 の優先度と実施順序あり）
-- AC6.1-4: 適合（追加/更新テスト方針と判定指標あり）
-- AC6.1-5: 適合（`UI->Domain直参照` / 逆方向依存 / 循環依存 の一覧と件数あり）
-- AC6.1-6: 適合（変更影響テスト手順、期待影響範囲、合否条件あり）
-- AC6.1-7: 適合（禁止依存0件・循環依存0件・UI業務ロジック0件・境界違反テスト100%を数値固定）
+1. [重大] PyQt/PySide 命名規約の固定不足
+- 失敗箇所: `docs/plan.md` 全体（シグナル/スロット命名規則の明文化なし）
+- 違反規約: `docs/reference_standards.md` 4章「シグナルは過去分詞形、スロットは動詞」
+- 根拠: 基準は「絶対的な技術基準」として命名規則の順守を要求。計画に検証項目・移行方針・DoD反映がないため、準拠を担保できない。
+- 最小修正指示: Phase 6.2〜6.4 もしくは Gate-S に以下を追加すること。
+  - 既存シグナル/スロット名の棚卸し
+  - 命名規約違反をFailにする静的チェック（または監査チェックリスト）
+  - DoDに「命名規約違反0件」を明記
+- 原因層: 設計
+- 差し戻し先: Architect
 
-## 4) 総合判定
-- 判定: **PASS**
-- 差し戻し要因（pytestエラー/基準違反）: **なし**
+2. [重大] Builder/Validator分離の「差分限定レビュー」規定が未固定
+- 失敗箇所: `docs/plan.md` 7章（役割分担）
+- 違反規約: `docs/reference_standards.md` 1章「Builder/Validatorの分離（要件と生成差分のみでレビュー）」
+- 根拠: 役割分担に「敵対的かつ厳格レビュー」はあるが、レビュー入力を「要件とDiffのみに限定」する運用制約が明示されていない。
+- 最小修正指示: 監査プロセス定義へ以下を追加。
+  - Auditor入力: 要件定義＋差分(Diff)＋テスト結果のみ
+  - Implementer思考過程・補助メモの参照禁止
+  - 違反時は監査無効として再監査
+- 原因層: 設計
+- 差し戻し先: Architect
+
+3. [中] EMCSの客観メトリクス定義不足
+- 失敗箇所: `docs/plan.md` 4章 Gate-S
+- 違反規約: `docs/reference_standards.md` 1章「EMCSモデルに基づく客観的メトリクス評価」
+- 根拠: Gate-Sは違反項目列挙があるが、EMCS観点での測定可能指標（例: 複雑度閾値、SRP逸脱判定基準、閾値超過時処理）が未定義。
+- 最小修正指示: Gate-Sに定量メトリクスを追加。
+  - 例: サイクロマティック複雑度上限、UI層メソッド行数上限、責務違反判定ルール
+  - しきい値とFail条件を明記
+- 原因層: 設計
+- 差し戻し先: Architect
+
+4. [中] 監査証跡のGitハッシュ取得方法が未規定
+- 失敗箇所: `docs/plan.md` 5章
+- 違反規約: `docs/reference_standards.md` 3章「git rev-parse HEAD を必ず記録」
+- 根拠: `git_commit_hash` 項目はあるが、取得方法（`git rev-parse HEAD`）の明記がない。監査再現時に実装差異を招く。
+- 最小修正指示: 必須実装として `git rev-parse HEAD` の取得・記録を明文化。
+- 原因層: 設計
+- 差し戻し先: Architect
+
+## 総括
+`docs/plan.md` は基準の主要方針（UI責務分離、Port化、Gate-S/Gate-F分離、Docker再現性、監査証跡項目）を広く包含している。一方で、絶対基準で要求される運用拘束と客観メトリクスの固定が不足しており、現状では基準完全準拠を証明できない。よって判定は `REJECT_TO_ARCHITECT` とする。
