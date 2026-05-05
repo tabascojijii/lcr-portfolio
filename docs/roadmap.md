@@ -1,198 +1,162 @@
-# LCR Roadmap（PM）
+# LCR Roadmap（Reference Standards 絶対準拠版）
 
 ## 0. 位置づけ
-本ロードマップは `docs/reference_standards.md` を絶対基準として策定する。`docs/plan.md` は実装計画の詳細化ソースとして参照し、矛盾時は常に `reference_standards` を優先する。
+本ロードマップは `docs/reference_standards.md` を絶対基準として、`docs/plan.md` の実装計画を実行順・完了条件・監査条件まで運用可能な形に固定したものである。
 
-監査反映（2026-05-05, Asia/Tokyo）:
-- `docs/audit_report.md` の判定結果（`REJECT_TO_PM`）と指摘事項1件を確認済み。
-- 監査入力識別子を固定する。
-  - 要件版識別子: `docs/requirements.md@<hash or revision>`
-  - Diff識別子: `PR#xx / commit range / patch hash`
-  - 判定時刻: 監査実行時刻（ISO 8601）
-  - 判定者ロール: `Validator`
-  - `docs/roadmap.md` は本改訂版を再監査対象とする。
+優先順位は常に以下とする。
+1. `docs/reference_standards.md`
+2. `docs/plan.md`
 
-## 1. 絶対遵守原則（Non-Negotiable）
-1. 監査・実装ガバナンス
-- Builder/Validator 分離を厳守する。
-- 監査判定は要件と差分（Diff）に限定し、主観評価を禁止する。
-- REJECT は処方的（失敗箇所・違反制約・修正指示）であることを必須化する。
+上位基準との不整合が発生した場合、実装を停止し、Architectに設計差し戻し（`REJECT_TO_ARCHITECT`）を行う。
 
-2. Docker 再現性
-- `FROM` はタグ禁止、`@sha256:` ダイジェスト固定を必須化する。
-- EOL OS のAPTは `old-releases.ubuntu.com` / `archive.debian.org` へ切替える。
-- `constraints.txt` により依存解決範囲を固定する。
-- C/C++ビルド依存イメージはマルチステージビルドを強制する。
+## 1. 絶対ガバナンス（全フェーズ共通）
+- EMCS客観メトリクスでのみ構造判定を行う（主観判断禁止）。
+- Builder/Validator分離を厳守し、監査入力は要件・差分・テスト証跡に限定する。
+- REJECTは処方的に記述する（失敗箇所、違反制約、最小修正指示、原因層、差し戻し先、再検証条件）。
+- Gate-S（構造）と Gate-F（機能）を独立運用し、Gate-S未達時は進行禁止とする。
 
-3. Data Integrity
-- `container_image_digest` と `git_commit_hash` を必須記録する。
-- 入出力・パラメータ・実行ログの SHA-256 記録を必須化する。
-- 記録パスはプロジェクトルート基準の相対パスのみ許可する。
+## 2. 不変の技術拘束（全フェーズ共通）
 
-4. UI/アーキテクチャ
-- Humble Object パターンを適用し、UI責務を最小化する。
-- 依存方向は `UI -> UseCase -> Domain -> Infrastructure` のみ許可する。
-- UseCase/Domain から Qt 依存を禁止する。
-- 層間通信は `abc.ABC` または `typing.Protocol` を必須化する。
-- 必須Portを固定し、未充足は構造違反として扱う。
-  - `EnvironmentCapabilityPort`
-  - `EnvironmentRepositoryPort`
-  - `ContainerRuntimePort`
-  - `AuditLogPort`
-  - `ImageCleanupPort`
-  - `KnowledgeMappingPort`
-  - `PackageLookupPort`
-- Qt命名規約（Signal=過去分詞、Slot=動詞開始）違反は失敗扱いとする。
+### 2.1 Docker Reproducibility
+- `Dockerfile` の `FROM` はタグ禁止、`@sha256:` 固定必須。
+- EOL OS はAPTソースをアーカイブミラーへ固定。
+- EOL/legacy依存ビルドは `constraints.txt` 必須。
+- ネイティブビルドはマルチステージを必須化。
 
-## 2. ロードマップ全体像
-- Phase A: 6.51 ベースライン固定
-- Phase B: 6.1 境界再配線（最優先）
-- Phase C: Phase 5 Guardrails 固定
-- Phase D: Phase 6 Lifecycle 固定
-- Phase E: 6.2〜6.4 契約・回帰固定
-- Phase F: 6.52 Logging 標準化
-- Phase G: 6.53 Analyzer 境界分離
-- Phase H: Docker再現性標準固定
+### 2.2 Data Integrity
+- 監査ログに `container_image_digest` と `git_commit_hash` を必須記録。
+- 入力/出力/パラメータ/実行ログのSHA-256を必須記録。
+- パスはプロジェクトルート相対のみを許容（絶対パス禁止）。
 
-順序原則:
-1. Gate-S（構造）成立前に Gate-F（機能）合格のみで進捗化しない。
-2. Phase B を最優先し、UI責務過多と Port バイパスを構造的に排除する。
-3. Docker再現性とData Integrityはリリース直前ではなく並行実装で前倒し固定する。
+### 2.3 UI/Architecture Discipline
+- UIはHumble Objectを厳守し、業務判断・外部I/Oを持たない。
+- 依存方向は `UI -> UseCase -> Domain -> Infrastructure` に固定。
+- Port/Interface は `abc.ABC` または `typing.Protocol` を必須利用。
+- Signal は過去分詞、Slot は動詞始まりを必須化。
 
-## 3. フェーズ計画
-### Phase A: 6.51 ベースライン固定
+## 3. フェーズロードマップ（変更禁止）
+
+### Phase A: 6.51 Baseline Visualization
 目的:
-- 責務マップ、副作用インベントリ、現状テスト結果を証跡化する。
+- 現状アーキテクチャと副作用分布を可視化し、後続フェーズの固定比較基準を作る。
 
 主要成果物:
 - `artifacts/phase_6_51_baseline_inventory.md`
 - `artifacts/phase_6_51_test_baseline.md`
 
 完了条件:
-- 対象/非対象境界が監査可能な形で固定されている。
+- 責務マップ・副作用インベントリ・改修対象/対象外が明示されている。
+- `pytest tests/` の現状証跡が保存されている。
 
-### Phase B: 6.1 境界再配線（最優先）
+### Phase B: 6.1 Boundary Refactoring（最優先）
 目的:
-- `MainWindow._run_container` と `MainWindow._show_create_env_dialog` の業務判断をUseCaseへ移管する。
+- `MainWindow._run_container` と `MainWindow._show_create_env_dialog` の業務判断をUseCaseへ完全移管する。
 
-主要施策:
-- `RunPreparationUseCase` に実行可否判定を集約。
-- `EnvironmentCreationProposalUseCase` に環境提案ロジックを集約。
-- `LifecycleManagementUseCase` に削除/クリーンアップ判断を集約。
+主要成果物:
+- `artifacts/architecture_decoupling_assessment.md`
+- `artifacts/refactoring_proposal.md`
 
 完了条件:
-- UIからDomain/Infrastructure直接参照 0。
-- Port未経由境界越え 0。
-- 対象2関数のUI業務ロジック 0。
+- UIからDomain直参照が0件。
+- Portバイパスが0件。
+- 上記2メソッドに業務判断が残存しない。
 
-### Phase C: Phase 5 Guardrails 固定
+### Phase C: Phase 5 Validation Guardrails
 目的:
-- capability可視化と mismatch 時ハードガードを実装する。
+- 実行前整合性チェックを強制し、ミスマッチ時の実行を構造的に防止する。
 
 完了条件:
-- AC-1〜AC-5, T5-1〜T5-4 充足。
+- capability mapping（推定/実証）が表示される。
+- mismatch時にRun Hard Guardが発火する。
+- 適合環境なし時に新規作成導線が強制される。
 
-### Phase D: Phase 6 Lifecycle 固定
+### Phase D: Phase 6 Lifecycle Management
 目的:
-- 環境削除・クリーンアップ・監査記録を運用可能な形で固定する。
+- ライフサイクル操作を専用UseCase/Managerに集約し、UIから副作用制御を分離する。
 
 完了条件:
-- AC6-1〜AC6-7, T6-1〜T6-6 充足。
+- 一括削除の2段階確認が強制される。
+- 部分失敗継続ポリシーが実装される。
+- cleanup範囲（dangling/unused）が固定される。
 
-### Phase E: 6.2〜6.4 契約・回帰固定
+### Phase E: 6.2-6.4 Contract Hardening
 目的:
-- DTO strict化、型検証、契約テストを固定する。
-
-主要施策:
-- Pydantic v2 strict を監査DTO→RuntimeDTO→環境DTOの順で導入。
-- `mypy` を主ゲート化し `type: ignore` は理由コメント必須化。
-- Port/DTO/Audit の contract test と golden regression 整備。
+- DTO/Port契約を型レベルで固定し、逸脱を実行前に検出する。
 
 完了条件:
-- AC6.2-1〜AC6.2-5, AC6.3-1〜AC6.3-4, AC6.4-1〜AC6.4-4 充足。
+- Pydantic v2 strictを監査DTO→Runtime DTO→環境DTOの順で適用。
+- `mypy` を主ゲート化し、理由なき `type: ignore` を0件化。
+- Port/DTO/Audit契約テストとgolden regressionが安定運用される。
 
-### Phase F: 6.52 Logging 標準化
+### Phase F: 6.52 Logging Standardization
 目的:
-- 対象コア領域の `print(` を除去し、例外経路のログレベルを統一する。
+- ログ出力を監査可能な構造へ統一し、`print(` を排除する。
+
+主要成果物:
+- `artifacts/phase_6_52_logging_migration_report.md`
+- `artifacts/phase_6_52_print_elimination_evidence.md`
 
 完了条件:
-- AC6.52-1〜AC6.52-5 充足。
+- `src/lcr/core/container` と `src/lcr/core/detector` の `print(` が0件。
+- 例外/フォールバック経路で `WARNING/ERROR` ログが保証される。
 
-### Phase G: 6.53 Analyzer 境界分離
+### Phase G: 6.53 Analyzer Side-Effect Porting
 目的:
-- `CodeAnalyzer` から直接 I/O を排除し、Port経由へ統一する。
+- Analyzerの直接I/Oを排除し、Port経由に統一する。
 
-主要施策:
-- PyPI照会を `PackageLookupPort` 経由へ移管。
-- mapping読込を Repository/Port 経由へ移管。
+主要成果物:
+- `artifacts/phase_6_53_analyzer_porting_report.md`
+- `artifacts/phase_6_53_analyzer_failure_policy.md`
 
 完了条件:
-- AC6.53-1〜AC6.53-5 充足。
+- `CodeAnalyzer` のdirect network/file I/Oが0件。
+- `PackageLookupPort` と mapping Repository 経由に統一される。
 
-### Phase H: Docker再現性標準固定
+### Phase H: 6.54 Container Side-Effect Porting
 目的:
-- EOLスタックを含む全Dockerビルドの再現性を業界標準で固定する。
+- Container関連副作用をRepository/Gateway/Serviceへ分離し、障害分類を固定する。
+
+主要成果物:
+- `artifacts/phase_6_54_container_porting_report.md`
+- `artifacts/phase_6_54_container_error_model.md`
 
 完了条件:
-- ダイジェスト未固定 `FROM` = 0。
-- EOL時APTアーカイブ未設定 = 0。
-- `constraints.txt` 未使用ビルド = 0。
-- C/C++ビルド依存でマルチステージ未適用 = 0。
+- 永続化/Docker照会/ファイル副作用がUI・UseCaseから分離される。
+- recoverable/non-recoverableの分類と伝播規約が適用される。
 
-証跡:
-- `artifacts/docker_reproducibility_checklist.md`
-- `artifacts/docker_digest_lock_evidence.md`
-- `artifacts/docker_multistage_evidence.md`
+## 4. 品質ゲート
 
-## 4. 品質ゲート運用
 ### Gate-S（構造）
-必須:
-- UI->Domain直参照 = 0
-- 逆方向依存 = 0
-- 循環依存 = 0
-- Portバイパス = 0
-- 対象2関数UI業務ロジック = 0
-- インターフェース非経由通信 = 0
-- UseCase->Qt依存 = 0
-- Domain->Qt依存 = 0
-- Qt Signal命名違反 = 0
-- Qt Slot命名違反 = 0
-- 必須Port未実装/未経由 = 0
+合格条件（全て0件）:
+- `UI->Domain direct import`
+- 逆方向依存
+- 循環依存
+- Portバイパス
+- `MainWindow._run_container` 業務判断残存
+- `MainWindow._show_create_env_dialog` 業務判断残存
+- `UseCase/Domain -> Qt依存`
+- `Dockerfile FROM tag usage`
+- `UI Signal/Slot naming violation`
+- `Unjustified type ignore`
 
-固定検査対象パス:
-- UI: `src/lcr/ui`
-- UseCase: `src/lcr/core/use_cases`
-- Domain: `src/lcr/core/domain`
-
-固定機械検証ルール:
-- 依存検査（AST/import lint）で `src/lcr/core/use_cases` と `src/lcr/core/domain` から `PyQt*` / `PySide*` import を検出した場合 fail とする。
-- 命名検査（AST）で Qt Signal/Slot 規約違反を検出した場合 fail とする。
-- 例外は `artifacts/qt_naming_exceptions.md` に理由付きで記載されたもののみ許可する。
-
-補助メトリクス（EMCS）:
-- EMCS-M1（責務密度）: UIクラスごとの業務判断分岐数（`if/elif` + 判定分岐）<= 2、逸脱件数 = 0
-- EMCS-M2（複雑度）: 主要UseCase公開メソッドの循環的複雑度 <= 10、超過件数 = 0
-- EMCS-M3（SRP逸脱）: 1クラス内で `UI描画 + 永続化 + 外部I/O` の3責務同居件数 = 0
-- EMCS-M4（境界純度）: UI層の外部I/O直接呼び出し件数 = 0
+EMCS閾値:
+- SRP violation hotspots: 0件
+- Cyclomatic complexity overflow: 0件（UseCase公開 `CC <= 10`、UIメソッド `CC <= 7`）
+- UI method LOC overflow: 0件（UIイベントハンドラ `<= 40 LOC`）
 
 ### Gate-F（機能）
-必須:
+合格条件:
 - `pytest tests/` 全件Pass
-- Phase別必須テスト（T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52/T6.53）Pass
-- 監査ログ必須項目テスト Pass
-- Docker再現性テスト Pass
-- Data Integrity テスト（T-DI-1〜4）Pass
-- Qt命名規約テスト（T-UI-NAME-1/2）Pass
-- Qt非依存テスト（T-ARCH-QT-1/2）Pass
+- フェーズ別必須テスト（T5, T6, T6.2, T6.3, T6.4, T6.51, T6.52, T6.53, T6.54）Pass
+- Data Integrity 必須項目テストPass
+- Docker Reproducibility 4要件テストPass
+- UI Signal/Slot命名テストPass
 
-ゲート判定原則:
-1. Gate-S fail は `REJECT_TO_ARCHITECT`。
-2. Gate-F pass 単独は進捗扱いにしない。
-3. 両ゲート同一リビジョンPassのみ Done 判定可能。
-4. T-UI-NAME-1/2, T-ARCH-QT-1/2 のいずれか1件でも失敗した場合は `REJECT_TO_ARCHITECT`。
+運用規則:
+- Gate-S fail 時点で `REJECT_TO_ARCHITECT`。
+- Gate-F pass単独は進捗として扱わない。
 
-## 5. 監査証跡と運用成果物
-必須成果物:
+## 5. 監査成果物（必須）
 - `artifacts/architecture_decoupling_assessment.md`
 - `artifacts/refactoring_proposal.md`
 - `artifacts/phase_6_51_baseline_inventory.md`
@@ -201,76 +165,23 @@
 - `artifacts/phase_6_52_print_elimination_evidence.md`
 - `artifacts/phase_6_53_analyzer_porting_report.md`
 - `artifacts/phase_6_53_analyzer_failure_policy.md`
+- `artifacts/phase_6_54_container_porting_report.md`
+- `artifacts/phase_6_54_container_error_model.md`
 - `artifacts/post_mortem_closure_checklist.md`
 - `artifacts/audit_reject_template.md`
-- `artifacts/data_integrity_field_matrix.md`
-- `artifacts/docker_reproducibility_checklist.md`
-- `artifacts/docker_digest_lock_evidence.md`
-- `artifacts/docker_multistage_evidence.md`
 
-監査ログ入力制約:
-- 許可入力: `docs/requirements.md` と関連する承認済み要件差分 + 変更差分のみ
-- 禁止入力: 実装者思考ログ、口頭説明、未証跡メモ
-- 監査証跡への必須記録:
-  - 要件版識別子（例: `docs/requirements.md@<hash or revision>`）
-  - Diff識別子（例: `PR#xx / commit range / patch hash`）
-  - 判定時刻と判定者ロール（Validator）
+## 6. 最終受け入れ条件（DoD）
+1. Gate-S と Gate-F が同一リビジョンで同時Passしている。
+2. RC-1〜RC-3（境界強制不全、差し戻し先誤り、ゲート混線）の閉塞証跡がある。
+3. `MainWindow._run_container` と `MainWindow._show_create_env_dialog` の責務移管が完了している。
+4. Data Integrity（相対パス・ハッシュ完全化・不変識別子記録）に違反がない。
+5. Docker Reproducibility 4要件（digest/EOL archive/constraints/マルチステージ）に違反がない。
+6. EMCS実測値と閾値判定結果が監査成果物に記録されている。
+7. Builder/Validator分離に違反する監査入力が0件である。
 
-`artifacts/post_mortem_closure_checklist.md` 必須項目:
-1. 既知2欠陥の閉塞証跡
-2. Gate-S / Gate-F 独立運用記録
-3. 差し戻し先判定ログ（Architect/Implementer）
-
-`artifacts/audit_reject_template.md` 必須項目:
-1. 失敗箇所（file path + 関数/クラス + 行動）
-2. 違反制約（どの規約/受け入れ基準に違反したか）
-3. 具体的修正指示（最小修正単位のヒント）
-4. 原因層（設計/実装）の判定
-5. 差し戻し先（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT`）
-6. 再検証条件（何を満たせば再提出可能か）
-
-監査運用ルール:
-- 上記必須項目が1つでも欠ける REJECT は監査失格として無効化する。
-
-## 6. マイルストーン
-1. M1（構造回復）
-- Phase A-B 完了
-- Gate-S 主要違反 0 化
-
-2. M2（機能安定）
-- Phase C-D 完了
-- Phase 5/6 系受け入れ基準充足
-
-3. M3（契約固定）
-- Phase E-G 完了
-- 型・契約・回帰・ログ標準化完了
-
-4. M4（再現性監査完了）
-- Phase H + Data Integrity 完了
-- Gate-S/Gate-F 同一リビジョンPass
-
-## 7. Definition of Done
-1. Gate-S と Gate-F が同一リビジョンでPass。
-2. post_mortem 指摘の責務移管が完了。
-3. Phase 5, 6, 6.1〜6.4, 6.51, 6.52, 6.53 の受け入れ基準を満たす。
-4. 監査証跡が相対パス・ハッシュ完全化・fail-fast 原則に準拠する（Data Integrity 要件と整合）。
-5. 同型差し戻し（UI責務過多/Port未経由/ゲート混線）が再発しない運用を証跡で確認できる。
-6. Docker再現性4要件を証跡付きで満たす。
-7. Data Integrity 必須項目を自動テストで担保。
-8. Qt命名規約とQt非依存が機械検証で violation 0。
-
-## 8. Data Integrity 固定仕様（監査必須）
-監査ログ必須記録項目:
-1. `container_image_digest`（実行イメージのSHA256ダイジェスト）
-2. `git_commit_hash`（`git rev-parse HEAD` の値）
-3. `input_sha256`（入力データ）
-4. `output_sha256`（出力データ）
-5. `parameter_sha256`（パラメータファイル）
-6. `execution_log_sha256`（実行ログ本体）
-7. `path_mode`（相対パス強制の検証結果）
-
-固定テスト（Gate-F必須）:
-- T-DI-1: 上記7項目の存在検証（欠落0件）
-- T-DI-2: すべてのハッシュ値がSHA-256形式であることを検証
-- T-DI-3: `git_commit_hash` が40桁16進であることを検証
-- T-DI-4: パスが絶対パスを含む場合 fail-fast で失敗することを検証
+## 7. 禁止事項
+- 設計承認前に実装へ着手すること。
+- Gate-S未達で「テスト合格」を理由に進行すること。
+- UI層へ業務判断・外部I/Oを再流入させること。
+- 根拠なきREJECT（処方的指示なし）を行うこと。
+- 監査証跡に絶対パスを残すこと。
