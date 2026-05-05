@@ -1,5 +1,8 @@
 # LCR Roadmap（Reference Standards 絶対準拠版）
 
+## 改訂履歴
+- 2026-05-06: `docs/audit_report.md`（AUDIT_PASS_ROADMAP, 指摘なし）を確認。`docs/reference_standards.md` を絶対基準として維持し、拘束条件の非緩和方針を明示。
+
 ## 0. 位置づけ
 本ロードマップは `docs/reference_standards.md` を絶対基準として、`docs/plan.md` の実装計画を実行順・完了条件・監査条件まで運用可能な形に固定したものである。
 
