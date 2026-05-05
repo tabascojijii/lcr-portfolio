@@ -511,3 +511,60 @@
   - T6.53-2: Repository化検証（Analyzerが直接ファイル読込しない）。
   - T6.53-3: 通信失敗フォールバック検証（timeout/例外時の戻り値整合）。
   - T6.53-4: 互換API検証（`analyze/summary/resolve_packages` の既存契約維持）。
+
+## Phase 6.54: Side-Effect Porting (Container Boundary)
+
+### 1. 目的
+- Container実行準備系コードから永続化・環境探査・ファイル操作などの副作用を分離し、責務境界を明確化する。
+- `ContainerManager` の高結合を緩和し、6.55での責務分割を安全に進める前提を作る。
+
+### 2. 採用方針（確定）
+- P6.54-1 分離対象
+  - 定義ファイル永続化（definitions/user knowledge）
+  - Docker環境検証・状態確認
+  - 実行前後のファイル生成/コピー処理
+- P6.54-2 境界方針
+  - 副作用は Repository/Gateway/Service へ移し、UseCase/Managerはオーケストレーション中心に保つ。
+- P6.54-3 互換方針
+  - 既存の公開API/画面導線は維持し、内部差し替えで移行する。
+- P6.54-4 失敗時方針
+  - 副作用層の失敗は分類（recoverable/non-recoverable）し、呼び出し側へ明示的に返す。
+
+### 3. 機能要件
+
+#### R6.54-1 永続化責務のRepository分離
+- 環境定義JSONおよび関連メタデータの読込/書込責務を専用Repositoryへ移管すること。
+- `ContainerManager` から直接 `open/json.dump/json.load` を行う経路を段階的に排除すること。
+
+#### R6.54-2 Docker検証責務のGateway分離
+- Docker到達性確認・イメージ存在確認等の `subprocess` 呼び出しをGatewayへ集約すること。
+- 実行可否判定はGateway戻り値に基づくこと。
+
+#### R6.54-3 ファイル操作責務のService分離
+- 出力ディレクトリ作成、スナップショット作成等のファイル副作用を専用Serviceへ移管すること。
+- RunConfig生成ロジックは、副作用実行から切り離して再利用可能にすること。
+
+#### R6.54-4 エラーモデル統一
+- 副作用層の例外を分類し、上位へ一貫したエラー型/エラーコードで伝播すること。
+- `print` ではなくロギング経由で失敗原因を記録すること。
+
+### 4. 成果物（必須）
+- `artifacts/phase_6_54_container_porting_report.md`
+  - 分離した副作用責務、旧実装との対応表、移行影響を記載すること。
+- `artifacts/phase_6_54_container_error_model.md`
+  - 副作用層エラー分類・伝播方針・UI表示方針を記載すること。
+
+### 5. 受け入れ基準
+- AC6.54-1: Container境界の永続化責務がRepository経由に移行されている。
+- AC6.54-2: Docker検証/照会の `subprocess` 呼び出しがGateway経由に統一されている。
+- AC6.54-3: 実行前後の主要ファイル副作用が専用Serviceへ移行されている。
+- AC6.54-4: 副作用失敗時のエラー分類と伝播が成果物・実装で一致している。
+- AC6.54-5: `pytest tests/` が全件 Pass し、Run/Build準備フローに回帰がない。
+
+### 6. テスト・ゲート要件（必須）
+- `pytest tests/` 全件 Pass を必須とする。
+- 最低限、以下の検証を実施すること。
+  - T6.54-1: Repository分離検証（Manager直I/O経路の排除確認）。
+  - T6.54-2: Gateway分離検証（Docker照会の直接`subprocess`排除確認）。
+  - T6.54-3: ファイル副作用Service検証（出力生成/スナップショット動作の整合）。
+  - T6.54-4: エラー伝播検証（recoverable/non-recoverable分類と上位通知整合）。
