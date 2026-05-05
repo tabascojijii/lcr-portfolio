@@ -43,7 +43,8 @@
 - 実装層へ局所修正を返す前に、設計成果物（責務表・依存図・Port契約）更新を必須化
 
 4. 監査運用規約（Builder/Validator分離）
-- 監査入力物は `requirements + diff + test evidence` のみに制限
+- 監査一次入力は `requirements + diff` のみに制限
+- `test evidence` は監査入力に含めず、機能合格用の別ゲートでのみ扱う
 - 実装中間思考プロセスを監査に持ち込むことを禁止
 - 監査は敵対的・独立に実施し、差し戻しは処方的指示（失敗箇所/違反制約/修正ヒント）を必須化
 
@@ -76,6 +77,19 @@ UIはDTOを受けて表示と操作導線のみ担う。
 - `KnowledgeMappingPort`
 
 Portは `typing.Protocol` または `abc.ABC` で型契約を固定し、戻り値型省略と `Any` の無制限利用を禁止。
+
+### 3.2.1 クラス間通信のインターフェース強制（Port外を含む）
+`docs/reference_standards.md` の「クラス間通信はインターフェース経由」に合わせ、Port以外の主要通信にも `typing.Protocol` / `abc.ABC` を強制する。
+
+- 適用対象A: UI-Application境界（`MainWindow` - UseCase呼び出し境界）
+- 適用対象B: UI-Presenter/ViewModel境界（表示用データ変換・状態反映）
+- 適用対象C: UseCase間依存（オーケストレーション/連携）
+- 適用対象D: Domainサービス依存（判定・ポリシー・計算サービス）
+
+強制規約:
+- 具象クラスへの直接参照で通信しない（インターフェース越しに接続）
+- 境界型（引数/戻り値）を明示し、暗黙のdict契約を禁止
+- 例外的な直接依存は原則禁止とし、必要時は設計レビュー記録を必須化
 
 ### 3.3 DTO強化（Phase 6.2整合）
 Pydantic v2 strict で以下を段階導入。
@@ -175,11 +189,14 @@ Pydantic v2 strict で以下を段階導入。
   - slotは動詞開始（例: `update_display`）
   - 規約逸脱 `0`
 - 監査運用分離:
-  - 監査入力物制約（requirements/diff/test evidenceのみ）違反 `0`
+  - 監査一次入力制約（requirements/diffのみ）違反 `0`
+- インターフェース規律:
+  - インターフェース非経由通信 `0`（適用対象A〜D）
 
 ### Gate-2 機能合格
 - `pytest tests/` 全件Pass
 - Phase別必須テスト（T5/T6/T6.2/T6.3/T6.4/T6.51/T6.52）Pass
+- `test evidence` は本ゲートの証跡としてのみ扱い、監査一次入力へ流用しない
 - 監査証跡必須項目テストPass:
   - コンテナイメージDigest記録の存在/形式
   - 実行時Gitコミットハッシュ（`git rev-parse HEAD`）記録の存在/形式
