@@ -15,6 +15,23 @@
 - REJECTは処方的に記述する（失敗箇所、違反制約、最小修正指示、原因層、差し戻し先、再検証条件）。
 - Gate-S（構造）と Gate-F（機能）を独立運用し、Gate-S未達時は進行禁止とする。
 
+### 1.1 Builder/Validator 分離運用（固定）
+監査担当（Validator/Auditor）への許容入力:
+- `docs/requirements.md`
+- `docs/reference_standards.md`
+- `git diff`（または同等差分）
+- テスト証跡（`pytest` / 型検査 / Gate-S測定結果）
+
+監査担当への禁止入力:
+- 実装者の思考過程メモ
+- 口頭/チャットでの主観的補足説明
+- 「意図したからOK」という非検証主張
+- 差分に存在しない将来対応の約束
+
+違反時規則:
+- 禁止入力が監査判定に混入した場合、その監査は無効化し再監査を必須とする。
+- 無効化時は `artifacts/audit_reject_template.md` に「監査I/O境界違反」として記録する。
+
 ## 2. 不変の技術拘束（全フェーズ共通）
 
 ### 2.1 Docker Reproducibility
@@ -173,6 +190,19 @@ EMCS閾値:
 - `artifacts/phase_6_54_container_error_model.md`
 - `artifacts/post_mortem_closure_checklist.md`
 - `artifacts/audit_reject_template.md`
+
+`post_mortem_closure_checklist.md` 必須項目:
+1. RC-1〜RC-3 の閉塞証跡
+2. Gate-S/Gate-F 独立運用記録
+3. 差し戻し先判定ログ（Architect/Implementer）
+
+`audit_reject_template.md` 必須項目:
+1. 失敗箇所（file path + 関数/クラス）
+2. 違反制約（規約/受け入れ基準）
+3. 最小修正単位の指示
+4. 原因層（設計/実装）
+5. 差し戻し先（`REJECT_TO_ARCHITECT` / `REJECT_TO_IMPLEMENT`）
+6. 再検証条件
 
 ## 6. 最終受け入れ条件（DoD）
 1. Gate-S と Gate-F が同一リビジョンで同時Passしている。
