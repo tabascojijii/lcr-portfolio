@@ -221,6 +221,21 @@ Gate-S 機械検証ルール（固定）:
 監査運用ルール:
 - 上記必須項目が1つでも欠けるREJECTは監査失格として無効化する。
 
+### 5.1 Builder/Validator 分離の運用固定（監査入力制約）
+- Builder（実装）と Validator（監査）は思考プロセスを共有しない。
+- 監査入力は以下の2系統のみに限定する。
+1. 要件文書（`docs/requirements.md` と関連する承認済み要件差分）
+2. 変更差分（PR Diff または変更ファイル差分）
+- 非許可入力（監査根拠として使用禁止）:
+1. 実装者の思考ログ
+2. 口頭説明やチャット上の未証跡説明
+3. 未コミットメモ・下書き・個人ノート
+- Validator は「要件 + Diff」以外を根拠に判定してはならない。
+- 監査証跡には、使用した入力一覧を必須記録する。
+1. 要件版識別子（例: `docs/requirements.md@<hash or revision>`）
+2. Diff識別子（例: `PR#xx / commit range / patch hash`）
+3. 判定時刻と判定者ロール（Validator）
+
 ## 6. Definition of Done
 1. Gate-S, Gate-F の両方が同一リビジョンで Pass
 2. `post_mortem` 指摘2箇所の責務移管完了
